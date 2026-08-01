@@ -58,21 +58,59 @@ def advertised(monkeypatch):
     return eps
 
 
+@pytest.fixture
+def installed(monkeypatch):
+    """Two packages advertising themselves, seen through the REAL
+    `discover_entrypoints` — `importlib.metadata.entry_points` is what gets
+    faked, not the function under test.
+
+    The `advertised` fixture below replaces `discover_entrypoints` itself,
+    which is right for the load-policy tests and useless for these: a mutation
+    putting `ep.load()` back INSIDE discovery survived a whole suite that never
+    called the real one.
+    """
+    eps = [_Ep("alpha", "alpha.plug:main"), _Ep("beta", "beta.plug:main")]
+
+    class _Eps:
+        def select(self, group):
+            assert group == hookspecs.ENTRY_POINT_GROUP
+            return list(eps)
+
+    import importlib.metadata as md
+    monkeypatch.setattr(md, "entry_points", lambda: _Eps())
+    return eps
+
+
 class TestDiscoveryImportsNothing:
     def test_the_importing_variant_is_gone(self):
         """Named rather than pattern-matched: if it comes back, this fails."""
         assert not hasattr(hookspecs, "discover_entrypoint_plugins")
 
-    def test_discovery_returns_entry_points_not_loaded_objects(self, advertised):
+    def test_discovery_returns_entry_points_not_loaded_objects(self, installed):
         got = hookspecs.discover_entrypoints()
         assert [e.name for e in got] == ["alpha", "beta"]
-        assert not any(e.loaded for e in advertised), "discovery imported code"
+        assert not any(e.loaded for e in installed), (
+            "discovery imported third-party code just by looking")
 
-    def test_the_value_survives_so_a_policy_has_something_to_judge(self, advertised):
+    def test_the_value_survives_so_a_policy_has_something_to_judge(self, installed):
         """The old version threw this away by importing first — a policy needs
         to know WHAT would run before it runs."""
         assert [e.value for e in hookspecs.discover_entrypoints()] == [
             "alpha.plug:main", "beta.plug:main"]
+
+    def test_a_scan_that_blows_up_yields_nothing_rather_than_raising(self, monkeypatch):
+        import importlib.metadata as md
+        monkeypatch.setattr(md, "entry_points",
+                            lambda: (_ for _ in ()).throw(RuntimeError("broken env")))
+        assert hookspecs.discover_entrypoints() == []
+
+    def test_load_into_imports_nothing_through_the_real_discovery_either(
+            self, installed):
+        """The end-to-end shape of the defect, with nothing stubbed but the
+        environment: advertised packages, a default call, no imports."""
+        reg = _Reg()
+        assert hookspecs.load_into(reg) == 0
+        assert not any(e.loaded for e in installed)
 
 
 class TestLoadingIsADecision:
