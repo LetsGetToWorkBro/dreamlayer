@@ -613,21 +613,48 @@ class TestControls:
         assert [p["name"] for p in brain.people()] == ["Marcus"]
 
     def test_rewind_groups_todays_activity_by_hour(self, tmp_path):
+        """Grouping logic only — it must not depend on the clock (#555).
+
+        This used to fail on the machine's timezone AND on the hour the suite
+        happened to run, for three independent reasons:
+
+          * the fixture anchored the day with `now - (now % 86400)`, which is
+            UTC midnight, while `rewind()` anchors at LOCAL midnight. Off UTC
+            the seeded items landed in a different local hour and the asserted
+            block did not exist at all.
+          * the extra event was placed at `now + 600`, so when the suite ran
+            during the asserted hour it fell inside the very block whose count
+            was being pinned.
+          * `add_event()` also writes its own "Added event" activity row at the
+            CURRENT wall clock, and `rewind()` groups that row like any other.
+            That is the second of the two surplus items behind the reported
+            `assert (4 == 2)`, and fixing only the event timestamp would have
+            left it.
+
+        So: anchor exactly the way `rewind()` does, and assert on hours chosen
+        to be different from the hour we are running in.
+        """
         cfg = tmp_path / "cfg"; cfg.mkdir()
         BrainConfig(token="t").save(cfg)
         brain = Brain(cfg)
         now = time.time()
-        day_start = now - (now % 86400)
-        brain.activity.add("folder", "Added folder /docs", ts=day_start + 9 * 3600 + 5)
-        brain.activity.add("ask", "asked about the lease", ts=day_start + 9 * 3600 + 200)
-        brain.activity.add("cloud-egress", "cloud call", ts=day_start + 14 * 3600)
-        brain.add_event("Standup", now + 600)          # upcoming event lands today too
+        lt = time.localtime(now)
+        # the same anchor rewind() computes, from the same `now` we pass it
+        day_start = now - (lt.tm_hour * 3600 + lt.tm_min * 60 + lt.tm_sec)
+        # Candidates stay clear of midnight and noon so the AM/PM assertion
+        # survives a DST shift moving local-midnight+N off hour N by an hour.
+        am = next(h for h in (9, 10, 8, 7, 6) if h != lt.tm_hour)
+        pm = next(h for h in (14, 15, 16, 17, 18) if h != lt.tm_hour)
+        brain.activity.add("folder", "Added folder /docs", ts=day_start + am * 3600 + 5)
+        brain.activity.add("ask", "asked about the lease", ts=day_start + am * 3600 + 200)
+        brain.activity.add("cloud-egress", "cloud call", ts=day_start + pm * 3600)
+        brain.add_event("Standup", day_start + pm * 3600 + 600)   # an event lands today too
         r = brain.rewind(now)
         hours = [b["hour"] for b in r["blocks"]]
-        assert 9 in hours                               # two 9am items grouped
-        nine = next(b for b in r["blocks"] if b["hour"] == 9)
-        assert nine["count"] == 2 and nine["label"].endswith("AM")
-        assert r["count"] >= 3
+        assert am in hours                              # the two morning items grouped
+        block = next(b for b in r["blocks"] if b["hour"] == am)
+        assert block["count"] == 2 and block["label"].endswith("AM")
+        assert pm in hours and r["count"] >= 3
 
     def test_scheduler_delivers_brief_once_at_the_hour(self, tmp_path):
         cfg = tmp_path / "cfg"; cfg.mkdir()

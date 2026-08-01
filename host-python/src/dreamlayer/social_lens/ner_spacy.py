@@ -33,9 +33,36 @@ class SpacyNER:
                 self._nlp = None
 
     def people(self, text: str) -> list[str]:
+        """Names in `text` — never fewer than the offline heuristic finds (#557).
+
+        `en_core_web_sm` tags no PERSON at all in an ordinary introduction:
+
+            "Hi I'm Priya from Overpass Studio"
+              ents           → [('Overpass Studio', 'ORG')]
+              people()       → []            (installed)
+              _heuristic()   → ['Priya', …]  (absent)
+
+        So installing the optional extra made Name Capture stop capturing the
+        name — the offline path answered and the "better" one did not. An empty
+        list is not an exception, so the `except` branch never fired.
+
+        When the model DOES name someone it is still trusted outright: it merges
+        multi-token names ("Marcus Chen") that the capitalized-token heuristic
+        splits in two. The fallback is consulted only when the model found
+        nobody — and then the entities it DID find are subtracted, so the
+        heuristic's over-capture is filtered by the model's own knowledge rather
+        than handed back raw: "Overpass"/"Studio" are dropped because the model
+        positively labelled that span ORG, leaving ['Priya'].
+        """
         if self._nlp is not None:
             try:
-                return [e.text for e in self._nlp(text).ents if e.label_ == "PERSON"]
+                doc = self._nlp(text)
+                found = [e.text for e in doc.ents if e.label_ == "PERSON"]
+                if found:
+                    return found
+                not_people = {tok for e in doc.ents if e.label_ != "PERSON"
+                              for tok in e.text.split()}
+                return [w for w in self._heuristic(text) if w not in not_people]
             except Exception as exc:
                 log.warning("[ner_spacy] parse failed: %s; heuristic", exc)
         return self._heuristic(text)
