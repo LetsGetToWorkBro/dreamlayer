@@ -49,6 +49,13 @@ PALETTE_LUA = ROOT / "halo-lua" / "display" / "palette.lua"
 RENDERER_LUA = ROOT / "halo-lua" / "display" / "renderer.lua"
 MATERIALS_LUA = ROOT / "halo-lua" / "display" / "materials.lua"
 CARDS_PY = ROOT / "host-python" / "src" / "dreamlayer" / "hud" / "cards.py"
+CARDS_LUA = ROOT / "halo-lua" / "display" / "cards.lua"
+HORIZON_LUA = ROOT / "halo-lua" / "display" / "horizon.lua"
+PARTICLES_LUA = ROOT / "halo-lua" / "display" / "particles.lua"
+THEME_LUA = ROOT / "halo-lua" / "display" / "theme.lua"
+THEMES_DIR = ROOT / "halo-lua" / "display" / "themes"
+FIGMENT_STAGE_LUA = ROOT / "halo-lua" / "app" / "figment_stage.lua"
+HALO_LUA_DIR = ROOT / "halo-lua"
 
 AA_NORMAL = 4.5  # WCAG AA, normal-size text — the floor #571 established
 
@@ -172,6 +179,18 @@ def _local_def_tokens(src: str, var: str) -> set[str]:
 # cards get no pane", the ember set, the drift/scrub/deviation family) put it
 # on `background`. Texts at a pane's edge are counted against the pane — the
 # stricter reading.
+#
+# These backgrounds are SETTLED-STATE backgrounds. During the exit contract
+# the pane leaves before the text does: every pane is gated on `exit_t == 0`
+# while text keeps drawing until TR.exit_contract cuts it (composite()'s exit
+# branch, renderer.lua:2048-2057 — pinned by
+# test_the_exit_contract_takes_the_pane_before_the_text). So each "on
+# `surface`" ink below — accent_attention's FactCheck eyebrow included —
+# transiently composites on `background` during every exit. That costs the
+# sweep nothing: `background` is the darker of the two, so each of those
+# transient ratios is HIGHER than the `surface` one enforced here
+# (test_surface_is_the_stricter_background). The exit window adds headroom;
+# it never removes it.
 # ---------------------------------------------------------------------------
 
 ENFORCED: list[tuple[str, str, str]] = [
@@ -256,10 +275,41 @@ NOT_ENFORCED: list[tuple[str, str]] = [
 GEOMETRY_ONLY = {"accent_memory_static", "confidence_low", "confidence_med",
                  "confidence_high"}
 
-# Defined in palette.lua and referenced by NOTHING in renderer.lua. Said out
-# loud rather than held to a floor — the #571 ink3 reasoning: asserting a
-# floor on a token nothing draws would be asserting about nothing.
-UNRENDERED = {"accent_error", "memory_rail", "status_paused"}
+# Defined in palette.lua and referenced by NOTHING in renderer.lua — the
+# scope IS the claim, so it is in the name. This is NOT "unrendered": two of
+# the three are drawn on the device by other modules (DRAWN_ELSEWHERE below,
+# pinned by TestNotInRendererScope). The #565 failure shape was checking one
+# file and declaring a universal; this set asserts about renderer.lua alone.
+# Said out loud rather than held to a floor — the #571 ink3 reasoning:
+# asserting a floor on a token renderer.lua never draws would be asserting
+# about nothing.
+NOT_IN_RENDERER = {"accent_error", "memory_rail", "status_paused"}
+
+# Where each NOT_IN_RENDERER token actually lives on the device (all paths
+# resolved against origin/main). Every entry is pinned by a test in
+# TestNotInRendererScope — prose that can drift from the code is how the
+# first pass of this file called all three "unrendered" while horizon.lua
+# was drawing status_paused behind the cards.
+DRAWN_ELSEWHERE = {
+    "status_paused": (
+        "drawn by the idle Horizon the renderer composites over: the "
+        "shattered promise-arc notch (horizon.lua:227), the paused heartbeat "
+        "tick and its bloom dot (horizon.lua:344, :350), and the yesterlight "
+        "scrub tick (horizon.lua:487); also the default particle color "
+        "(particles.lua:106)"),
+    "accent_error": (
+        "a theme-restyleable token (theme.lua:31 COLOR_KEYS; restyled by "
+        "themes/cyberpunk.lua:17 and themes/high_contrast.lua:18) and drawn "
+        "as figment TEXT: host reality_compiler/v2/compat.py:119-122 builds "
+        "TextLine(color='accent_error') scenes that "
+        "halo-lua/app/figment_stage.lua:344 draws via _display.text"),
+    "memory_rail": (
+        "genuinely unrendered repo-wide: the only reference outside its "
+        "palette.lua/themes.py definitions is the ObjectRecall layout 'vbar' "
+        "(host cards.py:105) — a layout key nothing in halo-lua reads, since "
+        "ObjectRecallCard routes to draw_object_recall, which ignores "
+        "card.layout"),
+}
 
 BACKGROUNDS = {"background", "surface"}
 
@@ -269,6 +319,16 @@ BACKGROUNDS = {"background", "surface"}
 # until its origins are pinned — the sweep cannot quietly stop seeing one.
 KNOWN_VARIABLE_EXPRS = {"color", "dim", "accent", "col",
                         "spec.color or fallback_color"}
+
+# BLIND SPOT, stated rather than hidden: draw_fact_check derives its eyebrow
+# ink as `FACT_COLOR[card.verdict] or card.conf_color or P.text_ghost_static`
+# (renderer.lua:1359). The `card.conf_color` fallback carries no P. token, so
+# the parser above cannot see it: a FactCheckCard payload that set conf_color
+# would put a confidence_* color into TEXT and this sweep would stay silent.
+# No payload does today — host cards.py's fact_check sets "color", never
+# "conf_color", and Lua cards.lua's M.fact_check sets neither — so
+# confidence_* is geometry-only in practice. The tripwire that keeps "today"
+# honest is test_fact_check_payloads_carry_no_conf_color below.
 
 
 @pytest.fixture(scope="module")
@@ -468,7 +528,7 @@ class TestTheSweepCannotGoStale:
 
     def test_every_palette_token_is_classified_exactly_once(self, palette):
         inks = _enforced_inks() | _not_enforced_inks()
-        buckets = [BACKGROUNDS, inks, GEOMETRY_ONLY, UNRENDERED]
+        buckets = [BACKGROUNDS, inks, GEOMETRY_ONLY, NOT_IN_RENDERER]
         for i, a in enumerate(buckets):
             for b in buckets[i + 1:]:
                 assert not (a & b), f"token in two buckets: {a & b}"
@@ -501,13 +561,129 @@ class TestTheSweepCannotGoStale:
             f"geometry token now drawn as text — classify its pairing: "
             f"{sorted(leaked)}")
 
-    def test_the_unrendered_set_is_exact(self, renderer_src, palette):
-        """Unrendered is a claim about the code, so it is pinned rather than
-        assumed — and it cannot silently grow: every other token must be
-        referenced by the renderer (surface via materials.M.PANE, pinned in
-        TestTheSurfacesAreWhatTheSweepThinks)."""
+    def test_the_not_in_renderer_set_is_exact(self, renderer_src, palette):
+        """Not-in-renderer is a claim about ONE FILE, so it is pinned against
+        exactly that file — and it cannot silently grow: every other token
+        must be referenced by renderer.lua (surface via materials.M.PANE,
+        pinned in TestTheSurfacesAreWhatTheSweepThinks). Whether those tokens
+        are drawn ELSEWHERE is a separate question with its own tests
+        (TestNotInRendererScope) — the first pass of this file conflated the
+        two and called drawn tokens "unrendered"."""
         referenced = {t for t in palette
                       if re.search(r"P\." + t + r"\b", renderer_src)}
-        unrendered = (set(palette) - referenced) - {"surface"}
-        assert unrendered == UNRENDERED, (
-            f"tokens nothing renders changed: now {sorted(unrendered)}")
+        not_in_renderer = (set(palette) - referenced) - {"surface"}
+        assert not_in_renderer == NOT_IN_RENDERER, (
+            f"tokens renderer.lua does not reference changed: "
+            f"now {sorted(not_in_renderer)}")
+
+    def test_the_exit_contract_takes_the_pane_before_the_text(self,
+                                                              renderer_src):
+        """The pairing table's backgrounds are settled-state backgrounds; the
+        wording above them describes WHY the exit window is safe. This pins
+        the mechanism so the wording cannot drift from the code: panes gated
+        on `exit_t == 0`, text cut by TR.exit_contract in composite()."""
+        pane_gates = len(re.findall(r"exit_t == 0", renderer_src))
+        assert pane_gates >= 6, (
+            f"only {pane_gates} exit_t pane gates — the 'panes vanish at "
+            "exit' wording is stale")
+        assert "TR.exit_contract" in renderer_src, (
+            "exit_contract gone — text no longer cuts on a schedule during "
+            "exit; re-read the exit branch before trusting the table")
+        assert re.search(r"enter_t\s*=\s*text_ok and 1\.0 or -1\.0",
+                         renderer_src), (
+            "composite() no longer keeps text up past the pane during exit "
+            "— the exit-contract paragraph above ENFORCED is stale")
+
+    def test_fact_check_payloads_carry_no_conf_color(self):
+        """Tripwire for the parser blind spot declared at KNOWN_VARIABLE_EXPRS:
+        draw_fact_check's eyebrow ink falls back to card.conf_color
+        (renderer.lua:1359), which the parser cannot see. Today no FactCheck
+        constructor sets conf_color — if one ever does, a confidence_* color
+        reaches TEXT and the sweep must classify the pairing by hand."""
+        if not CARDS_PY.exists() or not CARDS_LUA.exists():
+            pytest.skip("cards.py / cards.lua not in this checkout")
+        py = CARDS_PY.read_text(encoding="utf-8")
+        m = re.search(r"^def fact_check\(.*?(?=^def |\Z)", py, re.S | re.M)
+        assert m, "fact_check def not found in cards.py"
+        assert "conf_color" not in m.group(0), (
+            "cards.py fact_check now sets conf_color — the eyebrow fallback "
+            "at renderer.lua:1359 can put a confidence_* color into text; "
+            "classify that pairing in the sweep")
+        lua = _lua(CARDS_LUA)
+        m = re.search(r"function M\.fact_check\(.*?\nend\b", lua, re.S)
+        assert m, "M.fact_check not found in cards.lua"
+        assert "conf_color" not in m.group(0), (
+            "cards.lua M.fact_check now sets conf_color — same blind spot, "
+            "same fix: classify the pairing it enables")
+
+
+class TestNotInRendererScope:
+    """NOT_IN_RENDERER says 'referenced by nothing in renderer.lua' — no
+    more. This class pins where those tokens ARE drawn so the distinction
+    stays true repo-wide (#565's lesson: enumerate, do not spot-check; and a
+    green test must never guard a sentence another file falsifies)."""
+
+    def test_the_elsewhere_map_covers_the_set_exactly(self):
+        assert set(DRAWN_ELSEWHERE) == NOT_IN_RENDERER, (
+            "DRAWN_ELSEWHERE and NOT_IN_RENDERER drifted apart — state "
+            "where every not-in-renderer token is actually drawn")
+
+    def test_status_paused_is_drawn_by_the_horizon_and_particles(self):
+        """The idle Horizon the renderer composites over draws status_paused
+        in four places; particles.lua defaults to it. If these go away the
+        token may graduate to genuinely-unrendered — say so then, not
+        before."""
+        for path in (HORIZON_LUA, PARTICLES_LUA):
+            if not path.exists():
+                pytest.skip("halo-lua not in this checkout")
+        horizon = _lua(HORIZON_LUA)
+        hits = len(re.findall(r"P\.status_paused\b", horizon))
+        assert hits >= 4, (
+            f"horizon.lua now references status_paused {hits}x (< 4) — "
+            "re-check DRAWN_ELSEWHERE")
+        assert re.search(r"P\.status_paused\b", _lua(PARTICLES_LUA)), (
+            "particles.lua no longer defaults to status_paused — re-check "
+            "DRAWN_ELSEWHERE")
+
+    def test_accent_error_is_themed_and_drawn_as_figment_text(self):
+        """accent_error is live device ink outside renderer.lua: restyleable
+        by themes, and drawn as figment text (host compat.py builds
+        TextLine(color='accent_error'); figment_stage.lua draws line.color
+        via _display.text)."""
+        for path in (THEME_LUA, THEMES_DIR / "cyberpunk.lua",
+                     THEMES_DIR / "high_contrast.lua", FIGMENT_STAGE_LUA):
+            if not path.exists():
+                pytest.skip("halo-lua not in this checkout")
+        assert re.search(r'"accent_error"', _lua(THEME_LUA)), (
+            "accent_error left theme.lua's COLOR_KEYS — re-check "
+            "DRAWN_ELSEWHERE")
+        for name in ("cyberpunk.lua", "high_contrast.lua"):
+            assert re.search(r"accent_error\s*=", _lua(THEMES_DIR / name)), (
+                f"{name} no longer restyles accent_error")
+        stage = _lua(FIGMENT_STAGE_LUA)
+        assert re.search(r"color\s*=\s*line\.color", stage) and \
+            "_display.text" in stage, (
+                "figment_stage.lua no longer draws scene line colors as "
+                "text — the accent_error figment-text claim is stale")
+
+    def test_memory_rail_is_genuinely_unrendered_repo_wide(self):
+        """The ONE genuinely-unrendered token, held to a repo-wide standard:
+        no halo-lua file but palette.lua may mention it; renderer.lua may
+        not read the layout 'vbar' key (the host's only use, cards.py:105);
+        and cards.py may not grow a second use."""
+        if not HALO_LUA_DIR.exists() or not CARDS_PY.exists():
+            pytest.skip("halo-lua / host-python not in this checkout")
+        holders = {str(p.relative_to(HALO_LUA_DIR))
+                   for p in HALO_LUA_DIR.rglob("*.lua")
+                   if re.search(r"\bmemory_rail\b", _lua(p))}
+        assert holders == {"display/palette.lua"}, (
+            f"memory_rail escaped its definition: referenced in {holders}")
+        renderer = _lua(RENDERER_LUA)
+        assert "vbar" not in renderer, (
+            "renderer.lua now reads layout 'vbar' — the ObjectRecall "
+            "MEMORY_RAIL bar is live ink; classify it")
+        uses = len(re.findall(r"\bMEMORY_RAIL\b",
+                              CARDS_PY.read_text(encoding="utf-8")))
+        assert uses == 1, (
+            f"cards.py references MEMORY_RAIL {uses}x (was 1, the undrawn "
+            "vbar) — find the new use and classify it")
