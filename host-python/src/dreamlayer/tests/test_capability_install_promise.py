@@ -182,3 +182,66 @@ class TestSomeOfThemDoRunJustNotHere:
         assert "These run on your glasses" in text
         # a hub capability must not also appear under "nothing calls them yet"
         assert 'runs_on !== "hub"' in text
+
+
+class TestAPackDoesNotSellAnInertCapability:
+    """A pack is the ONE-CLICK unit — on a frozen build the panel says "add with
+    a pack ↓" and the tagline is the whole pitch. Three of them named a specific
+    capability that installing could not switch on:
+
+      * Total Recall promised "deduped", which is `memory_dedup` — and that runs
+        on the GLASSES, so a Mac install of this pack does not switch it on.
+      * Clear Eyes promised "identity-stable tracking", which is
+        `object_tracking` — nothing in the tree feeds it frames.
+      * Guardian promised "structured cancellation", which is
+        `structured_concurrency` — Orchestrator-only.
+
+    The Operator pack was already written the honest way and is the model: name
+    what works "today", then say the rest ships "as libraries" for surfaces
+    still being wired.
+    """
+
+    @staticmethod
+    def _inert(pack):
+        return [c for c in pack.caps() if not cap.wires_on_install(c)]
+
+    def test_the_check_has_something_to_check(self):
+        packs = [p for p in cap.PACKS if self._inert(p)]
+        assert packs, "no pack carries an inert capability — update this file"
+
+    @pytest.mark.parametrize("key,phrase", [
+        ("recall", "deduped"),
+        ("eyes", "identity-stable tracking,"),
+        ("guardian", "structured cancellation."),
+    ])
+    def test_the_bare_promise_is_gone(self, key, phrase):
+        """Each phrase named an inert capability as a flat selling point."""
+        p = next(x for x in cap.PACKS if x.key == key)
+        assert phrase not in p.tagline, (
+            f"{key} sells {phrase!r} again — that capability cannot be switched "
+            "on by installing this pack")
+
+    @pytest.mark.parametrize("key", ["recall", "eyes", "guardian", "operator"])
+    def test_a_pack_carrying_inert_caps_says_so(self, key):
+        """Not a blanket rule — only packs that actually carry one. A pack whose
+        every capability wires on install should NOT be hedged, or the hedge
+        stops meaning anything."""
+        p = next(x for x in cap.PACKS if x.key == key)
+        assert self._inert(p), f"{key} no longer carries an inert cap"
+        low = p.tagline.lower()
+        assert ("librar" in low or "does not" in low), (
+            f"{key} carries {len(self._inert(p))} capabilities that installing "
+            "cannot switch on and its tagline does not say so")
+
+    def test_a_fully_live_pack_is_not_hedged(self):
+        """The other side of the same rule, so the hedge stays informative."""
+        for p in cap.PACKS:
+            if self._inert(p):
+                continue
+            assert "as those surfaces come online" not in p.tagline, p.key
+
+    def test_the_hub_one_says_it_is_the_glasses_not_a_someday(self):
+        """`memory_dedup` is not unfinished — it runs. Saying "coming soon"
+        about a feature the wearer's glasses use would be the wrong hedge."""
+        p = next(x for x in cap.PACKS if x.key == "recall")
+        assert "GLASSES" in p.tagline or "glasses" in p.tagline

@@ -811,16 +811,22 @@ class Pack:
 
 PACKS: Tuple[Pack, ...] = (
     Pack("recall", "Total Recall",
-         "Semantic memory that actually understands — indexed, deduped, searchable by meaning, fully offline.",
+         "Semantic memory that actually understands — indexed, searchable by meaning, "
+         "fully offline. (Near-duplicate merging rides along as a library: your "
+         "GLASSES use it, this Mac does not.)",
          ("memory",), "~2–4 GB", 5, recommended=True),
     Pack("ears", "Sharp Ears",
          "Local speech: neural voice detection, on-device transcription, and Juno speaking in her own cloned voice. Audio never leaves this Mac.",
          ("voice", "asr-extra", "voice-clone"), "~2–4 GB", 4),
     Pack("eyes", "Clear Eyes",
-         "Perception: object recognition, identity-stable tracking, real voice fingerprints, proper language parsing, and a painterly dream-mode lens.",
+         "Perception: object recognition, real voice fingerprints, proper language "
+         "parsing, and a painterly dream-mode lens — working today. The "
+         "identity-stable tracker ships as a library; nothing feeds it frames yet.",
          ("vision", "intelligence", "dream-style"), "~3–5 GB", 4),
     Pack("guardian", "Guardian",
-         "Deeper privacy and provenance: in-context PII scrubbing, Ed25519 signatures, structured cancellation.",
+         "Deeper privacy and provenance: in-context PII scrubbing and Ed25519 "
+         "signatures — working today. Structured cancellation and the typed-record "
+         "adapters come with it as libraries, for surfaces still being wired.",
          ("privacy", "structured"), "~300 MB", 3),
     Pack("operator", "Operator",
          "Operations toolkit: pair a phone by sound and route across any LLM provider — working today — plus the libraries for LAN discovery, live dashboards, a sandboxed WASM plugin host, off-grid mesh and conflict-free sync as those surfaces come online.",
