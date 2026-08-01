@@ -648,6 +648,40 @@ class BrainConfig:
     # grammar of self-introductions still gates it — ambient chatter never
     # captures anything — but "kept without being asked" deserves its own yes.
     intro_auto_keep: bool = False
+
+    # -- what may interrupt you -------------------------------------------
+    # Seven switches the phone has shipped since launch and that reached
+    # NOTHING: `setFactCheck`, `setProactiveCards`, `setFocus`, `setCue`,
+    # `setWakeSource`, `setWakeFeedback` and `setProactiveAlerts` each wrote
+    # AsyncStorage and stopped there. The five below are enforced at
+    # `Brain.push_event` — the one funnel every card goes through — and the two
+    # wake fields are served to the glasses hub, which is the only thing that
+    # can act on them.
+    #
+    # Defaults are ON, unlike almost everything else in this file, and that is
+    # deliberate: these are not new capabilities being opted into, they are the
+    # product's existing behaviour becoming controllable. A default of False
+    # would silently turn the glasses off for everyone who upgrades.
+    proactive_cards: bool = True     # surface a card unasked at all
+    proactive_alerts: bool = True    # …and let Juno tap you on the shoulder
+    focus_mode: bool = False         # hush interruptions; capture keeps running
+    cue_event: bool = True           # "leave in 8 min"
+    cue_person: bool = True          # who is in front of you
+    cue_place: bool = True           # what you left here
+    # As people talk, check what is said against what you already know. Off by
+    # default because it is the only one here that SPENDS something (a lens
+    # pass per utterance), and because a fact-check on every sentence is a
+    # different product from one you ask for.
+    fact_check_enabled: bool = False
+    # Ways to wake Juno, and how she says she is listening. The Brain does not
+    # wake anything — the glasses hub does — so these are persisted here (the
+    # phone's config home) and PULLED by the hub, rather than being enforced on
+    # this side. See `JunoAttentionOps.sync_wake_prefs`.
+    wake_sources: list[str] = field(
+        default_factory=lambda: ["voice", "tap", "gaze", "raise"])
+    wake_feedback: list[str] = field(
+        default_factory=lambda: ["visual", "audio", "haptic"])
+
     # -- optional capabilities (dreamlayer/capabilities.py) --------------
     # keys the panel switched OFF — the persisted twin of DL_DISABLE_<KEY>,
     # so the bundled app remembers the choice across restarts

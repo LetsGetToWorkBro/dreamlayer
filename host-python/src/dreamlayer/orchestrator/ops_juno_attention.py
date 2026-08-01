@@ -44,6 +44,63 @@ class JunoAttentionOps(OpsHost):
 
     # -- Juno: wake word + multimodal activation + listening feedback --
 
+    def sync_wake_prefs(self, http_get=None) -> dict | None:
+        """Pull the wearer's wake preferences from the paired Brain and apply.
+
+        These four sources and three feedback cues are set on the PHONE, and
+        until now the phone wrote them to its own local storage and nothing ever
+        read them — `setWakeSource` and `setWakeFeedback` reached no device at
+        all. They cannot be enforced Brain-side either: the Brain wakes nothing,
+        this host does. So the Brain persists them (it is the phone's config
+        home and the only thing the phone can reach) and this pulls them, in the
+        same direction and with the same helper `morning_brief` already uses to
+        read `/dreamlayer/brief/latest`.
+
+        Returns what was applied, or None when there is no Brain, no answer, or
+        an answer that names nothing — an unreachable Brain must leave the
+        wearer's glasses exactly as they were, never fall back to a default that
+        quietly re-enables a source they switched off.
+        """
+        if not self.brain_url:
+            return None
+        get = http_get or _default_http_get
+        try:
+            j = get(self.brain_url.rstrip("/") + "/dreamlayer/juno",
+                    self.brain_token)
+        except Exception:
+            return None
+        if not isinstance(j, dict):
+            return None
+        srcs = j.get("wake_sources")
+        fb = j.get("wake_feedback")
+        applied: dict = {}
+        # A missing key leaves that half alone; an EMPTY LIST is a real answer
+        # ("no way to wake me by gesture") and is applied. Conflating the two
+        # would make "I turned them all off" indistinguishable from "an older
+        # Brain doesn't know about this".
+        if isinstance(srcs, list):
+            self.wake_sources = {str(s) for s in srcs if isinstance(s, str)}
+            applied["wake_sources"] = sorted(self.wake_sources)
+        if isinstance(fb, list):
+            want = {str(k) for k in fb if isinstance(k, str)}
+            for k in self.wake_feedback:
+                self.wake_feedback[k] = k in want
+            applied["wake_feedback"] = dict(self.wake_feedback)
+        # The interruption switches are ENFORCED by the Brain at its own
+        # `push_event`; mirroring them here keeps the hub's own cards from
+        # contradicting it — this host builds cards the Brain never sees.
+        ints = j.get("interrupts")
+        if isinstance(ints, dict):
+            if "proactive_cards" in ints:
+                self.set_anticipation(bool(ints["proactive_cards"]))
+                applied["proactive_cards"] = bool(ints["proactive_cards"])
+            for cue in ("event", "person", "place"):
+                key = f"cue_{cue}"
+                if key in ints:
+                    self.set_cue(cue, bool(ints[key]))
+                    applied[key] = bool(ints[key])
+        return applied or None
+
     def set_wake_source(self, source: str, on: bool = True) -> None:
         """Enable/disable a way to wake Juno (voice / tap / gaze / raise)."""
         if on:

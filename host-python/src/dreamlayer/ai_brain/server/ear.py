@@ -192,6 +192,28 @@ class EarHost:
             self.truth.note_transcript(text, speaker or "")
         except Exception as exc:                     # noqa: BLE001 — a gauge must
             log.warning("[truth] read failed: %s", type(exc).__name__)   # never
+        # …and CHECK IT, when the wearer has asked for a live fact-checker.
+        #
+        # "Live fact-checker" has been a switch in the phone's Settings since
+        # launch — "as people talk, Juno quietly checks what's said" — and
+        # `setFactCheck` wrote AsyncStorage and stopped there. The Brain grew no
+        # such flag, and `LensHost.fact_check` could only ever be called by
+        # someone typing a claim into a route. So the feature the copy promised
+        # did not exist, and this is the line that makes it true.
+        #
+        # The lens is left to do its own refusing: it returns `fired: False` for
+        # an unverifiable claim, an unreachable tier, or a speaker still inside
+        # the cooldown, and only pushes a card when it genuinely has something.
+        # Fed the redacted text like everything else here, and gated on its own
+        # opt-in because it is the one lens on this path that SPENDS something
+        # (a verifier pass per utterance).
+        try:
+            if getattr(self.brain.config, "fact_check_enabled", False):
+                ls = self.brain.lenses()
+                if ls is not None:
+                    ls.fact_check(text)
+        except Exception as exc:                     # noqa: BLE001 — a check must
+            log.warning("[ear] fact check failed: %s", type(exc).__name__)  # never
         # …and ANSWER it, when the room asked a question and the Brain knows.
         self._answer_ahead(text)
         name = "heard" if not speaker else f"heard:{speaker}"
