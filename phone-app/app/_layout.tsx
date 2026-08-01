@@ -242,6 +242,7 @@ export default function Layout() {
       <Tabs.Screen name="saga" options={{ href: null }} />
       <Tabs.Screen name="lenses" options={{ href: null }} />
       <Tabs.Screen name="listening" options={{ href: null }} />
+      <Tabs.Screen name="privacy" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{ href: null }} />
       <Tabs.Screen name="rehearsal" options={{ href: null }} />
       <Tabs.Screen name="ember" options={{ href: null }} />

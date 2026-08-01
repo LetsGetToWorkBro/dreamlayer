@@ -71,6 +71,37 @@ export async function reportFix(fix: Fix): Promise<boolean> {
 }
 
 /**
+ * One fix, now, posted once — for "make HERE a private zone".
+ *
+ * Marking a zone is the one place a report cannot wait for the 25 m interval:
+ * the wearer is standing still, on purpose, in the room they want silenced, and
+ * `startReporting` sends nothing while stationary. Returns whether the Brain
+ * has a usable position afterwards, so a screen can say "I don't know where you
+ * are yet" instead of adding a zone around a coordinate from an hour ago.
+ *
+ * Foreground permission only, same trade as the reporter: asking for always-on
+ * location to power a privacy feature would be a poor bargain to explain.
+ */
+export async function markHere(): Promise<boolean> {
+  if (!Location?.getCurrentPositionAsync) return false;
+  try {
+    const perm = await Location.requestForegroundPermissionsAsync?.();
+    if (perm && perm.status !== "granted") return false;
+    const pos = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy?.Balanced,
+    });
+    const c = pos?.coords;
+    if (!c || !Number.isFinite(c.latitude) || !Number.isFinite(c.longitude)) return false;
+    return await reportFix({
+      lat: c.latitude, lon: c.longitude,
+      accuracy_m: c.accuracy ?? 0, heading_deg: null,
+    });
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Start reporting position (and heading) to the Brain. Returns a stopper.
  *
  * Safe to call when unpaired or without expo-location — it becomes a no-op
