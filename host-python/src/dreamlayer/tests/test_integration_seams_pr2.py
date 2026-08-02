@@ -153,3 +153,29 @@ def test_spatial_and_egolife():
     ego.add(now - EgoLifeIndex.DAY - 10, "note", "yesterday thing")
     buckets = ego.by_day(days=7, now=now)
     assert 0 in buckets and 1 in buckets
+
+
+def test_the_hud_has_no_python_skia_renderer():
+    """RETIRED, inverted — `hud/render_skia.py` was removed on 2026-08-02.
+
+    It was a working Skia rasterizer sketch that could never reach a wearer.
+    There are three renderers in this product and Skia only touched the one
+    nobody wears:
+
+      * `halo-lua/display/renderer.lua` — Lua, ON THE GLASSES;
+      * the JS canvas in `ai_brain/server/live.py` — the Live Lens on the phone;
+      * `hud/renderer.CardRenderer` — Python, the only thing Skia plugged into,
+        and consumed solely by `hud/golden_images.py`, `hud/export.py` and
+        `sdk/preview.py`. `grep CardRenderer ai_brain/` is empty: the Brain
+        never renders a card in Python.
+
+    So finishing it — drawing every card layout in Skia AND adding a whole-image
+    renderer slot `CardRenderer` does not have — would have bought crisper
+    golden-test images and a nicer SDK preview, for a capability the catalogue
+    itself scored `impact=1`.
+    """
+    import importlib.util
+    assert importlib.util.find_spec("dreamlayer.hud.render_skia") is None, (
+        "render_skia is back — see decisions/0007 for why it was retired")
+    from dreamlayer.hud.renderer import CardRenderer
+    assert CardRenderer() is not None, "the PIL renderer is the one that stayed"

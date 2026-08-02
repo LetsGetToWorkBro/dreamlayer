@@ -67,13 +67,17 @@ def test_rosetta_argos_translate_fn_identity():
 
 
 # --- hud/render_skia: delegates to the PIL fallback when Skia absent ----------
-def test_render_skia_falls_back():
-    from dreamlayer.hud.render_skia import make_skia_renderer, available
-    sentinel = object()
-    render = make_skia_renderer(lambda card: sentinel)
-    out = render({"title": "Timer"})
-    if not available:
-        assert out is sentinel     # went straight to the PIL fallback
+def test_there_is_no_python_skia_renderer_to_fall_back_from():
+    """RETIRED, inverted — `hud/render_skia.py` was removed on 2026-08-02.
+
+    It rasterized correctly and could never reach a wearer: the glasses render
+    in Lua (`halo-lua/display/renderer.lua`) and the Live Lens renders on a JS
+    canvas, so the only thing Skia plugged into was `hud.renderer.CardRenderer`
+    — used by golden-image tests, the export helper and the SDK preview, and by
+    nothing in `ai_brain/`. See decisions/0007.
+    """
+    import importlib.util
+    assert importlib.util.find_spec("dreamlayer.hud.render_skia") is None
 
 
 # --- ai_brain/server_fastapi: import-safe; app iff fastapi present ------------

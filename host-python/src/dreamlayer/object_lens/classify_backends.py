@@ -16,6 +16,7 @@ still gets real (gated) recognition rather than silence.
 from __future__ import annotations
 import logging
 import math
+import os
 import sys as _sys
 from typing import Optional, Tuple
 
@@ -287,17 +288,156 @@ class MLXVisionClassifier:
             return None
 
 
-class CoreMLClassifier:
-    """CoreML on-device inference (coremltools) — Apple Silicon path. Kept a
-    thin seam: a real Vela/CoreML model plugs in here when the .mlmodel exists."""
-    dep = "coremltools"
-    available = _has("coremltools")
 
-    def __init__(self, model_path: Optional[str] = None):
-        self.model_path = model_path
+def _to_rgb_image(frame):
+    """Any frame shape the lenses pass around -> a PIL RGB image, or None.
+
+    Floats in 0..1 and uint8 both arrive here depending on the rung upstream,
+    and a CoreML model wants neither an array nor a float image.
+    """
+    try:
+        from PIL import Image  # type: ignore
+        import numpy as np
+        if isinstance(frame, Image.Image):
+            return frame.convert("RGB")
+        arr = np.asarray(frame)
+        if arr.size == 0:
+            return None
+        if arr.dtype != np.uint8:
+            arr = ((np.clip(arr, 0, 1) * 255).astype("uint8")
+                   if arr.max() <= 1.0 else arr.astype("uint8"))
+        return Image.fromarray(arr).convert("RGB")
+    except Exception as exc:                         # noqa: BLE001
+        log.debug("[classify] frame not convertible: %s", type(exc).__name__)
+        return None
+
+
+def _configured_coreml_model() -> str:
+    """The wearer's compiled model path, from config.
+
+    Read through the shared `CONFIG` rather than plumbed through every caller —
+    the same way `lens_hosts` reads `retention_hot_hours`. An env-var-only path
+    was the exact mistake `dream_model_path` had to be rescued from: a bundled
+    .app cannot set one, so the feature was reachable to developers and to
+    nobody else.
+    """
+    try:
+        from ..config import CONFIG
+        return str(getattr(CONFIG, "coreml_model_path", "") or "")
+    except Exception:                                # noqa: BLE001
+        return ""
+
+
+class CoreMLClassifier:
+    """CoreML on-device inference — the Apple Neural Engine path.
+
+    On a Mac-mini Brain a compiled `.mlmodel`/`.mlpackage` classifier runs on
+    the ANE rather than the CPU: faster per frame and materially cooler, which
+    is what matters on a machine doing continuous ambient recognition.
+
+    WHAT THIS USED TO BE. The whole body was:
+
+        return None if not (self.available and self.model_path) else None
+
+    — `None` on both branches. It could not return a label under any
+    configuration, so the capability was not dormant, it was a claim. That is
+    the failure this repo keeps finding, and it is why `available` alone was
+    never enough to promote it.
+
+    Three things gate a real answer, and each is a separate honest refusal:
+    coremltools importable, macOS to execute on (coremltools imports fine on
+    Linux and cannot predict), and a model file that exists. Missing any of
+    them returns None and the ladder falls through to the next rung — exactly
+    the behaviour before this was implemented.
+
+    `_predict` is injectable so the parsing and the thresholding are tested for
+    real off-Apple; the Apple-only branch is the model load itself.
+    """
+    dep = "coremltools"
+    available = _has("coremltools") and _sys.platform == "darwin"
+
+    #: Below this the answer is "I do not know" rather than a guess. The ladder
+    #: treats None as "ask the next rung", which is the right thing for a model
+    #: that is unsure — a 3%-confident label is worse than no label.
+    MIN_CONFIDENCE = 0.25
+
+    def __init__(self, model_path: Optional[str] = None,
+                 min_confidence: float = MIN_CONFIDENCE, _predict=None):
+        self.model_path = model_path or _configured_coreml_model()
+        self.min_confidence = float(min_confidence)
+        self._model = None
+        self._predict = _predict          # (PIL.Image) -> dict, for tests
+        #: Real labels returned. `DL_WIRED_COREML_ONDEVICE` follows this, not
+        #: `available` — a wheel and a model file are not a prediction.
+        self.predictions = 0
+
+    def usable(self) -> bool:
+        """Could this rung answer at all? Cheap, no model load."""
+        if self._predict is not None:
+            return True
+        if not (self.available and self.model_path):
+            return False
+        return os.path.exists(self.model_path)
+
+    def _ensure(self) -> None:
+        if self._predict is not None or self._model is not None:
+            return
+        if not self.usable():
+            return
+        try:                              # pragma: no cover - Apple-only path
+            import coremltools as ct      # type: ignore
+            self._model = ct.models.MLModel(self.model_path)
+        except Exception as exc:          # pragma: no cover
+            log.warning("[coreml] load failed: %s", type(exc).__name__)
+            self._model = None
+
+    @staticmethod
+    def _read(out: dict) -> Optional[Tuple[str, float]]:
+        """`(label, confidence)` out of a CoreML classifier's output dict.
+
+        A Core ML classifier emits `classLabel` plus a probability dictionary
+        whose KEY NAME IS CHOSEN BY WHOEVER CONVERTED THE MODEL — commonly
+        `classLabelProbs`, but a converted torchvision model may call it
+        anything. So the probabilities are found by shape (the first dict-valued
+        output) rather than by a name that is not part of the format, and the
+        label falls back to the argmax of that dict when `classLabel` is absent.
+        """
+        if not isinstance(out, dict):
+            return None
+        probs = next((v for v in out.values() if isinstance(v, dict) and v), None)
+        label = out.get("classLabel")
+        if label is None and probs:
+            label = max(probs, key=lambda k: probs[k])
+        if label is None:
+            return None
+        try:
+            conf = float(probs[label]) if probs and label in probs else 1.0
+        except (TypeError, ValueError):
+            conf = 1.0
+        return (str(label), conf)
 
     def __call__(self, frame) -> Optional[Tuple[str, float]]:
-        return None if not (self.available and self.model_path) else None
+        if not self.usable():
+            return None
+        self._ensure()
+        if self._predict is None and self._model is None:
+            return None
+        try:
+            img = _to_rgb_image(frame)
+            if img is None:
+                return None
+            if self._predict is not None:
+                out = self._predict(img)
+            else:                         # pragma: no cover - Apple-only path
+                out = self._model.predict({"image": img})
+            got = self._read(out)
+            if got is None or got[1] < self.min_confidence:
+                return None
+            self.predictions += 1
+            return got
+        except Exception as exc:          # noqa: BLE001
+            log.warning("[coreml] predict failed: %s", type(exc).__name__)
+            return None
 
 
 class HeuristicVisionClassifier:
@@ -420,6 +560,13 @@ def default_classifier(labels: Optional[list[str]] = None,
     recognition happens even with no ML deps. Pass ``heuristic_fallback=False`` to
     get the old behaviour (None when nothing neural is installed, so a caller's own
     mock stays authoritative)."""
+    # Apple Neural Engine first when the wearer has actually compiled a model:
+    # it is the cheapest per frame on the Mac-mini Brain, and `usable()` is a
+    # file check rather than a load, so an unconfigured Mac costs nothing here
+    # and falls straight through to the rungs below.
+    _cml = CoreMLClassifier()
+    if _cml.usable():
+        return _cml
     if YoloClassifier.available:
         y = YoloClassifier()
         if y._model is not None:

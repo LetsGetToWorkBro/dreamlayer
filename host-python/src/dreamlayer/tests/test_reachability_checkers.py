@@ -878,8 +878,16 @@ class TestLoadableIsNotOneState:
         for key in ("social_graph", "dream_style", "crdt_sync"):
             assert key in promoted, f"the literal flag for {key} was not read"
         # and not everything — a set that swallowed the catalogue would empty the
-        # inert bucket and hide the real shortlist
-        assert "coreml_ondevice" not in promoted
+        # inert bucket and hide the real shortlist.
+        #
+        # This used to name `coreml_ondevice`, which is promoted now: its
+        # `__call__` was `return None if not (...) else None` and is a real ANE
+        # classifier. The guard needs a capability that genuinely has NO
+        # promoter, so it names the ones still in that bucket — and if they are
+        # ever wired, this line has to move again rather than being deleted,
+        # because a non-vacuity guard that stops guarding is worse than none.
+        assert "asgi_server" not in promoted
+        assert "structured_output" not in promoted
         assert "asgi_server" not in promoted
 
     def test_a_test_setting_a_flag_does_not_count_as_promotion(self, caps):

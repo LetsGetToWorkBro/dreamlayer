@@ -1116,12 +1116,23 @@ class BrainLenses:
             return {"nodes": [], "total": 0, "index": 0, "pushed": 0}
         from .brain_social import _ago as _ts_label
         rows = sorted(rows, key=lambda b: b.ts, reverse=True)
-        total = len(rows)
+        # Near-duplicates collapse HERE and not in the ring (`memory/dedup.py`):
+        # the Object Lens's "seen before N×" row is len() over raw ring entries,
+        # so merging at write time would make that count lie. Scrubbing back
+        # through the same sentence five times is noise; the count is signal.
+        from ...memory.dedup import collapse
+        merged = collapse(rows, lambda b: (b.event.summary or ""))
         nodes = [{"summary": (b.event.summary or "").strip(),
                   "kind": b.event.kind or "object",
                   "ts": b.ts, "ts_label": _ts_label(b.ts, now),
+                  "repeats": reps,
                   "confidence": round(float(getattr(b.event, "confidence", 0.0) or 0.0), 3)}
-                 for b in rows]
+                 for b, reps in merged]
+        # `total` is the MERGED length, not the raw one: it is the scrubber's
+        # bound (`min(index, total - 1)`) and the denominator its progress dot
+        # draws, so a raw total would let the wearer scrub past the end of the
+        # list they can actually see.
+        total = len(nodes)
         if not total:
             return {"nodes": [], "total": 0, "index": 0, "pushed": 0}
         idx = max(0, min(int(index or 0), total - 1))

@@ -3342,6 +3342,34 @@ def _capability_payload(brain: Brain) -> dict:
                 env["DL_WIRED_DIARIZATION"] = "1"
     except Exception:                           # noqa: BLE001
         pass
+    # `memory_dedup` — near-duplicate collapsing over what the wearer is shown.
+    # The flag follows a scrub list that ACTUALLY merged something: collapsing
+    # is on the read path unconditionally, so "the code ran" is not evidence,
+    # and a wearer who never repeats themselves has nothing to dedup and should
+    # not be told the capability is doing work.
+    try:
+        _ls = getattr(brain, "_lenses", None)
+        _r = getattr(_ls, "_ring", None) if _ls is not None else None
+        if _r is not None:
+            from ...memory.dedup import collapse as _collapse
+            _rows = _r.latest(limit=200)
+            if len(_collapse(_rows, lambda b: (b.event.summary or ""))) < len(_rows):
+                env["DL_WIRED_MEMORY_DEDUP"] = "1"
+    except Exception:                               # noqa: BLE001
+        pass
+    # `coreml_ondevice` — the Apple Neural Engine rung of the vision ladder. The
+    # flag follows a real prediction, never `available`: the adapter used to
+    # return None on both branches of its only statement, so a wheel being
+    # importable was never evidence of anything. A compiled model on disk is not
+    # either — only a label that came back.
+    try:
+        from ...object_lens.classify_backends import CoreMLClassifier
+        from .live import _classifier as _vision_ladder
+        _rung = _vision_ladder()
+        if isinstance(_rung, CoreMLClassifier) and _rung.predictions > 0:
+            env["DL_WIRED_COREML_ONDEVICE"] = "1"
+    except Exception:                               # noqa: BLE001
+        pass
     # `typed_models` — the Veil as a type invariant on the ring's keep path.
     # The flag follows an invariant that has actually VETTED an append, not a
     # gate having been handed over: a ring nothing has been kept into is a

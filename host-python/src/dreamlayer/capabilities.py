@@ -108,7 +108,7 @@ CAPABILITIES: Tuple[Cap, ...] = (
         gain="baseline embeddings are mock vectors (or cloud); this makes memories truly searchable by meaning, offline", impact=5, before=1.5, after=5),
     Cap("memory_dedup", "Dedup + decay over the memory stream", "memory",
         ("mem0",), "memory", "lucid_recall/mem0_layer.py",
-        gain="fallback dedup is exact-match; this merges near-duplicates and decays stale ones", impact=3, before=2.5, after=4),
+        gain="near-duplicate collapsing already runs on what you are shown, with no dependency and nothing leaving the device — mem0 would add a hosted extraction step, so this one stays local by choice rather than by fallback", impact=3, before=2.5, after=4),
     Cap("typed_docs", "Validated multimodal memory records", "memory",
         ("docarray",), "memory", "memory/doc_schema.py",
         gain="baseline records are plain dataclasses; this validates every field", impact=2, before=3, after=4),
@@ -321,9 +321,6 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("offline_translation", "Neural MT with no network", "platform",
         ("argostranslate",), "platform", "rosetta_argos.py",
         gain="baseline 'translation' returns the text unchanged; this actually translates, offline", impact=4, before=0, after=4.5),
-    Cap("skia_render", "GPU-crisp HUD rasterizing", "platform",
-        ("skia",), "platform", "hud/render_skia.py",
-        gain="baseline PIL rendering is solid; this adds GPU-crisp strokes if you want them", impact=1, before=3.5, after=4),
     Cap("asgi_server", "ASGI adapter for your own dispatch", "platform",
         ("fastapi",), "platform", "ai_brain/server_fastapi.py",
         gain="the Brain's own server is the stdlib one and stays that way; this wires a dispatch function YOU write to FastAPI, with the auth and error envelope handled", impact=1, before=3.5, after=4),
@@ -465,6 +462,12 @@ _NOT_WIRED = frozenset({
     # promoted in `_capability_payload` when networkx answers over a NON-EMPTY
     # graph: the wheel over an empty graph returns nothing from every query, which
     # is exactly what the fallback does, so that must not read green.
+    # memory_dedup stays listed as the honest DEFAULT and is promoted when a
+    # scrub list genuinely merges something. `Mem0Layer` was built only by the
+    # Orchestrator the Brain never constructs, and mem0's own default routes
+    # extraction through a cloud LLM — so the collapsing lives in
+    # `memory/dedup.py`, dependency-free, on the READ path (merging at write
+    # time would make the Object Lens's "seen before N×" count lie).
     "memory_dedup", "typed_docs", "social_graph",
     # voice: the on-device "ear". Seven of these (voice_vad, local_asr,
     # mic_capture, asr_moonshine, onnx_speech, sound_events, bird_song) are now
@@ -507,8 +510,12 @@ _NOT_WIRED = frozenset({
     # image. Promotion is proof-based (`_dream_neural_ok`, set only after the
     # NEURAL painter produces a picture) and re-checked against the configured
     # path, so onnxruntime being importable still must not light this green.
-    # coreml_ondevice remains dormant (a macOS Vision classify backend not on the
-    # live path).
+    # coreml_ondevice stays listed as the honest DEFAULT and is promoted on a
+    # real prediction. Its `__call__` was `return None if not (...) else None` —
+    # None on both branches — so no configuration could make it answer, and
+    # `available` (coremltools imports) would have lit it green on a wheel
+    # alone. It is a real ANE classifier now, first on the ladder when the
+    # wearer has compiled a model, and dormant until one comes back with a label.
     "coreml_ondevice", "dream_style",
     # intelligence / structured: adapters wired only in tests
     # persona_tuning stays listed as the honest DEFAULT and is promoted on a
@@ -521,7 +528,7 @@ _NOT_WIRED = frozenset({
     "speaker_id", "persona_tuning", "object_tracking",
     "structured_output", "typed_models", "typed_pipeline",
     # platform / infra: no live loader / surface reaches these
-    "plugin_entrypoints", "event_bus", "skia_render", "asgi_server",
+    "plugin_entrypoints", "event_bus", "asgi_server",
     # crdt_sync stays listed as the honest DEFAULT and is promoted on a real
     # merge. `vault_sync.py` was a complete, tested CRDT that nothing constructed,
     # while the Brain had held the other half the whole time — `self.rc` builds
