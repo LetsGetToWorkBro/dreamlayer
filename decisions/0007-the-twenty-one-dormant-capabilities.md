@@ -466,3 +466,66 @@ The count going 73 → 71 is not a loss; two entries that could never honestly g
 green stopped being on the list. **Before wiring a dormant capability, ask what
 installing it would DO** — an entry whose only effect is to enable behaviour the
 design deliberately refuses should be deleted, not deferred.
+
+## Update — 2026-08-02: the fourth instance, and the one that mattered most
+
+`persona_tuning`, `typed_models`, `memory_dedup` — and then the transport to the
+glasses itself. Four times the same shape, and the fourth was the reason the
+product had no on-glass surface at all.
+
+**The whole `bridge/` package** — including `real_bridge.py`, which speaks BLE to
+a Halo over `brilliant-ble`/`brilliant-msg` and exposes `send_card(payload,
+event)` — is constructed in exactly two places: `main.py`'s emulator helper and
+`simulator/`. Both hang off the `Orchestrator` that `decisions/0001` records the
+shipped Brain never instantiates. Complete, tested, and reachable only from code
+the wearer does not run.
+
+`truth_live.py` had already written the symptom down while fixing its own case:
+*"the phone talks to the Brain and nothing else, so 'Read the room' … reached
+the glass only on a surface that does not exist yet."* Nobody followed the
+sentence to its conclusion, which is that the sentence was true of **every**
+card, not that one.
+
+`ai_brain/server/halo_link.py` is that surface.
+
+### Why a subscriber and not a call site
+
+The obvious build is to teach each producer to also send to the glasses: twenty
+edits, twenty chances to forget, and a permanent second list to keep in step —
+the `person_guard`/`voice_guard` shape this repo keeps centralising away from.
+
+The link instead registers a queue in `Brain._event_subs`, the list the Live
+Lens's SSE stream already joins. `push_event` fans out to every subscriber, so
+**every card that reaches the phone reaches the glass, and any future card does
+too, with no further wiring.** A producer cannot forget to support the glasses
+because it never learns they exist.
+
+It also means the gating is already right and must not be repeated. A card in
+that queue has passed the Veil, the wearer's interruption preferences, and the
+learned attention bar. Re-checking would double-gate; ignoring the `safety` flag
+would let a smoke alarm be dropped by a policy written for ambient cards.
+
+### What this changes about the earlier entries
+
+Every capability the report calls DRIVEN was, until now, driven *to the phone*.
+The bucket's meaning has quietly widened: the same twenty now reach the device
+too, without any of them being touched. That is the argument for fixing
+transports at the funnel rather than per feature, and it is worth remembering
+the next time a capability looks like it needs its own wire.
+
+### What would overturn this
+
+`grep -rn send_card host-python/src/dreamlayer/ai_brain` returning anything
+other than `halo_link.py`. The inverted test
+(`TestTheGlassIsTheONETheBrainCanReach`) asserts exactly that: the path must
+stay ONE seam. Scattered `send_card` calls would restore the old problem in a
+form no checker can measure — some cards reaching the device and some not, with
+nothing to tell them apart.
+
+### The pattern, now that there are four
+
+Each of the four had a complete, tested seam and a consumer nothing constructs.
+None of them needed a dependency, a redesign, or new domain logic. **Ask who
+constructs the consumer** — and when the answer is `Orchestrator`, the fix is
+always to re-host the plain half Brain-side, following `retention_live.py`,
+never to resurrect the Orchestrator.
