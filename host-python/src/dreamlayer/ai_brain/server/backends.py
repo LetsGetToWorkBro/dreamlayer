@@ -417,6 +417,11 @@ _LOCAL_AGENT_PROBES = (
     {"label": "Msty", "provider": "custom",
      "base_url": "http://localhost:10000/v1",
      "models_url": "http://localhost:10000/v1/models"},
+    # SGLang's launch_server defaults to port 30000 (ServerArgs.port) and serves
+    # the OpenAI-compatible GET /v1/models, same shape as vLLM above.
+    {"label": "SGLang", "provider": "custom",
+     "base_url": "http://localhost:30000/v1",
+     "models_url": "http://localhost:30000/v1/models"},
 )
 
 

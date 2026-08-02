@@ -137,6 +137,50 @@ class TestOneClickDiscovery:
         _, url, _, _ = _build_request("custom", "http://localhost:10000/v1", "m", "", "q")
         assert url == "http://localhost:10000/v1/chat/completions"
 
+    def test_discover_finds_sglang(self):
+        # SGLang serves an OpenAI-compatible /v1/models on its default port
+        # 30000 (ServerArgs.port); a running instance must be discovered with
+        # its model list.
+        def fake(url, timeout):
+            if "30000" in url:
+                return {"data": [{"id": "meta-llama/Llama-3.1-8B-Instruct"}]}
+            raise ConnectionError("down")                     # everyone else off
+        found = {a["label"]: a for a in discover_local_agents(getter=fake)}
+        assert set(found) == {"SGLang"}
+        assert found["SGLang"]["provider"] == "custom"
+        assert found["SGLang"]["base_url"] == "http://localhost:30000/v1"
+        assert found["SGLang"]["models"] == ["meta-llama/Llama-3.1-8B-Instruct"]
+        # discovered endpoint is localhost → on-device by construction
+        assert all(is_local_endpoint(a["base_url"]) for a in found.values())
+
+    def test_sglang_reachable_with_no_models_is_still_discovered(self):
+        # a server that answers but has nothing loaded is UP — it must be
+        # offered with an empty list, not dropped as unreachable.
+        def fake(url, timeout):
+            if "30000" in url:
+                return {"data": []}                           # SGLang up, idle
+            raise ConnectionError("down")
+        found = {a["label"]: a for a in discover_local_agents(getter=fake)}
+        assert set(found) == {"SGLang"}
+        assert found["SGLang"]["models"] == []
+
+    def test_sglang_absent_when_not_running(self):
+        # port 30000 refused while another agent answers → SGLang is not offered
+        def fake(url, timeout):
+            if "30000" in url:
+                raise ConnectionError("refused")              # SGLang down
+            if "11434" in url:
+                return {"models": [{"name": "llama3.2"}]}      # Ollama up
+            raise ConnectionError("down")
+        found = {a["label"]: a for a in discover_local_agents(getter=fake)}
+        assert set(found) == {"Ollama"}
+
+    def test_sglang_base_url_does_not_double_the_v1_segment(self):
+        # the /v1-suffixed base_url discovery hands back must resolve to a single
+        # /v1 segment, not /v1/v1/chat/completions
+        _, url, _, _ = _build_request("custom", "http://localhost:30000/v1", "m", "", "q")
+        assert url == "http://localhost:30000/v1/chat/completions"
+
     def test_discover_empty_when_nothing_running(self):
         def down(url, timeout):
             raise OSError("refused")
