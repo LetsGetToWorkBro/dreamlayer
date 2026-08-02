@@ -43,7 +43,7 @@ from typing import Iterable, Optional, Tuple
 PROFILES: dict[str, Tuple[str, ...]] = {
     "profile-halo":  ("hardware",),
     "profile-phone": ("memory", "voice", "structured", "llm"),
-    "profile-mac":   ("memory", "voice", "asr-extra", "structured", "llm",
+    "profile-mac":   ("memory", "voice", "structured", "llm",
                       "intelligence", "vision", "infra", "privacy",
                       "platform"),
     "profile-cloud": ("structured", "llm", "intelligence", "privacy"),
@@ -169,9 +169,6 @@ CAPABILITIES: Tuple[Cap, ...] = (
         note="opt-in; BirdNET (6,000+ species) on the ambient-audio rung — no human identity in a bird call",
         gain="the glasses hear alarms and doorbells; with BirdNET they also know the Song Sparrow singing over your walk — fully offline, Pi-Zero-sized, pure delight", impact=2, before=0, after=4,
         optional=True),   # birdnetlib has no universal wheel — needs a compiler
-    Cap("asr_alignment", "Word-level timestamps for prosody", "voice",
-        ("whisperx",), "asr-extra", "truth_lens/prosody_whisperx.py",
-        gain="baseline has no word timing; this timestamps every word so tone becomes readable", impact=3, before=0, after=3.5),
     Cap("diarization", "Live who-is-speaking turns", "voice",
         ("diart",), None, "social_lens/diarize_diart.py", kind="manual",
         note="pip install diart",
@@ -228,10 +225,6 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("object_tracking", "Identity-stable multi-object tracking", "intelligence",
         ("supervision",), "intelligence", "dream_mode/track_supervision.py",
         gain="baseline tracker loses objects when they overlap; this keeps identity through occlusion", impact=3, before=2.5, after=4),
-    Cap("facial_aus", "Micro-expression action units", "intelligence",
-        ("libreface", "feat", "facetorch"), None, "truth_lens/au_backends.py",
-        kind="manual", note="research installs; see adapter docstring",
-        gain="baseline passes frames through untouched; this reads micro-expressions for the truth lens", impact=4, before=0, after=4),
 
     # --- vision -------------------------------------------------------------------
     Cap("vision_classify", "Object recognition (CLIP/YOLO/VLM)", "vision",
@@ -490,10 +483,13 @@ _NOT_WIRED = frozenset({
     # `tagger_live` lesson, where a present wheel with no model reported live for a
     # seam that could only ever return nothing.
     #
-    # wake_word (no wake engine yet), asr_alignment and diarization are still NOT
-    # promoted — they need the full Orchestrator path.
+    # wake_word (no wake engine yet) and diarization are still NOT promoted —
+    # they need the full Orchestrator path. `asr_alignment` was RETIRED on
+    # 2026-08-02: the reworked Truth Lens computes its voice-stress channel from
+    # `truth_lens/prosody.py` with no dependency, so whisperx only sharpened a
+    # channel that already works (decisions/0007).
     "voice_vad", "local_asr", "wake_word", "mic_capture", "live_interpret",
-    "sound_events", "asr_moonshine", "bird_song", "asr_alignment", "diarization",
+    "sound_events", "asr_moonshine", "bird_song", "diarization",
     "onnx_speech",
     # vision: six frontier lenses (math_ocr, doc_read, depth_sense,
     # openvocab_find, scene_segment, sky_sense) are now reachable from the phone /
@@ -522,7 +518,7 @@ _NOT_WIRED = frozenset({
     # wearer runs. `attention_live.AttentionGate` re-hosts the plain half
     # Brain-side, the way `retention_live.py` did, and `push_event` consults it.
     # It reports dormant until the wearer's own swats support a bar.
-    "speaker_id", "persona_tuning", "object_tracking", "facial_aus",
+    "speaker_id", "persona_tuning", "object_tracking",
     "structured_output", "typed_models", "typed_pipeline",
     # platform / infra: no live loader / surface reaches these
     "plugin_entrypoints", "event_bus", "skia_render", "asgi_server",
@@ -857,7 +853,7 @@ PACKS: Tuple[Pack, ...] = (
          ("memory",), "~2–4 GB", 5, recommended=True),
     Pack("ears", "Sharp Ears",
          "Local speech: neural voice detection, on-device transcription, and Juno speaking in her own cloned voice. Audio never leaves this Mac.",
-         ("voice", "asr-extra", "voice-clone"), "~2–4 GB", 4),
+         ("voice", "voice-clone"), "~2–4 GB", 4),
     Pack("eyes", "Clear Eyes",
          "Perception: object recognition, real voice fingerprints, proper language "
          "parsing, and a painterly dream-mode lens — working today. The "

@@ -4,22 +4,61 @@ optional and absent in CI). Adapters must not change host behaviour.
 from __future__ import annotations
 
 
-# --- truth_lens: AU backends passthrough; prosody/causal degrade cleanly -----
-def test_au_backends_passthrough():
-    from dreamlayer.truth_lens.au_backends import LibreFaceAU, PyFeatAU, FaceTorchAU, OpenFace3AU
-    sentinel = object()
-    for B in (LibreFaceAU, PyFeatAU, FaceTorchAU, OpenFace3AU):
-        assert B().process(sentinel) is sentinel   # passthrough with no dep
-        assert B().process(None) is None
+# --- truth_lens: the AU channel is off BY DESIGN; prosody stands alone -------
+def test_the_micro_expression_channel_stays_off():
+    """RETIRED, inverted — `au_backends` was removed on 2026-08-02.
+
+    This used to assert that four AU backends (LibreFace, py-feat, FaceTorch,
+    OpenFace3) passed frames through untouched with no dependency installed.
+    They did. The problem was what installing one would have DONE.
+
+    The reworked Truth Lens turns the micro-expression channel off deliberately:
+    `fusion.AU_CHANNEL_REAL` is False, its weight is 0.0, it is excluded from
+    the confidence count, and it draws as an honest empty slot on the Testimony
+    Thread. `truth_live.py` states the reason plainly — it "is the difference
+    between a delivery read and a lie detector: this surface never claims to
+    have seen a face twitch, because it has not."
+
+    A capability whose only effect is to switch on a channel the design refuses
+    is not a dormant capability, it is a loaded gun in the catalogue. So the
+    adapters are gone and this asserts the refusal instead.
+
+    `au_detector.py` is untouched and stays: it is what draws the empty slot.
+    """
+    import importlib.util
+    assert importlib.util.find_spec(
+        "dreamlayer.truth_lens.au_backends") is None, (
+        "au_backends is back — see decisions/0007 for why it was retired")
+    from dreamlayer.truth_lens.fusion import AU_CHANNEL_REAL, CHANNEL_WEIGHTS
+    assert AU_CHANNEL_REAL is False
+    assert CHANNEL_WEIGHTS["micro_expression"] == 0.0
 
 
-def test_prosody_fallback():
+def test_prosody_needs_no_dependency_at_all():
     """`causal_fusion` used to be asserted here too. It was dropped
     (decisions/0006): it imported dowhy purely as a flag, never called it, and
     read three attributes the credibility channels do not have — so it returned
-    None whether or not the dependency was installed."""
-    from dreamlayer.truth_lens.prosody_whisperx import WhisperXProsody
-    assert WhisperXProsody().word_timings("nope.wav") == []
+    None whether or not the dependency was installed.
+
+    `prosody_whisperx` joined it on 2026-08-02, for a different reason worth
+    keeping. It was never broken: `word_timings()` returned [] without whisperx
+    and real word timings with it. It was REDUNDANT. The reworked Truth Lens
+    (`ai_brain/server/truth_live.py`) computes its voice-stress channel — pitch,
+    jitter, shimmer, hesitation, pause ratio, speech rate — from
+    `truth_lens/prosody.py` over the FFT frames the interpreter already
+    produces, with no dependency. whisperx sharpened a channel that already
+    works, for ~70 packages including torch and the CUDA 12 stack.
+
+    So the assertion is inverted: the prosody channel must keep standing on its
+    own, and a re-added optional dependency must not become the thing it needs.
+    """
+    import importlib.util
+    assert importlib.util.find_spec(
+        "dreamlayer.truth_lens.prosody_whisperx") is None, (
+        "prosody_whisperx is back; if that is deliberate, decisions/0007 says "
+        "why it was retired and what would have to change")
+    from dreamlayer.truth_lens.prosody import ProsodyAnalyzer
+    assert ProsodyAnalyzer() is not None
 
 
 # --- orchestrator: ECAPA hash embed; commitment/taste/persona fallbacks ------

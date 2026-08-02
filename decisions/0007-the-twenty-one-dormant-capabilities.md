@@ -416,3 +416,53 @@ cases the seam named in the catalogue was real, complete and tested. **Ask who
 constructs the consumer, not whether the consumer exists** — and when the
 obvious integration point turns out to be inert, that is a finding to write
 down, not an obstacle to route around by wiring it anyway.
+
+## Update — 2026-08-02, `asr_alignment` and `facial_aus`: RETIRED, not deferred
+
+Both are removed from the catalogue and both adapters are deleted. Neither was
+broken; the reworked Truth Lens made one redundant and the other unwanted.
+
+**`facial_aus` was the one that mattered.** Four AU backends (LibreFace,
+py-feat, FaceTorch, OpenFace3) sat behind a capability the wearer could install.
+Installing any of them would have switched on the micro-expression channel — and
+the reworked lens turns that channel off *on purpose*:
+`fusion.AU_CHANNEL_REAL` is False, its weight is 0.0, it is excluded from the
+confidence count, and it draws as an honest empty slot on the Testimony Thread.
+`ai_brain/server/truth_live.py` states why: it "is the difference between a
+delivery read and a lie detector: this surface never claims to have seen a face
+twitch, because it has not."
+
+So the entry was not a dormant capability. It was a documented, one-click way
+for a wearer to turn a delivery read into a lie detector, sitting in the
+catalogue with an `impact=4` next to it. That is worse than a false green: a
+false green overstates what the product does, and this understated what
+installing it would change.
+
+`truth_lens/au_detector.py` is untouched and stays — it is what produces the
+empty slot.
+
+**`asr_alignment` was simply redundant.** `prosody_whisperx.word_timings()`
+worked: [] without whisperx, real word timings with it. But the live channel it
+was meant to sharpen — pitch, jitter, shimmer, hesitation rate, pause ratio,
+speech rate, energy — is computed by `truth_lens/prosody.py` from the FFT frames
+the interpreter already produces, with no dependency at all, and `truth_live.py`
+feeds it directly from the endpointed segment. whisperx refined something that
+already works, at ~70 packages including torch and the CUDA 12 stack.
+
+The `asr-extra` extras group went with it, along with its references in
+`PROFILES["profile-mac"]` and the "Sharp Ears" pack. Two tests in
+`test_capabilities.py` caught that drift before the suite did, which is the
+behaviour they exist for.
+
+Both assertions in `test_integration_seams_pr2.py` are inverted rather than
+deleted, matching how `causal_fusion` was handled in `decisions/0006`: the tests
+now pin that the modules are ABSENT and that the AU channel stays off, so a
+re-add is a deliberate act that trips a test rather than a quiet return.
+
+### The general rule this establishes
+
+Retiring a capability is a legitimate outcome and belongs beside wiring one.
+The count going 73 → 71 is not a loss; two entries that could never honestly go
+green stopped being on the list. **Before wiring a dormant capability, ask what
+installing it would DO** — an entry whose only effect is to enable behaviour the
+design deliberately refuses should be deleted, not deferred.

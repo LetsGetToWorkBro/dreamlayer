@@ -38,7 +38,7 @@ voice    = ["silero-vad>=6,<7", "faster-whisper>=1,<2", "openwakeword>=0.6,<1", 
 # zero-shot voice cloning (Juno speaks in her own voice, offline) — heavy (torch),
 # opt-in only, so it is NOT in any deployment profile: `pip install dreamlayer[voice-clone]`
 voice-clone = ["coqui-tts>=0.24,<1"]
-asr-extra = ["whisperx>=3,<4"]
+
 structured = ["outlines>=1,<2", "instructor>=1,<2", "pydantic>=2,<3", "pydantic-ai>=1.102.0,<2"]
 llm      = ["litellm>=1,<2"]
 intelligence = ["speechbrain>=1,<2", "spacy>=3,<4", "river>=0.23,<1", "human-learn>=0.3,<1", "supervision>=0.29,<1"]
@@ -106,7 +106,7 @@ platform = ["pluggy>=1,<2", "pyee>=13,<14", "argostranslate>=1,<2", "skia-python
 #     tests/test_capabilities.py asserts these stay in sync with capabilities.py. ---
 profile-halo  = ["dreamlayer[hardware]"]                       # bridge host next to the glasses: BLE only
 profile-phone = ["dreamlayer[memory,voice,structured,llm]"]    # pocket hub: local recall + STT, no heavy vision
-profile-mac   = ["dreamlayer[memory,voice,asr-extra,structured,llm,intelligence,vision,infra,privacy,platform]"]  # the full Brain
+profile-mac   = ["dreamlayer[memory,voice,structured,llm,intelligence,vision,infra,privacy,platform]"]  # the full Brain
 profile-cloud = ["dreamlayer[structured,llm,intelligence,privacy]"]  # remote runner: reasoning, no device/local-model stack
 
 [tool.uv]
