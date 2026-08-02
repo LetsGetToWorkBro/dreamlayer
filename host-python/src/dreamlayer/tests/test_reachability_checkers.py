@@ -380,6 +380,41 @@ class TestThePushScanResolvesTheLocalShapes:
             "the synthetic module's cross-module-receiver push was not "
             f"reported unresolved: {unresolved}")
 
+    def test_a_to_hud_card_through_a_factory_with_a_nested_def_stays_unresolved(
+            self, hud, tmp_path, monkeypatch):
+        """The same refusal, one shape over: `make_thing` never returns a
+        Reward — its NESTED helper does. Crediting the helper's return to the
+        enclosing factory would invent a receiver class the same-file rule
+        never established, and the scan would name a card type that is never
+        pushed. The decoy class is load-bearing: it keeps the bare-name
+        `to_hud_card` map void, so only the class-qualified path can answer —
+        and it must refuse rather than read across the nested `def`."""
+        pushed, unresolved = self._scan(hud, tmp_path, monkeypatch, """
+            class Reward:
+                def to_hud_card(self):
+                    return {"type": "RewardCard", "primary": "x"}
+
+            class Decoy:
+                def to_hud_card(self):
+                    return {"type": "DecoyCard", "primary": "y"}
+
+            def make_thing():
+                def _unused_helper():
+                    return Reward()          # nested; make_thing never returns a Reward
+                return {"not": "a reward"}
+
+            class Host:
+                def go(self):
+                    thing = make_thing()
+                    self._push("k", thing.to_hud_card())
+        """)
+        assert not pushed, (
+            "the synthetic scan credited a nested helper's return to the "
+            f"enclosing factory and invented a pushed card type: {pushed}")
+        assert [u.split(":")[0] for u in unresolved] == ["synthetic.host"], (
+            "the synthetic module's nested-def-factory push was not reported "
+            f"unresolved: {unresolved}")
+
     def test_an_ifexp_names_every_resolvable_branch(
             self, hud, tmp_path, monkeypatch):
         """The `server.py:1297` shape — the one the issue did not name:

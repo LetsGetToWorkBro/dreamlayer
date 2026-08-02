@@ -355,6 +355,18 @@ def _class_card_types(reachable: set) -> dict[str, str]:
             for name, kinds in seen.items()}
 
 
+def _own_nodes(fn):
+    """Every node belonging to THIS function, stopping at a nested `def`."""
+    stack = list(ast.iter_child_nodes(fn))
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.Lambda, ast.ClassDef)):
+            continue                      # its returns are its own
+        yield node
+        stack.extend(ast.iter_child_nodes(node))
+
+
 def _pushed_types(reachable: set) -> dict[str, set]:
     """card type → reachable modules that PUSH it to the glass.
 
@@ -432,7 +444,7 @@ def _pushed_types(reachable: set) -> dict[str, set]:
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            classes = {r.value.func.id for r in ast.walk(node)
+            classes = {r.value.func.id for r in _own_nodes(node)
                        if isinstance(r, ast.Return)
                        and isinstance(r.value, ast.Call)
                        and isinstance(r.value.func, ast.Name)
