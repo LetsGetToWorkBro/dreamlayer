@@ -6,7 +6,7 @@ real backend, so it could never actually answer a fact query. This adapter is
 that backend: it reads the wearer's own memory through the Retriever (the same
 ANN + exact-scan recall the rest of the system uses), and — when the optional
 mem0 layer is present — consults it first, so the three previously-disjoint
-lucid_recall pieces (router, Mem0Layer, the Retriever) now compose behind one
+lucid_recall pieces (router, an optional semantic store, the Retriever) compose behind one
 surface instead of sitting unwired beside each other.
 
 Recall gating is upstream: LucidRecall.query() already short-circuits on
@@ -22,7 +22,7 @@ class RetrieverRecallIndex:
     ----------
     retriever : Retriever
         The orchestrator's memory retriever (ANN + exact scan).
-    mem0 : Mem0Layer, optional
+    mem0 : semantic store, optional
         When mem0 is installed, its semantic store is consulted first; a miss
         (or its absence) falls through to the Retriever, so the offline default
         behaves identically to a Retriever-only index.

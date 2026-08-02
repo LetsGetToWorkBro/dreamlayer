@@ -229,6 +229,7 @@ export default function Layout() {
       <Tabs.Screen name="look" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="labs" options={{ href: null }} />
+      <Tabs.Screen name="glasses" options={{ href: null }} />
       <Tabs.Screen name="brief" options={{ href: null }} />
       <Tabs.Screen name="plugins" options={{ href: null }} />
       <Tabs.Screen name="capabilities" options={{ href: null }} />

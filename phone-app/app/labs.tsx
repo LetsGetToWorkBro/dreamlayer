@@ -44,6 +44,7 @@ const GROUPS: { section: string; rows: Row[] }[] = [
   {
     section: "Your brain",
     rows: [
+      { route: "/glasses", labelKey: "settings.glassesLink" },
       { route: "/listening", labelKey: "settings.listeningLink" },
       { route: "/privacy", labelKey: "settings.privacyLink" },
       { route: "/brain-tiers", labelKey: "settings.brainTierLink" },

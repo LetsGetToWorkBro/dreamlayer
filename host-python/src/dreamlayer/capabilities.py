@@ -106,9 +106,6 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("local_embeddings", "Real semantic embeddings, offline", "memory",
         ("sentence_transformers",), "memory", "memory/embedder_local.py",
         gain="baseline embeddings are mock vectors (or cloud); this makes memories truly searchable by meaning, offline", impact=5, before=1.5, after=5),
-    Cap("memory_dedup", "Dedup + decay over the memory stream", "memory",
-        ("mem0",), "memory", "lucid_recall/mem0_layer.py",
-        gain="near-duplicate collapsing already runs on what you are shown, with no dependency and nothing leaving the device — mem0 would add a hosted extraction step, so this one stays local by choice rather than by fallback", impact=3, before=2.5, after=4),
     Cap("typed_docs", "Validated multimodal memory records", "memory",
         ("docarray",), "memory", "memory/doc_schema.py",
         gain="baseline records are plain dataclasses; this validates every field", impact=2, before=3, after=4),
@@ -462,13 +459,12 @@ _NOT_WIRED = frozenset({
     # promoted in `_capability_payload` when networkx answers over a NON-EMPTY
     # graph: the wheel over an empty graph returns nothing from every query, which
     # is exactly what the fallback does, so that must not read green.
-    # memory_dedup stays listed as the honest DEFAULT and is promoted when a
-    # scrub list genuinely merges something. `Mem0Layer` was built only by the
-    # Orchestrator the Brain never constructs, and mem0's own default routes
-    # extraction through a cloud LLM — so the collapsing lives in
-    # `memory/dedup.py`, dependency-free, on the READ path (merging at write
-    # time would make the Object Lens's "seen before N×" count lie).
-    "memory_dedup", "typed_docs", "social_graph",
+    # memory_dedup was RETIRED on 2026-08-02: near-duplicate collapsing works
+    # with no dependency at all (`memory/dedup.py`, on the read path), so there
+    # is nothing left to install and a catalogue of installable options is the
+    # wrong place for it. mem0's own default routes extraction through a cloud
+    # LLM, which is not an upgrade this product can offer (decisions/0007).
+    "typed_docs", "social_graph",
     # voice: the on-device "ear". Seven of these (voice_vad, local_asr,
     # mic_capture, asr_moonshine, onnx_speech, sound_events, bird_song) are now
     # driven by the Brain's opt-in ear (ai_brain/server/ear.py) — it sets
@@ -664,9 +660,6 @@ _PROMOTED_AT_RUNTIME = frozenset({
 #: remembered — `test_capability_install_promise` asserts the call site is still
 #: there, and the entry has to be removed or moved when it stops being.
 _RUNS_ON_HUB = {
-    "memory_dedup": "orchestrator/orchestrator.py",   # Mem0Layer, on the live
-                                                      # LucidRecall path, gated
-                                                      # on mem0 truly loading
     "mesh_range": "orchestrator/ops_confluence.py",   # the LoRa mesh, which is
                                                       # a glasses radio
     # The odd one out, and worth the extra sentence. `MemoryEvent` is

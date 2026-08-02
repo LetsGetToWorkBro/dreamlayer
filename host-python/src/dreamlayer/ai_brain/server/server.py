@@ -1384,6 +1384,56 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         except Exception:                            # noqa: BLE001 — see above
             return True
 
+    @staticmethod
+    def _lua_root() -> str:
+        """The `halo-lua/` bundle in a source checkout, or "" from a wheel.
+
+        Empty is not a failure: a Halo already running the app is driven fine
+        without a fresh bundle push, and refusing to connect over a missing
+        source tree would strand a working pair of glasses on every packaged
+        install.
+        """
+        try:
+            root = Path(__file__).resolve().parents[5] / "halo-lua"
+            return str(root) if root.is_dir() else ""
+        except Exception:                            # noqa: BLE001
+            return ""
+
+    def halo_connect(self, kind: str = "emulator", lua_root: str = "") -> dict:
+        """Bring up the link to the glasses and start forwarding cards.
+
+        The link joins `_event_subs` — the same fan-out the Live Lens SSE
+        stream joins — so every producer in the Brain reaches the glass without
+        knowing the glass exists.
+        """
+        try:
+            from .halo_link import build_bridge, link
+            ln = link(self)
+            if ln.bridge is None:
+                ln.bridge = build_bridge(kind)
+            if ln.bridge is None:
+                return {"ok": False, "reason": f"bridge {kind!r} unavailable"}
+            if not lua_root:
+                lua_root = self._lua_root()
+            return ln.connect(lua_root)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("halo connect failed: %s", type(exc).__name__)
+            return {"ok": False, "reason": "unavailable"}
+
+    def halo_disconnect(self) -> dict:
+        try:
+            from .halo_link import link
+            return link(self).disconnect()
+        except Exception:                            # noqa: BLE001
+            return {"ok": False, "reason": "unavailable"}
+
+    def halo_status(self) -> dict:
+        try:
+            from .halo_link import link
+            return link(self).status()
+        except Exception:                            # noqa: BLE001
+            return {"connected": False, "sent": 0, "driving": False}
+
     def observe_card(self, kind: str, confidence, dismissed: bool) -> bool:
         """Record the wearer's reaction to one card. True if it became a label.
 
@@ -4871,6 +4921,25 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             self._json(200, brain.set_interpret(bool(b.get("on", True)),
                                                 str(b.get("target", "") or "")))
 
+        def _post_halo(self, path, qs):
+            """Bring the glasses link up or down: `{"action": "connect"|
+            "disconnect", "bridge": "emulator"|"real"}`.
+
+            The one control the wearer needs, because everything else is
+            automatic: once connected, the link is a subscriber on the same
+            fan-out the Live Lens uses, so every card the phone shows the glass
+            shows too — including cards added long after this route was written.
+            """
+            b = self._body()
+            if str(b.get("action", "connect")) == "disconnect":
+                self._json(200, brain.halo_disconnect())
+                return
+            self._json(200, brain.halo_connect(
+                str(b.get("bridge", "emulator") or "emulator")))
+
+        def _get_halo(self, path, qs):
+            self._json(200, brain.halo_status())
+
         def _post_attention(self, path, qs):
             """What the wearer did with a card: `{"kind", "confidence",
             "dismissed"}`.
@@ -5705,6 +5774,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/calendar": _get_calendar,
             "/dreamlayer/people": _get_people,
             "/dreamlayer/intro": _get_intro,
+            "/dreamlayer/halo": _get_halo,
             "/dreamlayer/calendars": _get_calendars,
             "/dreamlayer/mail/accounts": _get_mail_accounts,
             "/dreamlayer/contacts": _get_contacts,
@@ -6904,6 +6974,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/truth": _post_truth,
             "/dreamlayer/intro": _post_intro,
             "/dreamlayer/attention": _post_attention,
+            "/dreamlayer/halo": _post_halo,
             "/dreamlayer/vault/sync": _post_vault_sync,
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,

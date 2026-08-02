@@ -546,22 +546,47 @@ class TestTheGlassIsTheONETheBrainCanReach:
 
     An earlier draft asked only "does `halo-lua` draw this type" and answered
     yes for all 24. But `Brain.push_event` fans out to the LIVE LENS — an SSE
-    stream to the browser page in `live.py` — and nothing under `ai_brain/`
-    calls `bridge.send_card`, so no Brain push has any path to the glasses
-    firmware at all. The checker was measuring the Orchestrator's renderer to
-    decide whether the Brain's cards were visible.
+    stream to the browser page in `live.py` — and for a long time nothing under
+    `ai_brain/` called `bridge.send_card`, so no Brain push had any path to the
+    glasses firmware at all. The checker was measuring the Orchestrator's
+    renderer to decide whether the Brain's cards were visible.
+
+    **That gap closed on 2026-08-02** (`ai_brain/server/halo_link.py`). The two
+    renderers are still measured separately — they draw different sets and
+    always will — but "the Brain cannot reach the device" is no longer true, and
+    the assertion below is inverted to say so.
     """
 
-    def test_the_brain_has_no_path_to_the_device_renderer(self):
+    def test_the_brain_reaches_the_device_renderer_through_exactly_one_seam(self):
+        """RETIRED, inverted. This asserted `not hits` — that NOTHING under
+        `ai_brain/` called `send_card`.
+
+        The whole `bridge/` package, including the real BLE transport, was
+        constructed only by `main.py`'s emulator helper and `simulator/`, both
+        hanging off the `Orchestrator` the shipped Brain never builds
+        (decisions/0001). So the transport was complete, tested, and reachable
+        only from code the wearer does not run — the same defect as
+        `persona_tuning`, `typed_models` and `memory_dedup`, and the largest,
+        because it is why nothing reached the glass.
+
+        The inversion keeps the property that made the original valuable: the
+        path must be ONE seam, not scattered `send_card` calls across the
+        producers. A single subscriber on the existing fan-out means every card
+        the Live Lens gets the glass gets; twenty call sites would mean twenty
+        chances to forget, and this test would stop being able to tell whether
+        any given card reaches the device.
+        """
         import pathlib
         import subprocess
         root = pathlib.Path(__file__).resolve().parents[4]
-        hits = subprocess.run(
-            ["grep", "-rn", "send_card", str(root / "host-python/src/dreamlayer/ai_brain")],
-            capture_output=True, text=True).stdout.strip()
-        assert not hits, (
-            "something under ai_brain/ now calls send_card — if the Brain has "
-            f"gained a path to halo-lua, this whole model needs revisiting:\n{hits}")
+        hits = [ln for ln in subprocess.run(
+            ["grep", "-rn", "send_card",
+             str(root / "host-python/src/dreamlayer/ai_brain")],
+            capture_output=True, text=True).stdout.strip().splitlines() if ln]
+        files = {ln.split(":", 1)[0].rsplit("/", 1)[-1] for ln in hits}
+        assert files == {"halo_link.py"}, (
+            "the Brain's path to the glasses must stay a single seam; "
+            f"send_card is now called from {sorted(files)}")
 
     def test_the_two_renderers_are_measured_separately(self, hud):
         device = hud._drawn_on_glass()
@@ -660,10 +685,19 @@ def buckets(caps, closure):
 class TestTheCapabilityCheckerSeesTheWholeCatalogue:
 
     def test_it_reads_every_declared_capability(self, caps):
-        """74 today. The count matters because the handoff said ~39 for months
-        — a checker reading half the catalogue would have agreed with it."""
+        """69 today. The count matters because the handoff said ~39 for months
+        — a checker reading half the catalogue would have agreed with it.
+
+        This is a PARSER floor, not a catalogue-size freeze. It fell 74 -> 69 as
+        five entries were deliberately retired (`asr_alignment`, `facial_aus`,
+        `skia_render`, `memory_dedup`, and earlier `causal_fusion`), each
+        recorded in decisions/0007 with an inverted test. Lower it when an entry
+        is retired on purpose; never lower it to make a red run go green,
+        because the failure this guards is the checker silently reading half the
+        file.
+        """
         decl = caps._declared_caps()
-        assert len(decl) >= 70, f"only {len(decl)} capabilities parsed"
+        assert len(decl) >= 69, f"only {len(decl)} capabilities parsed"
 
     def test_every_capability_names_a_seam_or_is_a_documented_concept(self, caps):
         """`seam` is the only field that makes this checkable at all. One entry
@@ -699,7 +733,10 @@ class TestTheCapabilityCheckerSeesTheWholeCatalogue:
         file" when 18 of them are named there with the reason written out."""
         dormant = caps._declared_dormant()
         assert len(dormant) >= 15, f"only {len(dormant)} parsed — set literal?"
-        for key in ("memory_dedup", "social_graph", "live_interpret"):
+        # `memory_dedup` used to be named here and was retired on 2026-08-02:
+        # near-duplicate collapsing needs no dependency, so there is nothing to
+        # install and nothing to declare dormant.
+        for key in ("typed_docs", "social_graph", "live_interpret"):
             assert key in dormant, key
         assert "vector_search" not in dormant     # wired; must stay checkable
 
@@ -1395,7 +1432,7 @@ class TestTheDependencyCheckerSeesTheWholeCatalogue:
 
     def test_it_reads_every_declared_capability(self, dep):
         decl = dep._declared_caps()
-        assert len(decl) >= 70, f"only {len(decl)} capabilities parsed"
+        assert len(decl) >= 69, f"only {len(decl)} capabilities parsed"
         # `kind="service"` capabilities legitimately declare () — nothing is
         # pip-installed, so there is no probe to audit. Everything else must
         # carry at least one module, or it would silently leave the audit.
