@@ -22,7 +22,8 @@ For 4 of the 21 that is roughly true and the work is real — all four are now
 built, and each took a feature rather than a wire (see the updates). For the
 other 17 the
 blocker is not effort — it is a missing producer, a missing consumer, a
-dependency that will not install, or a claimed interface the seam does not fit.
+dependency whose weight or whose downstream feature is the real question, or a
+claimed interface the seam does not fit.
 Wiring most of them means BUILDING THE OTHER HALF, which is a feature decision,
 not a connection.
 
@@ -54,14 +55,16 @@ tree for a construction outside the seam and outside `tests/`.
 by-design-unreachable from the Brain (decisions/0001). Reaching them from the
 Brain would be the regression.
 
-### C — dependency will not install in this environment (5)
+### C — ~~dependency will not install in this environment~~ (5)
+
+**This heading was wrong and the correction is below (2026-08-02).** All five
+resolve. What is true is that four of them arrive with a CUDA/torch stack and
+the fifth with an agent framework, and that each is downstream of a decision
+that is not about the dependency at all.
 
 `asr_alignment` (whisperx), `diarization` (diart), `facial_aus`
-(libreface/pyfeat/facetorch), `persona_tuning` (hulearn), `typed_pipeline`
-(pydantic_ai). A wire written against a library that cannot be imported cannot
-be tested, and an untested wire against an optional dependency is precisely the
-`importable ≠ working` failure this repo keeps finding. Deferred on evidence,
-not on preference.
+(libreface/pyfeat/facetorch), `persona_tuning` (human-learn), `typed_pipeline`
+(pydantic_ai).
 
 ### D — the interesting ones: dependency present, and still not one wire (7)
 
@@ -107,8 +110,8 @@ Per group, and each is cheap:
 ```
 A: grep -rn "MeshManager(" host-python/src --include=*.py | grep -v tests
    → answered: ai_brain/server/live_circle.py constructs one per member
-C: python -c "import whisperx"    (etc.)
-   → an importable dependency moves that row from C into the real work
+C: pip install --dry-run whisperx   (etc.)
+   → answered: all five resolve; see the 2026-08-02 correction
 D: grep -n "def register" -A 3 host-python/src/dreamlayer/hud/renderer.py
    → a one-argument callback would make skia_render's original claim true
 ```
@@ -264,6 +267,50 @@ rule that bucket encodes is about the Brain/Orchestrator split and does not
 apply. It reports `dormant`, `wires_on_install` is False, and the wearer's
 install hint reads "installs the library; nothing calls it yet", which is
 exactly the truth.
+
+## Correction — 2026-08-02, group C: they all install
+
+The heading claimed the dependency "will not install in this environment". That
+was asserted from `importlib.util.find_spec` returning None — which says the
+library is not installed HERE, and says nothing whatever about whether it could
+be. Measured properly with `pip install --dry-run`, **all five resolve**:
+
+| capability | dependency | resolves | what comes with it |
+|---|---|---|---|
+| `persona_tuning` | `human-learn` | yes, seconds | 5 packages (bokeh, clumper, shapely, tornado) |
+| `typed_pipeline` | `pydantic_ai` | yes | ~60: anthropic, google-genai, mcp, logfire, opentelemetry, keyring, cryptography |
+| `asr_alignment` | `whisperx` | yes, slowly | ~70: torch 2.8 + torchvision + torchaudio + the CUDA 12 stack, pyannote-audio, lightning, optuna |
+| `diarization` | `diart` | yes, slowly | ~68: torch 2.13 + the CUDA 13 stack, pyannote.audio, speechbrain, optuna |
+| `facial_aus` | `libreface` | yes | ~50: torch 2.0 + CUDA 11, mediapipe, dlib, opencv ×2, timm |
+
+Two of those rows are not close calls: `human-learn` is five small pure-Python
+packages, and the entry's own text about `persona_tuning` already said the
+blocker was that *nothing builds a rule by example* — the dependency was never
+the gate, and listing it under "will not install" hid that.
+
+**What the group actually splits into**, which is the useful shape:
+
+* **Downstream of a DECLINED feature (2).** `asr_alignment` feeds
+  `truth_lens/prosody.py`; `facial_aus` feeds the AU stage of the same
+  analyzer. Both stages exist to produce the deception gauge —
+  `TruthLensCard` — which `HANDOFF.md` records as **declined, not blocked**.
+  Wiring either builds toward the one card the project decided not to ship, at
+  a cost of 2–6 GB of CUDA per machine.
+* **A biometric decision nobody has made (1).** `diarization` is live
+  who-is-speaking. `ear.py` records speaker attribution as deliberately absent
+  and `HANDOFF.md` groups it with Timbre. The dependency is beside the point;
+  the question is whether the product does voice biometrics.
+* **No consumer, dependency irrelevant (2).** `typed_pipeline` and
+  `persona_tuning`. Both capability entries already SAY so in their own gain
+  strings ("nothing in the tree asks for it yet", "nothing in the tree builds
+  one yet"). These belong in group D, which is where the same shape already
+  lives.
+
+The lesson is the one this file exists to enforce, turned on itself: `find_spec`
+answers "is it here", and I wrote down "can it be had". Same error class as
+`importable ≠ working`, one level up the supply chain, and it survived because
+nothing in the entry's own "what would overturn this" section actually ran the
+install — it re-ran the import.
 
 ## Consequences
 

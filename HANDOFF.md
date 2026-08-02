@@ -388,9 +388,15 @@ than the fallback it shadows.) Each is a decision — wire it Brain-side, or mov
 it to `_BY_DESIGN` with a reason. **Do not silently move one to `_BY_DESIGN` to shrink
 the list**; that bucket is a claim, and it is the claim the next audit checks.
 
-Note two that are their own conversation: `diarization` and `asr_alignment` are
-speaker attribution, which `ear.py:129-131` records as deliberately absent.
-Wiring them is the same biometric decision as Timbre in §1, not a plumbing job.
+Note three that are their own conversation, and none of them is a plumbing job:
+`diarization` is speaker attribution, which `ear.py:129-131` records as
+deliberately absent — the same biometric decision as Timbre in §1.
+`asr_alignment` and `facial_aus` both feed stages of the Truth Lens analyzer
+whose only output is the deception gauge, and that card is **declined** (§1), so
+wiring either builds toward something the project chose not to ship — at 2-6 GB
+of CUDA per machine. `decisions/0007`'s 2026-08-02 correction has the measured
+install cost of each; the earlier claim that these dependencies "will not
+install" was wrong, and wrong in an instructive way.
 
 `ear.py:239-267` is the precedent for getting the RUNTIME half right — it
 promotes only the caps a run genuinely drives, after an earlier blanket
