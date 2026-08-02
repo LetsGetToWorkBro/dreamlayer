@@ -594,10 +594,24 @@ class TestTheGlassIsTheONETheBrainCanReach:
         device = hud._drawn_on_glass()
         live = hud._drawn_on_live_lens()
         assert device and live
-        assert len(live) < len(device), (
-            "the Live Lens is meant to be the SMALLER set — bespoke branches "
-            "for what the Brain pushes, plus a generic fallback. If it caught "
-            "up with halo-lua, check the scan is not matching comments again.")
+        # RETIRED, inverted — this asserted `len(live) < len(device)`.
+        #
+        # The Live Lens WAS the smaller set: 30 bespoke branches against
+        # halo-lua's 45, so fifteen of the forty card types `hud/cards.py`
+        # builds fell through to `glassEventCard` and arrived on the phone with
+        # the field carrying their answer dropped. Fourteen of those fifteen
+        # already drew properly on the glasses, which made the phone the
+        # surface that was behind.
+        #
+        # All fifteen have bespoke renderers as of 2026-08-02, so the sets are
+        # level at 45. The original's own failure message said to check the
+        # scan was not matching comments if this ever happened — it was
+        # checked: every one of the 45 has a real `t === "X"` dispatch arm, and
+        # `test_live_lens_card_parity.py` pins each by name.
+        assert len(live) >= len(device) - 1, (
+            f"the Live Lens fell behind again ({len(live)} vs {len(device)} on "
+            "the device) — a card type the Brain builds is drawing generically "
+            "on the phone")
         # NOT a subset, and the exceptions are the point rather than slack in
         # the test: a card the Brain pushes but the ORCHESTRATOR never sends has
         # no reason to exist in halo-lua, so the Live Lens is the only surface
@@ -636,15 +650,28 @@ class TestTheGlassIsTheONETheBrainCanReach:
         field carrying the answer."""
         live = hud._drawn_on_live_lens()
         assert "HarkCard" in live           # has a real branch
-        # The negative case used to be ReadyCard, which now HAS a branch — it is
-        # `{type, dismiss_ms}` and nothing else, so the fallback drew its "…"
-        # placeholder, i.e. a resting state that looked like a failure.
-        # ErrorCard takes its place: still no branch, still must not be counted.
-        assert "ErrorCard" not in live
-        # …and the scan must not have degenerated into "any name in the file".
-        # These appear in comments and payloads here but have no dispatch arm.
-        assert "PaletteShiftCard" not in live
-        assert "QueryListeningCard" not in live
+        # The negative case has rotated twice, and the reason is the point.
+        # First ReadyCard gained a branch, so ErrorCard took its place. Now
+        # ErrorCard, PaletteShiftCard and QueryListeningCard all have branches
+        # too — every one of the forty types `hud/cards.py` builds does, as of
+        # 2026-08-02.
+        #
+        # So the guard can no longer be "a built type with no branch": there
+        # aren't any, and inventing one would mean leaving a card drawing
+        # generically on the phone purely to keep a test honest. What it CAN
+        # still prove is that the scan reads dispatch arms rather than names:
+        # `ObjectPanelCard` appears in this file and has no arm.
+        assert "ObjectPanelCard" not in live, (
+            "the scan has degenerated into 'any card name in the file' — it "
+            "must read `t === \"X\"` dispatch arms, or the generic fallback "
+            "starts counting as a drawing again")
+        # …and every name it DOES report must have a real arm.
+        import re as _re
+        from dreamlayer.ai_brain.server import live as _live_mod
+        missing = [c for c in sorted(live)
+                   if not _re.search(r't === "%s"\s*(\|\||\))' % c,
+                                     _live_mod._PAGE)]
+        assert not missing, f"reported without a dispatch arm: {missing}"
 
     def test_the_card_whose_answer_needs_a_branch_has_one(self, hud):
         """ObjectRecallCard puts the place — the entire answer — outside
