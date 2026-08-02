@@ -103,6 +103,28 @@ class TestTimbre:
         assert self._reactors(b).note_speaker("") == 0
         assert _drain(b) == []
 
+    def test_silence_does_not_even_reach_the_reactor(self):
+        """What the early-out actually buys, and why asserting 0 is not enough.
+
+        `TimbreReactor.tick` refuses an empty label too, so deleting
+        `note_speaker`'s own guard changes no OUTCOME — a mutation removing it
+        left the whole suite green. What it changes is cost: this runs on the
+        capture hot path, once per attributed segment, and without the guard
+        every silent beat builds a RecallContext and walks into the reactor to
+        be told no.
+
+        So the thing to pin is that the reactor is never consulted.
+        """
+        b = _Brain()
+        _sub(b)
+        r = DreamReactors(b, now_fn=lambda: 1000.0)
+        seen = []
+        r._timbre = type("_T", (), {
+            "tick": staticmethod(lambda ctx: seen.append(ctx))})()
+        assert r.note_speaker("") == 0
+        assert seen == [], (
+            "an empty speaker label was carried all the way into the reactor")
+
     def test_the_veil_stops_it(self):
         b = _Brain(veiled=True)
         _sub(b)
