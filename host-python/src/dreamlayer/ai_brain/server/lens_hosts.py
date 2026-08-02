@@ -134,7 +134,12 @@ class BrainLenses:
         with self._lock:
             if self._ring is None:
                 from ...memory.ring_buffer import SemanticRingBuffer
-                self._ring = SemanticRingBuffer(RING_CAPACITY)
+                # The Veil as a type invariant on the keep path (`typed_models`):
+                # every `observe()` below already checks the gate, and this makes
+                # the ring refuse a veiled keep whether or not the NEXT caller
+                # remembers to. `_seed` uses `restore()` and is unaffected.
+                self._ring = SemanticRingBuffer(RING_CAPACITY,
+                                                privacy=_LensGate(self.brain))
             if not self._seeded:
                 self._seeded = True                  # set FIRST: a failing seed
                 self._seed()                         # must not retry every call
@@ -177,7 +182,7 @@ class BrainLenses:
                     meta = json.loads(row.get("meta") or "{}")
                 except (TypeError, ValueError):
                     pass
-                self._ring.append(
+                self._ring.restore(
                     MemoryEvent(kind=str(row.get("kind") or "memory"),
                                 summary=str(row.get("summary") or ""),
                                 confidence=float(row.get("confidence") or 0.5),

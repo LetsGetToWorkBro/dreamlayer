@@ -209,7 +209,10 @@ class WorldLensHost:
         # so MemoryProvider's "seen before N× · last at …" rows are REAL here —
         # not a stub — and erase/rebuild drops the ring with the host.
         from ...memory.ring_buffer import SemanticRingBuffer
-        self.ring = SemanticRingBuffer(64)          # glasses default capacity
+        # privacy= makes a veiled keep unconstructible rather than merely
+        # unreached; `_remember_sighting`'s own TOCTOU re-check stays, since
+        # returning early is kinder than raising on a best-effort look.
+        self.ring = SemanticRingBuffer(64, privacy=self.privacy)  # glasses default
         self.mesh = None
         # The auto-lens-selector: the SAME PerceptionRouter + GlanceArbiter the
         # glasses run, so a look decides its own lens (fire the clear winner,

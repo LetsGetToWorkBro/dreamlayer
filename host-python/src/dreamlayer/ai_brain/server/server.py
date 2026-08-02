@@ -3342,6 +3342,18 @@ def _capability_payload(brain: Brain) -> dict:
                 env["DL_WIRED_DIARIZATION"] = "1"
     except Exception:                           # noqa: BLE001
         pass
+    # `typed_models` — the Veil as a type invariant on the ring's keep path.
+    # The flag follows an invariant that has actually VETTED an append, not a
+    # gate having been handed over: a ring nothing has been kept into is a
+    # tripwire nobody has crossed, and reporting that as a live guarantee is
+    # the same overclaim as calling an importable adapter wired.
+    try:
+        for _r in (getattr(getattr(brain, "_lenses", None), "_ring", None),
+                   getattr(getattr(brain, "_world_lens", None), "ring", None)):
+            if getattr(_r, "veil_checks", 0) > 0:
+                env["DL_WIRED_TYPED_MODELS"] = "1"
+    except Exception:                               # noqa: BLE001
+        pass
     # `persona_tuning` — the wearer's interruption bar, and the flag follows a
     # bar that `tune()` genuinely RETURNED from their own swats. Not hulearn
     # being importable, and not the gate existing: a gate whose history is too
