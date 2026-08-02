@@ -636,6 +636,10 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # `event_bus` once a GhostMode circle could be formed at all — its
     # `MeshEventBus` wraps a `MeshManager` nothing had ever constructed.
     "object_tracking", "event_bus",
+    # …and `diarization`, once the capture pipeline could be handed a streaming
+    # diarizer at all. Promoted only on a segment genuinely split into more
+    # than one voice — the fallback answers one for everything.
+    "diarization",
 })
 
 
