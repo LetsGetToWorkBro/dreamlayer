@@ -133,6 +133,9 @@ dreamlayer = [
     "ai_brain/server/assets/*.woff2",
     "ai_brain/server/assets/*.js",    # halo-sim.js — the TRUE renderer behind Learn
     "ai_brain/server/assets/*.mp3",   # Juno's voice takes (click her, she talks)
+    "ai_brain/server/assets/*.txt",   # common_words.txt — Lexicon's rarity gate
+                                      # (missing from the wheel = no gate = every
+                                      # long word looks rare)
 
     # the vendored on-device Live Lens detector (MediaPipe loader + WASM + int8
     # model), served same-origin so the in-browser recognizer works with zero

@@ -572,6 +572,88 @@ def scholar(mode: str = "answer", primary: str = "", detail: str = "",
     }
 
 
+#: Lexicon's eyebrow and accent, held as one tuple for the same reason
+#: `_SCHOLAR_STYLE` holds three: the label and the colour are one decision.
+_LEXICON_STYLE = ("LEXICON", T.ACCENT_MEMORY)
+
+#: The glass budget the `lines` field is rendered against: five lines of
+#: twenty-four UTF-8 bytes. `lines` is what the Frame/emulator bridges send
+#: (`bridge/frame_sdk.py`), and nothing downstream re-wraps it.
+_LINE_BYTES = 24
+_LINE_COUNT = 5
+
+
+def _clip_bytes(text, max_bytes: int = _LINE_BYTES):
+    """Trim `text` to at most `max_bytes` UTF-8 BYTES without splitting a
+    character.
+
+    `_clip` counts characters, which is the same thing only for ASCII — and a
+    dictionary sense is exactly where it stops being ASCII (a diaeresis in
+    "coöperate", an em dash, a curly apostrophe). The budget the glass actually
+    has is a byte budget, so this measures bytes and drops whole characters off
+    the end until it fits, then ellipsizes. Non-str inputs pass through.
+    """
+    if not isinstance(text, str) or len(text.encode("utf-8")) <= max_bytes:
+        return text
+    out = text
+    while out and len((out + "…").encode("utf-8")) > max_bytes:
+        out = out[:-1]
+    return out.rstrip() + "…"
+
+
+def lexicon(word: str = "", sense: str = "", part_of_speech: str = "") -> dict:
+    """The Lexicon card — a rare word heard in conversation, defined in one line.
+
+    Follows the `_SCHOLAR_STYLE` family's shape (eyebrow / separator / primary,
+    memory accent, `dismiss_ms` in the same range) because it is the same
+    material: something the world said, explained. It declares its OWN type
+    rather than riding `scholar(mode="explain", ...)`, and the reason is the
+    Live Lens rather than taste — `renderEvent` has no `ScholarCard` branch, so
+    a ScholarCard pushed from the Brain would fall to `glassEventCard`, which
+    draws `eyebrow` and `primary` AND NOTHING ELSE. For this card `primary` is
+    the word the wearer just heard and could not place; the entire answer is in
+    `detail`. Drawn generically it would put "undulating" on the glass and drop
+    what it means, which is the card echoing the problem back.
+
+    `lines` is clamped to the glass budget (5 x 24 UTF-8 bytes) rather than
+    trusted to fit: a dictionary sense is arbitrary third-party text.
+    """
+    label, accent = _LEXICON_STYLE
+    head = _clip(str(word or "").strip(), 22)
+    body = " ".join(str(sense or "").split())
+    pos = _clip(str(part_of_speech or "").strip(), 16)
+    # the sense wrapped onto the lines the glass has left under the eyebrow and
+    # the word — greedy wrap, then clamped both ways so neither an unbroken
+    # 300-character sense nor a 40-line one can overflow.
+    wrapped: list = []
+    line = ""
+    for token in body.split():
+        candidate = f"{line} {token}".strip()
+        if len(candidate.encode("utf-8")) > _LINE_BYTES and line:
+            wrapped.append(line)
+            line = token
+        else:
+            line = candidate
+    if line:
+        wrapped.append(line)
+    lines = [_clip_bytes(s) for s in [label, head, *wrapped][:_LINE_COUNT]]
+    return {
+        "type":        "LexiconCard",
+        "dismiss_ms":  7000,
+        "eyebrow":     label,
+        "primary":     head,
+        "detail":      _clip(body, 140),
+        "footer":      pos,
+        "color":       accent,
+        "lines":       lines,
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 60, "size": "sm", "color": accent, "tracking": 3},
+            "separator": {"x1": 44, "x2": 212, "y": 76},
+            "primary":   {"x": 128, "y": 106, "size": "md", "color": T.TEXT_PRIMARY},
+        },
+    }
+
+
 def taste(ranking=None, unavailable: bool = False) -> dict:
     """TasteLens — look at a shelf/menu, get the pick. The winner in hero type,
     the runners-up stacked beneath with the *why* (dairy-free · 4.6★ · $3.20).
@@ -1216,6 +1298,10 @@ ALL_SAMPLES: dict[str, dict] = {
     ),
     "spoken_caption":      spoken_caption(
         speaker="Marcus", text="Let's lock the lease by Friday, deal?",
+    ),
+    "lexicon":             lexicon(
+        word="undulating", part_of_speech="verb",
+        sense="moving with a smooth wavelike motion",
     ),
     "person_dossier":      person_dossier({
         "person": "Marcus", "known": True, "exchanges": 6,

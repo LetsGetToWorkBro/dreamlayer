@@ -110,6 +110,12 @@ class EarHost:
         # exactly like the interpreter's persisted setting.
         from .truth_live import TruthRead
         self.truth = TruthRead(brain)
+        # -- Lexicon: a rare word the room just used, defined on the glass.
+        # Constructed eagerly for the same reason `truth` is (it is a few
+        # attributes; the word list and the HTTP connector inside it are both
+        # lazy), so nothing here costs a Brain that never switches it on.
+        from .lexicon_live import LexiconRead
+        self.lexicon = LexiconRead(brain)
 
     # -- CapturePipeline host contract -------------------------------------
 
@@ -216,6 +222,24 @@ class EarHost:
                     ls.fact_check(text)
         except Exception as exc:                     # noqa: BLE001 — a check must
             log.warning("[ear] fact check failed: %s", type(exc).__name__)  # never
+        # …and DEFINE a word the room used that the wearer may not know.
+        #
+        # The vocabulary half of the line above: fact-check asks whether what was
+        # said is TRUE, Lexicon asks what one word of it MEANS. It hangs here, on
+        # the redacted text, and the ordering is the whole safety argument — this
+        # is the only thing on the ear's path that egresses, and what it may send
+        # is one word that survived `default_redactor()`, never the utterance.
+        #
+        # Its own opt-in (`lexicon_enabled`, default off) for the same reason
+        # fact-check has one, only more so: this one leaves the device. The
+        # module does its own refusing — the Veil, the rarity gate, the dedupe
+        # set and the interruption preference are all inside `note_transcript`,
+        # so there is nothing to keep in step out here.
+        try:
+            self.lexicon.note_transcript(text)
+        except Exception as exc:                     # noqa: BLE001 — a definition
+            log.warning("[lexicon] read failed: %s",  # must never cost the
+                        type(exc).__name__)          # utterance its memory
         # …and ANSWER it, when the room asked a question and the Brain knows.
         self._answer_ahead(text)
         name = "heard" if not speaker else f"heard:{speaker}"
@@ -739,7 +763,14 @@ class EarHost:
                 # facts, and only the second one means the feature works.
                 "truth": self.truth.enabled,
                 "truth_proved": self.truth.proved,
-                "truth_reads": self.truth.read_count}
+                "truth_reads": self.truth.read_count,
+                # …and Lexicon, reported on the same three-fact principle: the
+                # switch, whether a definition has ever genuinely reached the
+                # glass, and how many. Deliberately NOT the words themselves —
+                # `status` does not hand captured content back over the wire.
+                "lexicon": self.lexicon.enabled,
+                "lexicon_proved": self.lexicon.proved,
+                "lexicon_defined": self.lexicon.defined_count}
 
     def set_truth(self, on: bool = True) -> dict:
         """Turn the room read on/off for THIS ear. Mirrors `set_interpret`: the
