@@ -70,12 +70,29 @@ class MeshEventBus:
     def on(self, event: str, fn: Callable) -> Callable:
         return self._ee.on(event, fn)
 
+    def _fan(self, event: str, payload) -> None:
+        """Publish, and never let a subscriber cost the caller its packet.
+
+        `_MiniEmitter` catches a raising listener; pyee's `EventEmitter` does
+        NOT — it propagates straight out of `emit`. So with the optional
+        dependency INSTALLED, one bad subscriber broke the mesh beat that had
+        already been signed and sent, while the dependency-free fallback
+        shrugged it off. An optional dependency must never do less than the
+        fallback it replaces, and the guard belongs here rather than in the
+        fallback, where it only ever covered one of the two paths.
+        """
+        try:
+            self._ee.emit(event, payload)
+        except Exception as exc:                 # noqa: BLE001
+            log.warning("[emitter] a %s listener raised: %s",
+                        event, type(exc).__name__)
+
     def publish_emit(self, kind: str, body: dict):
         """Emit through the mesh (honors the Veil) and, if a packet resulted,
         publish it. Returns the packet or None."""
         pkt = self._mesh.emit(kind, body)
         if pkt is not None:
-            self._ee.emit("emit", pkt)
+            self._fan("emit", pkt)
         return pkt
 
     def publish_receive(self, wire: dict):
@@ -83,5 +100,5 @@ class MeshEventBus:
         accepted. Returns the member or None (forged/replayed/veiled dropped)."""
         member = self._mesh.receive(wire)
         if member is not None:
-            self._ee.emit("receive", member)
+            self._fan("receive", member)
         return member

@@ -33,18 +33,6 @@ from .schema import BehaviorIntent
 
 log = logging.getLogger("dreamlayer.intent_parser_llm")
 
-try:  # optional deps — extras group `structured`
-    import instructor  # type: ignore  # noqa: F401
-    _HAS_INSTRUCTOR = True
-except ImportError:
-    _HAS_INSTRUCTOR = False
-
-try:
-    import outlines  # type: ignore  # noqa: F401
-    _HAS_OUTLINES = True
-except ImportError:
-    _HAS_OUTLINES = False
-
 
 class LLMIntentParser:
     """Structured NL→BehaviorIntent with a guaranteed regex fallback.
@@ -52,11 +40,9 @@ class LLMIntentParser:
     Parameters
     ----------
     llm : callable | None
-        Optional `llm(prompt:str)->str` returning a JSON body. When provided
-        together with instructor/outlines, the constrained path is used; the
-        result is still `.validate()`-checked. Absent → regex parser.
+        Optional `llm(prompt:str)->str` returning a restatement in the closed
+        grammar. Absent → the regex parser, byte for byte.
     """
-    available = _HAS_INSTRUCTOR or _HAS_OUTLINES
 
     def __init__(self, llm=None):
         self._regex = IntentParser()
@@ -65,15 +51,13 @@ class LLMIntentParser:
     def parse(self, text: str) -> BehaviorIntent:
         """Messy speech → a schema-legal BehaviorIntent, or ValueError.
 
-        The model path runs whenever a model is wired. It deliberately does NOT
-        also require instructor/outlines: `_llm_parse` never calls either of
-        them — the two imports above are probes for the capability meter and
-        carry `noqa: F401` saying so — so gating on them meant a wearer who had
-        wired a local model still got the bare regex parser until they installed
-        two libraries that do nothing on this path. `available` still reports
-        whether the structured extras are present, because that is what the
-        capability meter asks it; it is no longer a precondition for using the
-        model the wearer already has.
+        The model path runs whenever a model is wired, and requires nothing
+        else. It used to be gated on instructor/outlines, which this module has
+        never called: a wearer who had wired a local model got the bare regex
+        parser until they installed two libraries that do nothing here. The
+        import probes that backed that gate are gone too — the capability
+        catalogue names the extras, and a module holding a second copy of that
+        claim is a second thing that can be wrong.
         """
         if self._llm is None:
             return self._regex.parse(text)

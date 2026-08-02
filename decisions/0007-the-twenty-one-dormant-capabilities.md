@@ -18,7 +18,9 @@ is an afternoon each, and the count going down is a matter of effort.*
 
 ## Verdict
 
-For 4 of the 21 that is roughly true and the work is real. For the other 17 the
+For 4 of the 21 that is roughly true and the work is real — all four are now
+built, and each took a feature rather than a wire (see the updates). For the
+other 17 the
 blocker is not effort — it is a missing producer, a missing consumer, a
 dependency that will not install, or a claimed interface the seam does not fit.
 Wiring most of them means BUILDING THE OTHER HALF, which is a feature decision,
@@ -39,10 +41,10 @@ tree for a construction outside the seam and outside `tests/`.
 
 | capability | what is missing |
 |---|---|
-| `event_bus` | `MeshManager` is constructed nowhere in the tree. `MeshEventBus` wraps one; with no mesh there are no packets to fan out. |
-| `object_tracking` | Nothing emits per-frame centroids. `SupervisionTracker.update(centroids)` is referenced only by its own tests, and its natural partner `LostFoundScene` keys its ledger by LABEL rather than tracked identity — and is not constructed either. |
-| `wasm_plugins` | Needs a `.wasm`-guest package format. `store.py`'s own docstring already names the component host as *"the forward path a `.wasm`-guest package format targets"*; today's plugins ship Python module code. |
-| `extism_plugins` | The same missing format, a second runtime. |
+| `event_bus` | ~~`MeshManager` is constructed nowhere in the tree.~~ **Built — see the update below.** |
+| `object_tracking` | ~~Nothing emits per-frame centroids.~~ **Built — see the update below.** |
+| `wasm_plugins` | ~~Needs a `.wasm`-guest package format.~~ **Built — see the update below.** |
+| `extism_plugins` | ~~The same missing format, a second runtime.~~ **Built — see the update below.** |
 
 ### B — Orchestrator or simulator by design (5)
 
@@ -77,16 +79,8 @@ not on preference.
   working card with a black square, under the floor an optional dependency owes.
   Corrected in place; see `tests/test_skia_seam_claims.py`.
 
-* **`structured_output`** — the seam is LIVE (`brain_rc.py` builds
-  `LLMIntentParser` on the compose path) and `outlines`/`instructor` are both
-  installed; they are simply never called. Wiring them is not a line change:
-  `outlines` constrains a local sampler and needs direct model access, while the
-  suggester here is `backend.chat(prompt) -> str`, an Ollama HTTP call;
-  `instructor` patches an OpenAI-compatible *client*, and there is no client
-  object to patch. Either path restructures how the Brain talks to its local
-  model — on a path that already works, whose current design already guarantees
-  schema-legality by parsing the model's restatement with the deterministic
-  matchers. The gain would be fewer fallbacks, not correctness.
+* **`structured_output`** — see the 2026-08-01 update below: settled, and the
+  thing it was for is built without either library.
 
 * **`plugin_entrypoints`** — the safe API now exists (discovery no longer
   imports; loading takes an explicit policy). What it lacks is a policy worth
@@ -112,7 +106,7 @@ Per group, and each is cheap:
 
 ```
 A: grep -rn "MeshManager(" host-python/src --include=*.py | grep -v tests
-   → a construction outside confluence/mesh.py means event_bus is wireable
+   → answered: ai_brain/server/live_circle.py constructs one per member
 C: python -c "import whisperx"    (etc.)
    → an importable dependency moves that row from C into the real work
 D: grep -n "def register" -A 3 host-python/src/dreamlayer/hud/renderer.py
@@ -122,6 +116,154 @@ D: grep -n "def register" -A 3 host-python/src/dreamlayer/hud/renderer.py
 For the whole entry: `python -m dreamlayer.capabilities` and the counts in
 `capability_reachability.py`. If wired rises above 39 without this file
 changing, the file is stale.
+
+## Update — 2026-08-01, `wasm_plugins` (group A, row 3)
+
+Built, and the entry's own framing held: it was a FEATURE to design, not a wire.
+What it took was three separate blockers, and the first two would each have made
+the third worthless on its own — which is exactly the failure mode this file is
+about.
+
+1. **No package format.** `manifest.kind` now selects `"python"` or `"wasm"`;
+   the payload lands as `<module>.wasm` and rides in `source` as base64 so the
+   checksum and signature rules are untouched. `kind` is INSIDE
+   `signing_payload()`, because flipping it chooses which host runs the code —
+   the same as choosing the sandbox.
+2. **The gate refused every wasm package.** Base64 is not Python, so
+   `scan_source` answered `syntax error: cannot assign to expression` for all of
+   them. Routing them in `store.py` was necessary and not sufficient: they could
+   never reach the loader. `plugins/wasm_scan.py` reads the module's import and
+   export sections directly — no runtime, because the gate runs at install time
+   on machines that have none — and `validate.scan_wasm` refuses a guest reaching
+   past its manifest, naming the capability the author would have to declare.
+3. **The host could not pass a guest a string.** `log`, which the WIT calls "the
+   minimum a plugin needs to speak to the host at all", received two integers
+   and had no way to read the bytes they pointed at. `read_mem`/`write_mem` are
+   bounds-checked against the guest's live memory size and refuse rather than
+   clamp.
+
+Two bugs fell out that were not in this entry's ledger at all, both only
+reachable once a guest actually ran: `_wrap` returned `0` from every host
+function, so granting a VOID capability (`log`, `cards`) trapped the guest with
+"callback produced results when it shouldn't"; and `granted` was handed raw
+manifest names, so `network` never linked `net` and `log` linked for no one.
+
+The capability is now in `_PROMOTED_AT_RUNTIME`, not removed from `_NOT_WIRED`:
+wasmtime importing is not a guest. `DL_WIRED_WASM_PLUGINS` follows
+`wasm_plugin_host.live_guests() > 0` — a `.wasm` package instantiated right now
+— so removing the plugin takes the capability back down.
+
+`extism_plugins` (row 4) was blocked on "the same missing format", and with the
+format built the rest was one `kind`. `manifest.kind == "extism"` ships the same
+`.wasm` on disk under the Extism runtime, which links NO host functions at all —
+incapable rather than inspected. `extism_host.py` had been complete, tested and
+bounded for months with exactly one caller: its own tests. It was never missing
+a runtime; nothing on disk was ever an Extism guest.
+
+Three things had to differ from its sibling and none of them were guessed:
+
+* The gate reads a different namespace. An Extism guest imports
+  `extism:host/env` (the PDK's `alloc`/`store_u8`/`output_set`), which under the
+  component host's rules reads as "outside the host surface" — so `scan_wasm`
+  takes the runtime's namespace as a parameter. It is the STRICTER check of the
+  two: there is no capability to declare, because there is no power to grant.
+* No `memory` or `dl_alloc` export to insist on; the PDK owns both sides.
+* The smoke test is a real call, because Extism constructs its plugin per call
+  and has no instantiate step. An EMPTY reply is not a failure — `{}` is not a
+  sighting, and "nothing to say about this one" is the answer a good provider
+  gives most of the time.
+
+Both capabilities are promoted from their own live count (`live_guests()` per
+runtime), never each other's: a wearer running one is not running the other.
+
+## Update — 2026-08-01, `object_tracking` and `event_bus` (group A, rows 1–2)
+
+Both were "a missing producer", both were features to design, and in both cases
+the half that existed was the one nobody could reach.
+
+**`object_tracking`.** `SupervisionTracker.update([(cx, cy), …])` has taken a
+centroid list since it was written and nothing in the tree ever produced one —
+`YoloClassifier.__call__` throws the geometry away because the Object Lens wants
+one subject. `detect()` now returns every box with a normalised centroid, and
+`detections()` fans the whole ladder onto one shape: a localising rung gives
+positions, every other rung gives one label with `centroid=None` rather than a
+fabricated centre point, which would have made every label-only rung report an
+object that never moves at the same spot forever.
+
+The consumer is `orchestrator/object_trail.py`, and the design question it
+answers is the one this entry warned about — the obvious feature (detect a thing
+being SET DOWN) cannot be built honestly, because only one rung can localise
+anything, so motion-that-stops would be silently dead on most Brains.
+DEPARTURE needs no geometry, works on every rung, and gets better with a
+localiser instead of requiring one. It feeds `WaypathLens`, whose own docstring
+had always claimed anchors were dropped "when it sees where you left something"
+while every anchor in fact came from the wearer narrating one aloud.
+
+**`event_bus`.** `MeshEventBus` wraps a `MeshManager`, and
+`Orchestrator._init_confluence_plugins` sets `self.mesh = None` with the comment
+"attached by the app layer when a circle is formed". No app layer ever formed
+one, so GhostMode — a headline of the product, with a normative protocol
+document — was unreachable from every surface a wearer has.
+`ai_brain/server/live_circle.py` is the room, built as the exact sibling of
+`live_confluence.py`: the Brain as the pre-hardware meeting point, over the real
+primitives, adding no crypto and no receive rule of its own.
+
+One defect fell out that only a live subscriber could reach: `_MiniEmitter` (the
+dependency-free fallback) catches a raising listener and pyee's `EventEmitter`
+does not, so with the optional dependency INSTALLED one bad subscriber broke a
+mesh beat that had already been signed and sent. That is the floor principle
+inverted — an optional dependency doing less than the fallback it replaces — and
+the guard now lives in `MeshEventBus`, where it covers both paths.
+
+Both are promoted from proof, never from a wheel being importable: a real
+ByteTrack that has actually been handed a centroid, and a circle live on this
+Brain right now.
+
+## Update — 2026-08-01, `structured_output` (group D): settled, still dormant
+
+Judgement asked for and given. **Neither library gets wired, and the thing they
+were wanted for is now built without them.**
+
+Why not, concretely:
+
+* `outlines` constrains a sampler **in this process**. The model on this path is
+  `backend.chat(prompt) -> str`, an HTTP POST to Ollama. There is no sampler
+  here to constrain.
+* `instructor` patches an OpenAI-compatible **client object**. There is none;
+  creating one means adding an HTTP client dependency to reach a server the
+  Brain already talks to directly.
+* Worse than either: both return a *validated structured object*, which on this
+  path means the model CHOOSING the behaviour. `intent_parser_llm`'s whole
+  design principle is that "the model only suggests; the deterministic matcher
+  decides". Handing it a typed `BehaviorIntent` inverts that, on the one path
+  the reality compiler's safety story rests on.
+
+What the capability was actually for — a restatement that cannot land outside
+the closed grammar — is now delivered by the **model server's own** schema
+field: `_gen` passes a JSON Schema whose `behaviour` is an enum of the fifteen
+phrasings `IntentParser` reads, so the sampler cannot emit a sixteenth. The
+deterministic matcher still decides, no dependency was added, and a server that
+ignores `format` is simply asked again unconstrained — the floor an optional
+path owes.
+
+Two consequences recorded in code, not only here:
+
+* The seam no longer *imports* `instructor`/`outlines`. Both were probes behind
+  a gate that had already been removed as wrong (they gated a path neither
+  library takes part in), and a module holding a second copy of the capability
+  catalogue's dependency claim is a second thing that can be wrong — it already
+  was.
+* The catalogue's `gain` string used to promise these libraries "constrain the
+  model AT GENERATION so a malformed suggestion can't be produced in the first
+  place". That is now true and free, so the sentence described a benefit the
+  install cannot add. Rewritten to say so, ending "installing them adds nothing
+  here", with `tests/test_capability_gain_honesty.py` pinning it.
+
+The capability stays in `_NOT_WIRED` — not moved to `_BY_DESIGN`, because the
+rule that bucket encodes is about the Brain/Orchestrator split and does not
+apply. It reports `dormant`, `wires_on_install` is False, and the wearer's
+install hint reads "installs the library; nothing calls it yet", which is
+exactly the truth.
 
 ## Consequences
 

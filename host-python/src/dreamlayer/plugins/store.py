@@ -17,7 +17,7 @@ import json
 import shutil
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from .package import PluginPackage, PluginManifest, sha256_of
 from .validate import validate, ValidationReport
@@ -301,9 +301,10 @@ class PluginStore:
         capability ``wasm_plugins``), which gives a WASM *guest* zero ambient
         authority and links only its declared capabilities. That strongest tier
         binds the WIT contract (plugins/dreamlayer.wit) and applies to WASM-guest
-        packages; today's plugins ship Python module code, so this loader routes
-        them through the subprocess/WASI tiers above — the component host is the
-        forward path a `.wasm`-guest package format targets.
+        packages — `manifest.kind == "wasm"`, a `<module>.wasm` payload — which
+        this loader now routes there. A Python-module package still takes the
+        subprocess/WASI tiers above, because there is nothing to run in a wasm
+        guest.
 
         Returns the in-process LoadResult; the isolated hosts are stored on
         `self.isolated` (call .stop() to reclaim)."""
@@ -358,8 +359,39 @@ class PluginStore:
                 # authority); else the capability-mediated subprocess jail.
                 from .isolation import SubprocessPluginHost
                 from . import wasm_host, os_sandbox
+                # A package that IS a wasm guest goes to the strongest tier —
+                # the in-process Component-Model host, where the guest has zero
+                # ambient authority and can only call the host functions its
+                # declared capabilities link. That tier used to be unreachable:
+                # this loader routed on `wasm_host.available()` (the SUBPROCESS
+                # WASI tier, which needs a runtime binary and a guest image) and
+                # nothing ever asked whether the package itself was wasm.
+                #
+                # It matters most exactly where the other jails are weakest. On
+                # Windows and macOS there is no bwrap/nsjail, so the subprocess
+                # tier degrades to "just a subprocess holding the wearer's
+                # authority" — a degradation this file already records and warns
+                # about. A wasm guest has no such floor to fall to.
+                #
+                # `extism` is the same idea with the other trade: the Extism
+                # runtime links NO host functions at all, so its guest is even
+                # more incapable — and correspondingly cannot log or call
+                # anything. The manifest's `kind` picks, because the author
+                # knows which ABI they compiled against.
+                from .extism_plugin_host import ExtismPluginHost
+                from .wasm_plugin_host import WasmComponentPluginHost
+                pkg_is_wasm = (package.manifest.is_wasm
+                               and WasmComponentPluginHost.available())
+                pkg_is_extism = (package.manifest.is_extism
+                                 and ExtismPluginHost.available())
                 is_wasm = wasm_host.available()
-                Host = wasm_host.WasmPluginHost if is_wasm else SubprocessPluginHost
+                # `Any`, because these four hosts are duck-typed siblings — they
+                # share start/register_into/stop and no base class. Naming one of
+                # them as the variable's type would make the others errors.
+                Host: Any = (WasmComponentPluginHost if pkg_is_wasm else
+                             ExtismPluginHost if pkg_is_extism else
+                             (wasm_host.WasmPluginHost if is_wasm
+                              else SubprocessPluginHost))
                 pname = package.manifest.name
                 health = getattr(orchestrator, "health", None)
                 caplog = getattr(orchestrator, "capability_log", None)
@@ -369,7 +401,12 @@ class PluginStore:
                 # user's OS authority. When require_sandbox is set and no kernel
                 # boundary is available, we must not even start the child — fail
                 # closed means the untrusted code never executes at all.
-                kernel_boundary = is_wasm or bool(os_sandbox.available())
+                # The component host is a boundary in its own right, and a
+                # stronger one than a kernel sandbox around a native process:
+                # the guest cannot name a syscall, only the host functions that
+                # were linked for it.
+                kernel_boundary = (pkg_is_wasm or pkg_is_extism or is_wasm
+                                   or bool(os_sandbox.available()))
                 if not kernel_boundary:
                     note = (f"plugin '{pname}' isolated by process only — no "
                             "OS/WASM sandbox present (no kernel boundary)")

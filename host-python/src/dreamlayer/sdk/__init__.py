@@ -75,7 +75,8 @@ from ..plugins.package import (
     SDK_VERSION,
     sdk_supports,
 )
-from ..plugins.validate import validate, scan_source, ValidationReport
+from ..plugins.validate import (validate, scan_source, scan_wasm,
+                                ValidationReport)
 
 # --- typed contracts (editor autocomplete / type-checking) -------------------
 from .protocols import PluginContextProtocol, SettingsProtocol, ManifestDict
@@ -126,6 +127,51 @@ def package_from_dir(path):
     meta.setdefault("entry", "plugin:plugin")
     return PluginPackage(manifest=PluginManifest.from_dict(meta), source=source)
 
+
+def package_from_wasm_dir(path):
+    """Build a :class:`PluginPackage` from a WASM plugin project directory —
+    ``manifest.json`` (``"kind": "wasm"`` or ``"extism"``) plus the
+    ``<module>.wasm`` its ``entry`` names. The same authoring helper as
+    `package_from_dir`, for the guests that run in the strongest tiers::
+
+        pkg = package_from_wasm_dir(".")
+        assert validate(pkg, frozenset(KNOWN_CAPABILITIES)).ok
+
+    Separate from `package_from_dir` rather than a branch inside it: that one
+    is documented as "``plugin.json`` + ``plugin.py``", and silently accepting
+    a directory with no Python in it would make its FileNotFoundError — the
+    message an author reads when they mistyped a filename — start lying.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+    d = _Path(path)
+    meta_p = d / "manifest.json"
+    if not meta_p.exists():
+        raise FileNotFoundError(f"{d} is not a wasm plugin directory "
+                                "(needs manifest.json + the .wasm it names)")
+    meta = dict(_json.loads(meta_p.read_text(encoding="utf-8")))
+    # `extism` is the same `.wasm` on disk under the other runtime, so this
+    # helper serves both; anything else (including a missing kind) is a
+    # component-model guest.
+    kind = ("extism" if str(meta.get("kind", "")).strip().lower() == "extism"
+            else "wasm")
+    meta["kind"] = kind
+    meta.setdefault("entry",
+                    "plugin:run" if kind == "extism" else "plugin:dl_build")
+    mod = str(meta.get("module") or str(meta["entry"]).split(":")[0])
+    src_p = d / (mod + ".wasm")
+    if not src_p.exists():
+        raise FileNotFoundError(f"{d}: manifest.json points at module {mod!r} "
+                                f"but {src_p.name} is missing")
+    return PluginPackage.build_wasm(
+        name=str(meta.get("name", "")), version=str(meta.get("version", "")),
+        entry=str(meta["entry"]), wasm=src_p.read_bytes(), kind=kind,
+        author=str(meta.get("author", "")),
+        description=str(meta.get("description", "")),
+        homepage=str(meta.get("homepage", "")),
+        requires=tuple(meta.get("requires", ())),
+        signature=str(meta.get("signature", "")))
+
 # SDK contract version (single source of truth in plugins.package.SDK_VERSION).
 # Independent of the host package version: it bumps only when this surface
 # changes in a way a plugin author would notice. A plugin may declare `min_sdk`
@@ -152,7 +198,8 @@ __all__ = [
     "render_card", "registered_card_types", "contributions",
     # packaging + validation
     "PluginManifest", "PluginPackage", "sha256_of", "package_from_dir",
-    "validate", "scan_source", "ValidationReport",
+    "package_from_wasm_dir",
+    "validate", "scan_source", "scan_wasm", "ValidationReport",
     "KNOWN_CAPABILITIES", "API_VERSION", "SUPPORTED_API",
     "SDK_VERSION", "sdk_supports",
     # version

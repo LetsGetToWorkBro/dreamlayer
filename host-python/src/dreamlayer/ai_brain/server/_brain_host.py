@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from ...orchestrator.waypath import WaypathLens
     from ...reality_compiler.v2.compiler import RealityCompilerV2
     from ..schema import Answer
+    from ...orchestrator.object_trail import ObjectTrail
     from .store import ActivityLog, BrainConfig
 
 
@@ -44,6 +45,7 @@ class BrainHost:
         activity: ActivityLog
         health: HealthLedger
         waypath: WaypathLens
+        object_trail: ObjectTrail
         rc: RealityCompilerV2
         # -- W3/W5/W6 memory-ingest surface (SourceOps). index + backend are
         #    built in Brain.__init__/_wire_model; the rest are lazy. --

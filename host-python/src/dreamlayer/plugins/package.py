@@ -24,6 +24,7 @@ list it and a client can verify it before ever importing it.
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import re
 from dataclasses import dataclass, field, asdict
@@ -103,6 +104,16 @@ class PluginManifest:
     # a paid marketplace fills in model/price/currency later. No payment code
     # ships against it yet.
     pricing: dict = field(default_factory=lambda: {"model": "free"})
+    # Which host runs the payload:
+    #   "python" — a module + factory (the original, and still the default)
+    #   "wasm"   — a WebAssembly guest in wasm_component_host, in-process with
+    #              zero ambient authority and its declared capabilities linked
+    #   "extism" — the same `.wasm` under the Extism runtime, which links NO
+    #              host functions at all: incapable rather than inspected
+    # It is in `signing_payload` because flipping it changes WHICH HOST RUNS THE
+    # CODE — an attacker who could retag a signed package would be choosing the
+    # sandbox, which is the same as choosing no sandbox.
+    kind: str = "python"
     checksum: str = ""               # sha256 of the code payload
     signature: str = ""              # Ed25519 author signature over the code payload
     pubkey: str = ""                 # author's Ed25519 public key, hex
@@ -136,6 +147,10 @@ class PluginManifest:
             min_sdk=str(d.get("min_sdk", "")),
             pricing=(dict(d["pricing"]) if isinstance(d.get("pricing"), dict)
                      else {"model": "free"}),
+            # A manifest with no `kind` is a Python package — every one
+            # written before this field existed. Defaulting the OTHER way would
+            # send an old package to a wasm host that cannot run it.
+            kind=str(d.get("kind") or "python"),
             checksum=str(d.get("checksum", "")),
             signature=str(d.get("signature", "")),
             pubkey=str(d.get("pubkey", "")),
@@ -167,11 +182,44 @@ class PluginManifest:
         return out
 
     @property
+    def _kind(self) -> str:
+        return (self.kind or "python").strip().lower()
+
+    @property
+    def is_wasm(self) -> bool:
+        """A guest for the in-process Component-Model host."""
+        return self._kind == "wasm"
+
+    @property
+    def is_extism(self) -> bool:
+        """A guest for the Extism runtime — the same `.wasm` on disk, a
+        different sandbox and a different ABI. Kept as a separate `kind` rather
+        than a flag beside `wasm`, because the two are not interchangeable: an
+        Extism guest imports `extism:host/env` and would fail to instantiate in
+        the component host, and a component guest expects `(ptr, len)` in and a
+        length back where Extism hands the PDK bytes."""
+        return self._kind == "extism"
+
+    @property
+    def carries_wasm(self) -> bool:
+        """True when the payload on disk is a `.wasm` binary, whichever runtime
+        runs it. This is what the format cares about; `is_wasm`/`is_extism` are
+        what the LOADER cares about."""
+        return self.is_wasm or self.is_extism
+
+    @property
     def module(self) -> str:
+        """The payload's basename on disk — `<module>.py` or `<module>.wasm`."""
         return self.entry.split(":", 1)[0]
 
     @property
     def factory(self) -> str:
+        """Python: the factory callable. WASM: the exported entry function.
+
+        Same field, because it answers the same question — "what does the host
+        call?" — and keeping one field means `signing_payload` covers both
+        without a second security-relevant name to remember.
+        """
         return self.entry.split(":", 1)[1]
 
 
@@ -209,6 +257,7 @@ class PluginPackage:
             "api": m.api,
             "min_sdk": m.min_sdk,
             "requires": sorted(m.requires),
+            "kind": m.kind,
             "source_sha256": sha256_of(self.source),
         }
 
@@ -229,23 +278,48 @@ class PluginPackage:
 
     # -- disk round-trip -----------------------------------------------------
 
+    # A wasm payload is BINARY, and `source` is text — so it round-trips as
+    # base64. That keeps every existing invariant exactly as it was: the
+    # checksum still covers `source`, `signing_payload` still hashes `source`,
+    # and base64 is injective, so binding the text binds the bytes. The
+    # alternative — a second binary field — would have meant a second checksum
+    # rule and a second thing for a signature to miss.
+
     @classmethod
     def load(cls, directory) -> "PluginPackage":
         d = Path(directory)
         manifest = PluginManifest.from_dict(json.loads((d / "manifest.json").read_text()))
-        source = (d / f"{manifest.module}.py").read_text()
+        if manifest.carries_wasm:
+            raw = (d / f"{manifest.module}.wasm").read_bytes()
+            source = base64.b64encode(raw).decode("ascii")
+        else:
+            source = (d / f"{manifest.module}.py").read_text()
         return cls(manifest=manifest, source=source)
 
     def write(self, directory) -> Path:
         d = Path(directory)
         d.mkdir(parents=True, exist_ok=True)
         (d / "manifest.json").write_text(json.dumps(self.manifest.to_dict(), indent=2))
-        (d / f"{self.manifest.module}.py").write_text(self.source)
+        if self.manifest.carries_wasm:
+            (d / f"{self.manifest.module}.wasm").write_bytes(self.wasm_bytes())
+        else:
+            (d / f"{self.manifest.module}.py").write_text(self.source)
         return d
+
+    def wasm_bytes(self) -> bytes:
+        """The guest module. Raises for a Python package rather than returning
+        something a wasm host would then fail on obscurely."""
+        if not self.manifest.carries_wasm:
+            raise ValueError(f"{self.manifest.name!r} is a python package")
+        try:
+            return base64.b64decode(self.source, validate=True)
+        except Exception as exc:
+            raise ValueError(
+                f"{self.manifest.name!r} carries an unreadable wasm payload") from exc
 
     @classmethod
     def build(cls, *, name, version, entry, source, author="", description="",
-              homepage="", requires=(), signature="",
+              homepage="", requires=(), signature="", kind="python",
               long=(), forwho="", screenshot="") -> "PluginPackage":
         """Make a package from source, stamping the checksum for you (authoring
         helper — a real publish tool would sign here too). `long`/`forwho`/
@@ -253,8 +327,17 @@ class PluginPackage:
         manifest but *not* the checksum (which covers the code payload only), so
         an author can revise their write-up without re-signing the code."""
         m = PluginManifest(name=name, version=version, entry=entry, author=author,
-                           description=description, homepage=homepage,
+                           description=description, homepage=homepage, kind=kind,
                            requires=tuple(requires), checksum=sha256_of(source),
                            signature=signature, long=tuple(long), forwho=forwho,
                            screenshot=screenshot)
         return cls(manifest=m, source=source)
+
+    @classmethod
+    def build_wasm(cls, *, name, version, entry, wasm: bytes, kind="wasm",
+                   **kw) -> "PluginPackage":
+        """Authoring helper for a WASM guest. `entry` is `"<module>:<export>"` —
+        the basename it lands on disk as, and the function the host calls.
+        `kind="extism"` builds the same payload for the Extism runtime."""
+        return cls.build(name=name, version=version, entry=entry, kind=kind,
+                         source=base64.b64encode(wasm).decode("ascii"), **kw)
