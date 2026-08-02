@@ -1,0 +1,172 @@
+{
+  "id": "reflex",
+  "name": "Reflex",
+  "version": 2,
+  "initial": "a",
+  "battery_below": 20,
+  "counters": {
+    "r": {"name": "r", "start": 0, "lo": 0, "hi": 9},
+    "h": {"name": "h", "start": 0, "lo": 0, "hi": 99},
+    "m": {"name": "m", "start": 0, "lo": 0, "hi": 99},
+    "f": {"name": "f", "start": 0, "lo": 0, "hi": 99},
+    "s": {"name": "s", "start": 0, "lo": 0, "hi": 99},
+    "t": {"name": "t", "start": 0, "lo": 0, "hi": 999},
+    "l": {"name": "l", "start": 1, "lo": 1, "hi": 9},
+    "d": {"name": "d", "start": 0, "lo": 0, "hi": 99}
+  },
+  "scenes": {
+    "a": {
+      "id": "a",
+      "lines": [
+        {"content": "SPRINT L{count:l}", "row": 0, "size": "md", "color": "accent_attention"},
+        {"content": "{slot} tap=go", "row": 1, "size": "sm", "color": "text_secondary"}
+      ],
+      "on": {
+        "single": {"target": "b", "emit": "go"},
+        "double": {"target": "a", "emit": "lvl", "counter_ops": [{"counter": "l", "op": "inc", "amount": 1}]},
+        "long": {"target": "@end", "emit": "bye"},
+        "ble": {"target": "b", "emit": "go"},
+        "ble:2": {"target": "b", "emit": "go"},
+        "text": {"target": "a", "emit": "txt"},
+        "imu:peek": {"target": "g", "emit": "stat"},
+        "imu:tilt": {"target": "g", "emit": "stat"},
+        "imu:shake": {"target": "a", "emit": "rst", "counter_ops": [
+          {"counter": "r", "op": "set", "amount": 0},
+          {"counter": "h", "op": "set", "amount": 0},
+          {"counter": "m", "op": "set", "amount": 0},
+          {"counter": "f", "op": "set", "amount": 0}
+        ]},
+        "bond:near": {"target": "b", "emit": "go"},
+        "bond:tag:go": {"target": "b", "emit": "go"},
+        "place:enter": {"target": "b", "emit": "go"},
+        "place:exit": {"target": "@end", "emit": "bye"},
+        "battery_low": {"target": "y", "emit": "low"}
+      }
+    },
+    "b": {
+      "id": "b",
+      "lines": [
+        {"content": "wait {count:r}/8", "row": 0, "size": "lg", "color": "text_primary"}
+      ],
+      "duration_range": [1.0, 3.0],
+      "on_timeout": [
+        {"target": "c", "emit": "go"}
+      ],
+      "on": {
+        "single": {"target": "f", "emit": "fs", "counter_ops": [{"counter": "f", "op": "inc", "amount": 1}]},
+        "imu_tap": {"target": "f", "emit": "fs", "counter_ops": [{"counter": "f", "op": "inc", "amount": 1}]},
+        "double": {"target": "c", "emit": "go"},
+        "long": {"target": "@end", "emit": "bye"}
+      }
+    },
+    "c": {
+      "id": "c",
+      "lines": [
+        {"content": "GO! {elapsed}", "row": 0, "size": "lg", "color": "accent_success"}
+      ],
+      "duration_sec": 2,
+      "tick": "countup",
+      "pulse": {"window_sec": 0.5, "color": "accent_error", "rate_hz": 4},
+      "on_timeout": [
+        {"target": "e", "emit": "miss", "counter_ops": [
+          {"counter": "m", "op": "inc", "amount": 1},
+          {"counter": "s", "op": "set", "amount": 0}
+        ]}
+      ],
+      "on": {
+        "imu_tap": {"target": "d", "emit": "hit", "counter_ops": [
+          {"counter": "h", "op": "inc", "amount": 1},
+          {"counter": "t", "op": "inc", "amount": 1},
+          {"counter": "s", "op": "inc", "amount": 1}
+        ]},
+        "single": {"target": "d", "emit": "hit", "counter_ops": [{"counter": "h", "op": "inc", "amount": 1}]},
+        "ble:1": {"target": "d", "emit": "hit", "counter_ops": [{"counter": "h", "op": "inc", "amount": 1}]},
+        "double": {"target": "e", "emit": "skip"},
+        "long": {"target": "@end", "emit": "bye"}
+      }
+    },
+    "d": {
+      "id": "d",
+      "lines": [
+        {"content": "{elapsed_ms}ms", "row": 0, "size": "lg", "color": "accent_success"},
+        {"content": "run {count:s}", "row": 1, "size": "sm", "color": "text_secondary"}
+      ],
+      "duration_sec": 1,
+      "on_timeout": [
+        {"target": "z", "emit": "done", "when": {"counter": "r", "cmp": "ge", "value": 8}},
+        {"target": "b", "emit": "rd", "counter_ops": [{"counter": "r", "op": "inc", "amount": 1}]}
+      ],
+      "on": {
+        "imu:nod": {"target": "b", "emit": "rd", "counter_ops": [{"counter": "r", "op": "inc", "amount": 1}]}
+      }
+    },
+    "e": {
+      "id": "e",
+      "lines": [
+        {"content": "miss", "row": 0, "size": "lg", "color": "accent_error"}
+      ],
+      "duration_sec": 1,
+      "on_timeout": [
+        {"target": "z", "emit": "done", "when": {"counter": "r", "cmp": "ge", "value": 8}},
+        {"target": "b", "emit": "rd", "counter_ops": [{"counter": "r", "op": "inc", "amount": 1}]}
+      ],
+      "on": {
+        "imu:nod": {"target": "b", "emit": "rd", "counter_ops": [{"counter": "r", "op": "inc", "amount": 1}]}
+      }
+    },
+    "f": {
+      "id": "f",
+      "lines": [
+        {"content": "early!", "row": 0, "size": "md", "color": "accent_error"}
+      ],
+      "duration_sec": 1,
+      "on_timeout": [
+        {"target": "b", "emit": "rd"}
+      ],
+      "on": {
+        "imu:shake": {"target": "b", "emit": "rd"}
+      }
+    },
+    "g": {
+      "id": "g",
+      "lines": [
+        {"content": "hits {count:h}", "row": 0, "size": "md", "color": "text_primary"},
+        {"content": "sets {count:d}", "row": 1, "size": "sm", "color": "text_secondary"}
+      ],
+      "duration_sec": 2,
+      "on_timeout": [
+        {"target": "a", "emit": "stat"}
+      ],
+      "on": {
+        "single": {"target": "a", "emit": "ok"}
+      }
+    },
+    "y": {
+      "id": "y",
+      "lines": [
+        {"content": "low battery", "row": 0, "size": "md", "color": "accent_error"}
+      ],
+      "on": {
+        "single": {"target": "a", "emit": "ok"},
+        "long": {"target": "@end", "emit": "bye"}
+      }
+    },
+    "z": {
+      "id": "z",
+      "lines": [
+        {"content": "hits {count:h}", "row": 0, "size": "md", "color": "text_primary"},
+        {"content": "fs {count:f}", "row": 1, "size": "sm", "color": "text_secondary"}
+      ],
+      "duration_sec": 4,
+      "tick": "countdown",
+      "pulse": {"window_sec": 2, "color": "accent_success", "rate_hz": 4},
+      "on_timeout": [
+        {"target": "@end", "emit": "log", "record": true, "counter_ops": [{"counter": "d", "op": "inc", "amount": 1}]}
+      ],
+      "on": {
+        "single": {"target": "a", "emit": "again", "counter_ops": [{"counter": "r", "op": "set", "amount": 0}]},
+        "imu:double_nod": {"target": "a", "emit": "again", "counter_ops": [{"counter": "r", "op": "set", "amount": 0}]}
+      }
+    }
+  }
+}
