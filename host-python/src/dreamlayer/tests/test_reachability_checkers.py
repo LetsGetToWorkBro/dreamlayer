@@ -521,9 +521,9 @@ class TestTheUnresolvedPushCountIsPinned:
         _roots, reachable = lens._closure(
             lens._import_graph(files), {lens._module_name(p) for p in files})
         _pushed, unresolved = hud._pushed_types(reachable)
-        assert len(unresolved) == 6, (
+        assert len(unresolved) == 5, (
             f"the REAL tree's unresolved push-site count changed "
-            f"({len(unresolved)} != 6): {sorted(unresolved)} — if the resolver "
+            f"({len(unresolved)} != 5): {sorted(unresolved)} — if the resolver "
             "improved, verify each remaining site genuinely cannot be resolved "
             "locally and move this pin DOWN; if it grew, find what regressed")
         modules = sorted({u.rsplit(":", 1)[0] for u in unresolved})
@@ -534,8 +534,10 @@ class TestTheUnresolvedPushCountIsPinned:
                                              # calls live in other modules
             "ai_brain.server.server",        # the self-test's function-parameter
                                              # card (inter-procedural)
-            "ai_brain.server.truth_live",    # _push(result) — a TruthLens
-                                             # result, not a card
+            # truth_live left this list on 2026-08-02. Its `_push` BUILDS the
+            # card rather than forwarding one, so the inner push_event is the
+            # site, and `to_gauge_card` — a builder call assigned to a local,
+            # mutated, then returned — is read by `_fn_card_types_found` now.
         ], (
             "the REAL tree's unresolved push sites moved modules: "
             f"{modules} (from {sorted(unresolved)})")
@@ -609,14 +611,24 @@ class TestTheGlassIsTheONETheBrainCanReach:
             lens._import_graph(files), {lens._module_name(p) for p in files})
         pushed, _unresolved = hud._pushed_types(reachable)
         brain_only = live - device
-        assert brain_only, (
-            "no Brain-only card types at all — ConsistencyCard, StasisCard and "
-            "QuestRewardCard are pushed by lens_hosts and drawn by no device "
-            "renderer, so at least those three are expected here.")
+        # This used to assert `brain_only` was NON-empty, naming ConsistencyCard,
+        # StasisCard and QuestRewardCard as pushed-but-undrawn on the device.
+        # All three got device renderers on 2026-08-02 (renderer.lua:
+        # draw_consistency / draw_quest_reward / draw_stasis), which is the
+        # whole point of the Brain gaining a path to the glass — so an EMPTY set
+        # is now the good outcome and the assertion is inverted.
+        #
+        # The invariant that made the original valuable survives: whatever is
+        # here must be a type something actually pushes, or a branch was added
+        # for a card that never arrives.
         for ctype in brain_only:
             assert ctype in pushed or ctype in hud._BRAIN_ONLY_PUSHED, (
                 f"{ctype} has a Live Lens branch but nothing pushes it — "
                 "either wire the push or drop the branch.")
+        for ctype in ("ConsistencyCard", "StasisCard", "QuestRewardCard"):
+            assert ctype in device, (
+                f"{ctype} lost its device renderer — the Brain pushes it and "
+                "the glasses would fall back to draw_fallback")
 
     def test_the_generic_fallback_is_not_counted_as_a_drawing(self, hud):
         """`glassEventCard` draws `eyebrow` and `primary` only. Counting it
@@ -1045,9 +1057,19 @@ class TestThePushScanKnowsBuiltFromPushed:
         pushed, unresolved = hud._pushed_types(self._reachable(hud))
         assert "IntroKeptCard" in pushed, (
             "a one-argument `self._push(card)` was dropped again")
-        assert any("truth_live" in u for u in unresolved), (
-            "TruthRead._push takes a RESULT, not a card — it cannot be named, "
-            "so it must at least be counted")
+        # RETIRED, inverted. This asserted truth_live stayed UNRESOLVED, on the
+        # grounds that `TruthRead._push` takes a result rather than a card.
+        # True of the outer call — and the type was decidable one line inside,
+        # where `_push` does `card = result.to_gauge_card()` and pushes it.
+        # `_push` wrappers that BUILD rather than forward are scanned now, and
+        # `to_gauge_card` (a builder call assigned to a local, mutated, then
+        # returned) is read by `_fn_card_types_found`.
+        assert not any("truth_live" in u for u in unresolved), (
+            "truth_live went back to unresolvable — check the builder/forwarder "
+            "split in `_pushed_types` and the return-a-local shape in "
+            "`_fn_card_types_found`")
+        assert "TruthLensCard" in pushed, (
+            "truth_live resolves but does not name TruthLensCard")
 
     def test_the_deployers_same_named_method_is_still_not_a_push(self, hud):
         """`brain_rc` calls `.push_event(name)` on a deployer that has nothing

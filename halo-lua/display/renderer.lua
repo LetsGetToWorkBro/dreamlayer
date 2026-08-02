@@ -1878,6 +1878,115 @@ end
 -- exit_t  = raw 0→1 (0 until exit begins)
 -- idle_t  = ms elapsed in hold phase (for spinning/waving/pulsing)
 -- ---------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+-- Cards the BRAIN pushes that the device had no drawing for.
+--
+-- Until the Brain gained a path to the glasses (ai_brain/server/halo_link.py)
+-- these three only ever reached the Live Lens, so halo-lua never needed them
+-- and `draw_fallback` would have rendered each as a bare disc and a line of
+-- text. They are the wearer's own contradictions, their earned XP and their
+-- held thoughts — each deserves its own shape, and each is built from the
+-- fields the Python builder actually sets (consistency.py:279, quest.py:125,
+-- lens_hosts.py:1155). Keep the two in step.
+-- ---------------------------------------------------------------------------
+
+-- Candor: what you said now, against what you said before. The prior sits
+-- ABOVE in ghost and the claim below in full — the same vertical grammar as
+-- draw_deviation_alert, because it is the same question asked of a person
+-- rather than a route.
+local function draw_consistency(card, sc, enter_t, exit_t, idle_t)
+  local claim = card.primary or ""
+  local prior = card.footer  or ""
+
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 128, floor(72*sc), MAT.PANE, 4)
+  end
+
+  local ring_r = floor(lerp(52, 104, ease_out_expo(enter_t)) * sc)
+  if ring_r >= 1 then
+    arc(CX, CY, ring_r, 0, 360, P.accent_attention, 44)
+  end
+
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    text(T.truncate(card.eyebrow or "YOU SAID DIFFERENT BEFORE", "sm", 196),
+         CX, 66, P.accent_attention, "sm")
+  end
+
+  -- earlier, in ghost — deliberately the QUIETER of the two. The card is not
+  -- an accusation; the wearer is being shown their own record, not corrected.
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and prior ~= "" then
+    text("earlier", CX, 96, P.text_ghost, "sm")
+    text(T.truncate(prior, "sm", 196), CX, 112, P.text_ghost, "sm")
+  end
+
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
+    text(T.truncate(claim, "md", 196), CX, 146,
+         P.text_primary, T.fit_size(claim, 196, {"lg","md"}))
+  end
+end
+
+-- Saga: the reward beat. XP is the primary because it is the thing that
+-- changed; a rank or achievement is the rarer event and takes the footer, so a
+-- level-up reads as an addition to the number rather than replacing it.
+local function draw_quest_reward(card, sc, enter_t, exit_t, idle_t)
+  local xp     = card.primary or ""
+  local detail = card.detail  or ""
+  local footer = card.footer  or ""
+  local big    = card.leveled_up or (card.new_rank or "") ~= ""
+
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 128, floor(70*sc), MAT.PANE, 4)
+  end
+
+  -- Two rings on a level-up, one otherwise: the only visual difference
+  -- between "you earned some" and "you crossed a line", and it costs nothing.
+  local r1 = floor(lerp(48, 100, ease_out_expo(enter_t)) * sc)
+  if r1 >= 1 then arc(CX, CY, r1, 0, 360, P.accent_success, 52) end
+  if big then
+    local r2 = floor(lerp(48, 112, ease_out_expo(enter_t)) * sc)
+    if r2 >= 1 then arc(CX, CY, r2, 0, 360, P.accent_success, 26) end
+  end
+
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    text(T.truncate(card.eyebrow or "", "sm", 196), CX, 70,
+         P.accent_success, "sm")
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    text(T.truncate(xp, "lg", 196), CX, 122, P.text_primary,
+         T.fit_size(xp, 196, {"lg","md"}))
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and detail ~= "" then
+    text(T.truncate(detail, "sm", 196), CX, 150, P.text_secondary, "sm")
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and footer ~= "" then
+    text(T.truncate(footer, "sm", 196), CX, 172, P.accent_success, "sm")
+  end
+end
+
+-- Stasis: a thought held rather than acted on. Quiet by construction — no
+-- attention ring at all, because the whole point of the lens is that this did
+-- NOT interrupt you when it happened.
+local function draw_stasis(card, sc, enter_t, exit_t, idle_t)
+  local primary = card.primary or ""
+  local footer  = card.footer  or ""
+
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 128, floor(66*sc), MAT.PANE, 3)
+  end
+
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    text(T.truncate(card.eyebrow or "HELD", "sm", 196), CX, 74,
+         P.accent_memory, "sm")
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    text(T.truncate(primary, "md", 196), CX, 124, P.text_primary,
+         T.fit_size(primary, 196, {"lg","md"}))
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and footer ~= "" then
+    text(T.truncate(footer, "sm", 196), CX, 160, P.text_ghost, "sm")
+  end
+end
+
 local DRAW = {
   ReadyCard             = function(c,sc,et,xt,it) draw_ready(sc,et,xt)                    end,
   JunoColorsCard        = function(c,sc,et,xt,it) draw_juno_colors(et)                    end,
@@ -1895,6 +2004,10 @@ local DRAW = {
   LowConfidenceCard     = function(c,sc,et,xt,it) draw_low_confidence(sc,et,xt)           end,
   -- new engines
   CommitmentDriftCard   = function(c,sc,et,xt,it) draw_commitment_drift(c,sc,et,xt,it)    end,
+  -- Brain-pushed cards the device had no drawing for until halo_link.py
+  ConsistencyCard       = function(c,sc,et,xt,it) draw_consistency(c,sc,et,xt,it)         end,
+  QuestRewardCard       = function(c,sc,et,xt,it) draw_quest_reward(c,sc,et,xt,it)        end,
+  StasisCard            = function(c,sc,et,xt,it) draw_stasis(c,sc,et,xt,it)              end,
   TimeScrubNodeCard     = function(c,sc,et,xt,it) draw_time_scrub_node(c,sc,et,xt,it)     end,
   DeviationAlertCard    = function(c,sc,et,xt,it) draw_deviation_alert(c,sc,et,xt,it)     end,
   -- Meridian lens presentation
