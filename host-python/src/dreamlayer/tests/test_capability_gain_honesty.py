@@ -80,8 +80,35 @@ class TestTheGainMatchesTheBaseline:
         baseline is broken" is not."""
         gain = _cap(key).gain.lower()
         assert "already" in gain
-        assert "yet" in gain, (
-            f"{key} does not say the delta is unclaimed by anything in the tree")
+
+    def test_typed_pipeline_still_says_nothing_claims_the_delta(self):
+        """`typed_pipeline` remains dormant, so its gain must still say the
+        delta is unclaimed by anything in the tree."""
+        assert "yet" in _cap("typed_pipeline").gain.lower()
+
+    def test_persona_tuning_no_longer_says_nothing_builds_a_rule(self):
+        """RETIRED, inverted — and the inversion is the point.
+
+        This case used to assert `"yet" in gain`, pinning the entry's own
+        sentence: *"nothing in the tree builds one yet."* That was true and it
+        is now false, which is the whole result of the change that retired it.
+        `ai_brain/server/attention_live.py` builds the rule from the wearer's
+        swats and `Brain.push_event` applies it, so the delta the wearer is
+        being sold is no longer "somebody could use this" but the narrower and
+        truer "the fit you already get is cross-validated instead of scored on
+        its own training rows".
+
+        Asserting the ABSENCE keeps the entry from silently reverting to the
+        old pitch once its baseline stopped being empty — the failure this
+        whole file exists to catch, pointed the other way.
+        """
+        gain = _cap("persona_tuning").gain.lower()
+        assert "yet" not in gain, (
+            "persona_tuning still says its delta is unbuilt, but "
+            "attention_live builds it and push_event applies it")
+        assert "cross-validat" in gain, (
+            "the honest remaining delta is the k-fold, and the entry must name "
+            "it rather than re-selling the rule-building it now does anyway")
 
     @pytest.mark.parametrize("key,floor", [("typed_pipeline", 4.0),
                                            ("persona_tuning", 3.0)])

@@ -1384,6 +1384,47 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         except Exception:                            # noqa: BLE001 — see above
             return True
 
+    def observe_card(self, kind: str, confidence, dismissed: bool) -> bool:
+        """Record the wearer's reaction to one card. True if it became a label.
+
+        This is the input side of the only learned control in the Brain, and it
+        is the half that did not exist: `dismiss_ms` is a client-side expiry
+        timer, so nothing ever told the Brain that a card was swatted.
+        """
+        try:
+            from .attention_live import gate
+            return gate(self).observe(kind, confidence, dismissed)
+        except Exception as exc:                     # noqa: BLE001
+            log.debug("[attention] could not record: %s", type(exc).__name__)
+            return False
+
+    def attention_summary(self) -> dict:
+        """What the gate has learned, for the panel and the capability probe."""
+        try:
+            from .attention_live import gate
+            return gate(self).summary()
+        except Exception:                            # noqa: BLE001
+            return {"labelled": 0, "swatted": 0, "bar": 0.0, "fitted": False}
+
+    def _attention_allows(self, kind: str, card) -> bool:
+        """The learned interruption bar (`attention_live`). Fails OPEN, like
+        `_may_interrupt` and for the same reason.
+
+        The confidence is read off the CARD rather than threaded through every
+        `push_event` call site: the builders in `hud/cards.py` already put it
+        there for rendering (`conf_color`), so the number the wearer sees on the
+        card is the same number the gate judges. A second, hand-passed value
+        could drift from the drawn one, and then the gate would be reasoning
+        about a confidence nobody was ever shown.
+        """
+        try:
+            if not isinstance(card, dict):
+                return True
+            from .attention_live import gate
+            return gate(self).allows(kind, card.get("confidence"))
+        except Exception:                            # noqa: BLE001 — see above
+            return True
+
     def push_event(self, kind: str, card=None, veil_ok: bool = False) -> int:
         """Fan a card out to every connected Live Lens. Veil-gated by default:
         an ambient push (the morning brief, a memory nudge) is SUPPRESSED while
@@ -1404,6 +1445,14 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             # other. `veil_ok` skips both — a categorical safety alert is not a
             # notification the wearer opted out of.
             if not self._may_interrupt(kind):
+                return 0
+            # …and last, the bar the wearer's own swats set. AFTER the two
+            # above and never instead of either: this is the softest of the
+            # three — a preference the wearer never stated in words, inferred
+            # from what they swatted away — so it gets the least authority and
+            # the most conservative failure. Only proactive kinds, only cards
+            # that state a confidence, and open on anything unreadable.
+            if kind in self.PROACTIVE_KINDS and not self._attention_allows(kind, card):
                 return 0
         ev: dict = {"kind": kind, "safety": bool(veil_ok)}
         if isinstance(card, dict):
@@ -3293,6 +3342,17 @@ def _capability_payload(brain: Brain) -> dict:
                 env["DL_WIRED_DIARIZATION"] = "1"
     except Exception:                           # noqa: BLE001
         pass
+    # `persona_tuning` — the wearer's interruption bar, and the flag follows a
+    # bar that `tune()` genuinely RETURNED from their own swats. Not hulearn
+    # being importable, and not the gate existing: a gate whose history is too
+    # short, or whose wearer reacted the same way to everything, refuses and
+    # reports 0.0 — which is the honest answer, and not a wired capability.
+    try:
+        from .attention_live import gate as _attn_gate
+        if _attn_gate(brain).tuning_live():
+            env["DL_WIRED_PERSONA_TUNING"] = "1"
+    except Exception:                               # noqa: BLE001
+        pass
     # `event_bus` — a `MeshEventBus` exists only around a MeshManager that has
     # joined a circle, and until GhostMode was reachable nothing ever joined
     # one. The flag follows a circle live on this Brain right now, so it goes
@@ -4770,6 +4830,28 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             b = self._body()
             self._json(200, brain.set_interpret(bool(b.get("on", True)),
                                                 str(b.get("target", "") or "")))
+
+        def _post_attention(self, path, qs):
+            """What the wearer did with a card: `{"kind", "confidence",
+            "dismissed"}`.
+
+            The one signal that never used to cross back from the glass. Every
+            card auto-expired on a `dismiss_ms` timer, so the Brain could not
+            tell a card the wearer read from one they swatted away — and with
+            no such record, any tuner has nothing to tune on.
+
+            Deliberately cheap and unauthenticated beyond the usual do_POST
+            guards: it carries no captured content, only a card kind and the
+            confidence the card already displayed. A hostile caller can skew
+            their OWN interruption bar, which is a setting they can also just
+            change.
+            """
+            b = self._body()
+            ok = brain.observe_card(str(b.get("kind", "") or ""),
+                                    b.get("confidence"),
+                                    bool(b.get("dismissed", False)))
+            self._json(200, {"ok": True, "labelled": bool(ok),
+                             **brain.attention_summary()})
 
         def _post_intro(self, path, qs):
             """Decide a staged introduction: `{"action": "confirm"|"dismiss"}`.
@@ -6781,6 +6863,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/interpret": _post_interpret,
             "/dreamlayer/truth": _post_truth,
             "/dreamlayer/intro": _post_intro,
+            "/dreamlayer/attention": _post_attention,
             "/dreamlayer/vault/sync": _post_vault_sync,
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,

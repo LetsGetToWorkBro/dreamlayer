@@ -224,7 +224,7 @@ CAPABILITIES: Tuple[Cap, ...] = (
         gain="baseline rankings are static; this adapts to your taste as you use it", impact=3, before=2.5, after=4),
     Cap("persona_tuning", "Human-in-the-loop persona classifier", "intelligence",
         ("hulearn",), "intelligence", "orchestrator/persona_humanlearn.py",
-        gain="the classifier already applies any rule callable you hand it — installing this is what lets you BUILD that rule by example (a FunctionClassifier drawn from labelled cases) instead of writing it by hand; nothing in the tree builds one yet", impact=1, before=3, after=4),
+        gain="your glasses already learn how sure they must be before interrupting you — swatting a card away is a label, letting it run is another, and the bar is re-fit from your own reactions either way; installing this cross-validates that fit instead of scoring it on the very cards it was chosen from, which flatters a short history", impact=1, before=3, after=4),
     Cap("object_tracking", "Identity-stable multi-object tracking", "intelligence",
         ("supervision",), "intelligence", "dream_mode/track_supervision.py",
         gain="baseline tracker loses objects when they overlap; this keeps identity through occlusion", impact=3, before=2.5, after=4),
@@ -515,6 +515,13 @@ _NOT_WIRED = frozenset({
     # live path).
     "coreml_ondevice", "dream_style",
     # intelligence / structured: adapters wired only in tests
+    # persona_tuning stays listed as the honest DEFAULT and is promoted on a
+    # real fit. It had a tuner and one consumer — `MaturityGate`, built only by
+    # the `Orchestrator` the shipped Brain never instantiates (decisions/0001),
+    # so it was reachable from tests and the simulator and from nothing the
+    # wearer runs. `attention_live.AttentionGate` re-hosts the plain half
+    # Brain-side, the way `retention_live.py` did, and `push_event` consults it.
+    # It reports dormant until the wearer's own swats support a bar.
     "speaker_id", "persona_tuning", "object_tracking", "facial_aus",
     "structured_output", "typed_models", "typed_pipeline",
     # platform / infra: no live loader / surface reaches these

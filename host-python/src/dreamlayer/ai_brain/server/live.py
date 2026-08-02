@@ -1330,7 +1330,37 @@ function gend(ms){                                /* fade the card on + auto-dis
      card said the opposite of the truth. An explicit 0 now persists; anything
      falsy-but-absent still takes the caller's fallback. */
   if (ms === 0) return;
-  glassTimer = setTimeout(glassClear, ms || 4200);
+  /* Running the full timer is the only evidence of a card the wearer TOLERATED.
+     Any other clear — a replacement card, the dream canvas, a mode change — is
+     not the wearer's verdict on it, so it reports nothing rather than logging a
+     "kept" nobody meant. attnArm/attnReport, below. */
+  glassTimer = setTimeout(() => { attnReport(false); glassClear(); }, ms || 4200);
+}
+/* ---- the one signal that never used to cross back to the Brain ----
+   Every card auto-expired on a timer, so the Brain could not tell a card that
+   was read from one that was swatted away, and its only learned control had
+   nothing to learn from. A tap on the disc while a proactive card shows is the
+   swat; letting it run out is the keep. Nothing else is reported, and a card
+   with no confidence on it is never armed at all — there would be no number to
+   attribute the reaction to. */
+const ATTN_KINDS = {proactive_memory: 1, commitment_recall: 1,
+                    commitment_drift: 1, brief: 1, object_recall: 1,
+                    they_said: 1, candor: 1, hark: 1};
+let attnPending = null;
+function attnArm(kind, card){
+  attnPending = (ATTN_KINDS[kind] && card && typeof card.confidence === "number")
+    ? {kind: kind, confidence: card.confidence} : null;
+}
+function attnReport(dismissed){
+  const p = attnPending; attnPending = null;
+  if (!p) return;
+  try {
+    fetch("/dreamlayer/attention", {
+      method: "POST",
+      headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+      body: JSON.stringify({kind: p.kind, confidence: p.confidence,
+                            dismissed: !!dismissed})}).catch(() => {});
+  } catch (e) {}
 }
 function gwrap(str, n){                           /* soft-wrap to lines of ~n chars */
   const words = String(str || "").split(/\s+/).filter(Boolean);
@@ -2660,6 +2690,17 @@ $("tourskip").onclick = endTour;
 $("tourbtn").onclick = () => startTour(true);
 $("tourbtn").onkeydown = e => { if (e.key===" "||e.key==="Enter") startTour(true); };
 
+/* Swat: a tap on the disc dismisses the proactive card showing on it, and says
+   so. Deliberately inert when nothing is armed — a tap on an idle disc, or on a
+   direct answer the wearer asked for, must not teach the gate anything. This is
+   the glass equivalent of the shake the Orchestrator reads (ops_ingest's
+   SHAKE_DISMISS), which the Brain never had. */
+$("glass").addEventListener("click", () => {
+  if (!attnPending) return;
+  attnReport(true);
+  glassClear();
+});
+
 
 /* ---- confluence: two skies, one room -------------------------------------
    The REAL two-wearer layer, through the Brain as the meeting point. This
@@ -3932,6 +3973,7 @@ function stopEvents(){ try { if (evSource) evSource.close(); } catch (e) {} evSo
 function renderEvent(ev){
   if (dreamOn) return;                 /* never stomp the dream canvas */
   const c = ev.card, t = c && c.type;
+  attnArm(ev.kind, c);                 /* before any draw — gend() reads it */
   /* a self-test card announces itself — it must never read as a real alarm or a
      real brief (the Brain stamps selftest + a SELF-TEST eyebrow; we keep it) */
   const test = !!(c && c.selftest);
