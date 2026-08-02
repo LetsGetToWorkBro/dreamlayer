@@ -10,7 +10,7 @@ from pathlib import Path
 from dreamlayer.reality_compiler.v2.figment import Figment
 from dreamlayer.reality_compiler.v2.golf import referee, score
 
-FIXTURE = (Path(__file__).parents[3].parent
+FIXTURE = (Path(__file__).resolve().parents[4]
            / "examples" / "figments" / "reflex-ladder.json")
 
 # Measured with `dreamlayer golf verify examples/figments/reflex-ladder.json
@@ -34,6 +34,7 @@ def test_entry_is_eligible():
     report = referee(_load())
     assert report["ok"] is True
     assert report["violations"] == []
+    assert report["warnings"] == []
 
 
 def test_entry_holds_its_score_floor():
