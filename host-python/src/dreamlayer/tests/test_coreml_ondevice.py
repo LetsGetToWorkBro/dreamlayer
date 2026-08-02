@@ -208,3 +208,44 @@ class TestThePromotionIsEarned:
         src = inspect.getsource(s)
         assert "DL_WIRED_COREML_ONDEVICE" in src
         assert "predictions" in src
+
+
+class TestTheGatesBehindAvailable:
+    """`coremltools` is absent in CI, so `available` is False and every gate
+    BEHIND it is unreachable by an ordinary test — two mutations proved it:
+    deleting the darwin check and deleting the model-file check both left the
+    suite green. These reach past `available` deliberately.
+    """
+
+    def test_the_file_check_is_real(self, tmp_path, monkeypatch):
+        import dreamlayer.object_lens.classify_backends as B
+        monkeypatch.setattr(B.CoreMLClassifier, "available", True)
+        missing = B.CoreMLClassifier(model_path=str(tmp_path / "absent.mlmodel"))
+        assert missing.usable() is False, (
+            "a configured-but-missing model made the rung usable; it would take "
+            "the top of the ladder and return None for every frame")
+        present = tmp_path / "there.mlmodel"
+        present.write_bytes(b"x")
+        assert B.CoreMLClassifier(model_path=str(present)).usable() is True
+
+    def test_availability_is_gated_on_macos(self):
+        # Asserted at the definition because the value is computed at import:
+        # coremltools imports cleanly on Linux and cannot predict there, so a
+        # platform-blind `available` would put a rung that answers None for
+        # every frame at the top of the ladder on every Linux Brain.
+        import inspect
+
+        import dreamlayer.object_lens.classify_backends as B
+        src = inspect.getsource(B)
+        line = next(ln for ln in src.splitlines()
+                    if 'available = _has("coremltools")' in ln)
+        assert 'platform == "darwin"' in line, (
+            f"the darwin gate is gone from `available`: {line.strip()!r}")
+
+    def test_an_unusable_rung_never_reaches_predict(self, tmp_path, monkeypatch):
+        import dreamlayer.object_lens.classify_backends as B
+        monkeypatch.setattr(B.CoreMLClassifier, "available", True)
+        called = []
+        c = B.CoreMLClassifier(model_path=str(tmp_path / "absent.mlmodel"))
+        c._predict = None
+        assert c(_frame()) is None and not called
