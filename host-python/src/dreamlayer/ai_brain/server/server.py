@@ -1466,7 +1466,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             return {"ok": False, "answer": "", "kind": "unknown",
                     "confidence": 0.0}
 
-    def dream_pose(self, pose: dict, colors=None, amplitude: float = 0.0) -> dict:
+    def dream_pose(self, pose: dict, colors=None, amplitude: float = 0.0,
+                   fft=None) -> dict:
         """One Dream Mode beat from the phone: head pose, and the light here.
 
         Two lenses ride this. The pose drives **Yesterlight** — a held upward
@@ -1487,7 +1488,14 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                     getattr(self, "_zone_was", "") or "")
             except Exception:                        # noqa: BLE001
                 place = ""
-            if colors:
+            # The phone sends the raw SPECTRUM and the Brain decides the
+            # weather, so the palette logic lives in `MicReactor` once rather
+            # than being re-derived in JavaScript. `colors` is still accepted
+            # for a caller that has already computed them (the ledger takes
+            # either), but `fft` is the path that lights both surfaces.
+            if fft:
+                r.note_mic(fft, amplitude, place)
+            elif colors:
                 r.note_weather(place, colors, amplitude)
             sent = r.note_pose(pose if isinstance(pose, dict) else {}, place)
             return {"ok": True, "frames": sent, **r.status()}
@@ -5042,7 +5050,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             b = self._body()
             self._json(200, brain.dream_pose(
                 b.get("pose") if isinstance(b.get("pose"), dict) else {},
-                b.get("colors"), float(b.get("amplitude") or 0.0)))
+                b.get("colors"), float(b.get("amplitude") or 0.0),
+                b.get("fft")))
 
         def _post_attention(self, path, qs):
             """What the wearer did with a card: `{"kind", "confidence",

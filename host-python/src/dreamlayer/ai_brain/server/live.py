@@ -2624,6 +2624,46 @@ function glassErrorCard(c){                          /* something broke */
   gend(c.dismiss_ms || 5000);
 }
 
+function glassPaletteShiftCard(c){                   /* the room's colour */
+  /* `colors` is the card, and it is not text at all — the one type here whose
+     content a text renderer could never carry. The GLASSES get this natively as
+     a raw `palette` frame their animator sweeps across the whole disc; the
+     phone has no such channel, so the card IS the phone's palette surface. */
+  const ctx = glassCtx(); gback(ctx);
+  const cols = Array.isArray(c.colors) ? c.colors.slice(0, 6) : [];
+  if (cols.length){
+    const step = 360 / cols.length;
+    cols.forEach((col, i) => {
+      /* the device speaks YCbCr slots; a browser wants CSS. Luma alone is a
+         faithful reduction — it is the channel the palette actually shifts —
+         and inventing chroma we were not sent would be a prettier lie. */
+      let fill;
+      if (col && typeof col === "object" && typeof col.y === "number"){
+        const l = Math.max(0, Math.min(255, col.y | 0));
+        fill = "rgb(" + l + "," + l + "," + l + ")";
+      } else if (typeof col === "number"){
+        fill = "#" + (col >>> 0).toString(16).padStart(6, "0").slice(-6);
+      } else {
+        fill = String((col && (col.hex || col.color)) || "#888");
+      }
+      ctx.beginPath();
+      ctx.moveTo(128, 128);
+      ctx.arc(128, 128, 84, (i * step - 90) * Math.PI / 180,
+              ((i + 1) * step - 90) * Math.PI / 180);
+      ctx.closePath();
+      ctx.fillStyle = fill; ctx.globalAlpha = 0.5; ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+  }
+  ctx.beginPath(); ctx.arc(128, 128, 52, 0, 2 * Math.PI);
+  ctx.fillStyle = GP.background; ctx.fill();
+  gtext(ctx, String(c.mood || "").toUpperCase().slice(0, 14), 128, 132,
+        GP.text_secondary, "sm");
+  /* dismiss_ms is 0 by contract — it is consumed, not read — so it is given a
+     real lifetime here from the shift's own duration. */
+  gend(Math.max(1500, parseInt(c.duration_ms, 10) || 2000));
+}
+
 function glassEventCard(c){                          /* any pushed card with no bespoke renderer */
   const ctx = glassCtx(); gback(ctx);
   garc(ctx, 128, 108, 44, 0, 360, GP.border_subtle);
@@ -2654,7 +2694,7 @@ let dreamGen = 0;                 /* bumped on every enter/exit — an await tha
 let dreamACtx = null, dreamLastTick = 0, dreamT = 0;
 const DREAM_TICK_MS = 500;                 /* 2 Hz — DreamEngine.AMBIENT_HZ */
 const dweather = {pressure: 0, energy: 0, luma: 0.35};
-const dmotion = {mag: 0};
+const dmotion = {mag: 0, pitch: 0};
 const dparticles = [];
 for (let i = 0; i < 24; i++)               /* 24 particles, as the device */
   dparticles.push({a: i / 24 * Math.PI * 2, r: 28 + (i * 53) % 62,
@@ -2669,6 +2709,11 @@ function onDreamMotion(e){
   const a = (e.accelerationIncludingGravity || e.acceleration || {});
   const m = Math.abs(a.x || 0) + Math.abs(a.y || 0) + Math.abs(a.z || 0);
   dmotion.mag = dmotion.mag * 0.8 + Math.min(1, Math.abs(m - 9.8) / 12) * 0.2;
+  /* Yesterlight reads PITCH in radians, up negative — the held look back. The
+     accelerometer's y/z pair gives it directly, and without this the lens
+     would have been fed a constant 0 and could never arm. */
+  const ay = a.y || 0, az = a.z || 0;
+  if (ay || az) dmotion.pitch = dmotion.pitch * 0.8 + Math.atan2(-ay, -az) * 0.2;
 }
 async function enterDream(){
   dreamOn = true;
@@ -2717,6 +2762,7 @@ function exitDream(){
 function toggleDream(){ if (dreamOn) exitDream(); else enterDream(); }
 function dreamTick(){                      /* the 2 Hz reactor pass */
   let pressure = 0, energy = 0, amp = 0;
+  let _bands = null;
   if (dreamAnalyser && !veil) {
     const bins = new Uint8Array(dreamAnalyser.frequencyBinCount);
     dreamAnalyser.getByteFrequencyData(bins);
@@ -2726,16 +2772,56 @@ function dreamTick(){                      /* the 2 Hz reactor pass */
     for (let i = 0; i < bins.length; i++) amp += bins[i];
     pressure = lo / (8 * 255); energy = hi / (72 * 255);
     amp = amp / (bins.length * 255);
+    /* MicReactor reads 32 normalised bands. Reducing here rather than shipping
+       the raw FFT keeps the payload tiny (32 floats at 2 Hz) and is the same
+       shape the glasses' own reactor consumes. */
+    _bands = [];
+    const per = Math.max(1, Math.floor(bins.length / 32));
+    for (let b = 0; b < 32; b++){
+      let s = 0;
+      for (let k = 0; k < per; k++) s += bins[b * per + k] || 0;
+      _bands.push(s / (per * 255));
+    }
   }
   /* becalmed drift when quiet/veiled — the sky never flatlines */
   dweather.pressure = dweather.pressure * 0.7 + (pressure + dmotion.mag * 0.3) * 0.3;
   dweather.energy   = dweather.energy * 0.7 + energy * 0.3;
   dweather.luma     = 0.3 + Math.min(0.4, amp * 0.8 + dmotion.mag * 0.15);
   confBeat();                        /* the shared sky rides the same 2 Hz */
+  dreamBeatToBrain(_bands, amp);     /* …and the Brain paints both surfaces */
   if (performance.now() - _lastSceneT >= SCENE_MS) {   /* the scene, at 4 s */
     _lastSceneT = performance.now();
     dreamSceneBeat();
   }
+}
+/* ---- the dream beat the BRAIN acts on ------------------------------------
+   The phone ships the SPECTRUM, not a colour. The palette decision lives in
+   `dream_mode/mic_reactor.py` — the same primitive the glasses' own engine
+   runs — so there is one definition of what a room's weather looks like
+   instead of a second one written in JavaScript that drifts from it.
+
+   The Brain answers by pushing to BOTH surfaces: a raw `palette` frame the
+   glasses' animator sweeps across the disc, and a PaletteShiftCard for this
+   page, which has no native palette channel. Veiled → nothing is sent and the
+   Brain refuses again at its own gate.
+
+   Fire-and-forget at 2 Hz: a dropped beat costs one shade of one frame, and
+   waiting on it would stutter the dream loop. */
+let _dreamBeatBusy = false;
+function dreamBeatToBrain(bands, amp){
+  if (!bands || !bands.length || veil || _dreamBeatBusy) return;
+  _dreamBeatBusy = true;
+  try {
+    fetch("/dreamlayer/dream/pose", {
+      method: "POST",
+      headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+      body: JSON.stringify({
+        fft: bands.map(v => Math.round(v * 1000) / 1000),
+        amplitude: Math.round((amp || 0) * 1000) / 1000,
+        pose: {pitch: dmotion.pitch || 0},
+      }),
+    }).catch(() => {}).then(() => { _dreamBeatBusy = false; });
+  } catch (e) { _dreamBeatBusy = false; }
 }
 function dreamCurl(x, y, t){               /* cheap curl of a drifting field */
   const n = (a, b) => Math.sin(a * 0.061 + t * 0.00021 + Math.sin(b * 0.047 - t * 0.00013));
@@ -4238,10 +4324,7 @@ function renderEvent(ev){
   else if (t === "SynesthesiaCard") glassSynesthesiaCard(c);
   else if (t === "TruthLensCard") glassTestimonyCard(c);
   else if (t === "IntroOfferCard" || t === "IntroKeptCard") glassIntroCard(c);
-  /* the fourteen that used to fall through to glassEventCard. PaletteShiftCard
-     was a fifteenth until `palette_shift_card()` turned out to have NO CALLER
-     anywhere in the tree — a branch for a card that never arrives is the same
-     wasted wiring as a card with no branch, pointed the other way. */
+  /* the fifteen that used to fall through to glassEventCard */
   else if (t === "EmberPromptCard" || t === "EmberFlareCard"
            || t === "EmberRevealCard" || t === "EmberGraduatedCard")
     glassEmberCard(c);
@@ -4254,6 +4337,7 @@ function renderEvent(ev){
   else if (t === "LoadingCard") glassLoadingCard(c);
   else if (t === "LowConfidenceCard") glassLowConfidenceCard(c);
   else if (t === "ErrorCard") glassErrorCard(c);
+  else if (t === "PaletteShiftCard") glassPaletteShiftCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 

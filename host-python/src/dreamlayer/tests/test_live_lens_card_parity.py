@@ -33,15 +33,11 @@ CARDS = ROOT / "host-python" / "src" / "dreamlayer" / "hud" / "cards.py"
 #: phone's palette surface. An asymmetry in TRANSPORT, not a missing drawing.
 DEVICE_NATIVE_ONLY = {"PaletteShiftCard"}
 
-#: Built by a function NOTHING CALLS. `hud/cards.py:palette_shift_card` has no
-#: caller anywhere in the tree, so no surface can ever receive one. A renderer
-#: for it was written and then removed: a branch for a card that never arrives
-#: is the same wasted wiring as a card with no branch, pointed the other way,
-#: and `test_reachability_checkers` catches it in exactly those words.
-#:
-#: Wiring a producer would be a real feature — the phone has no native palette
-#: channel the way the device does — and is deliberately NOT smuggled in here.
-NO_PRODUCER = {"PaletteShiftCard"}
+#: Empty, and it stayed empty by BUILDING the missing producer rather than by
+#: excusing the gap. `palette_shift_card` had no caller anywhere in the tree for
+#: as long as it existed; `dream_reactors.note_mic` calls it now, from the same
+#: `MicReactor` primitive the glasses' own engine runs.
+NO_PRODUCER: set = set()
 
 
 def _hud():
@@ -78,8 +74,8 @@ class TestThePhoneDrawsEverythingItIsSent:
 
     def test_the_count_did_not_quietly_shrink(self, surfaces):
         _device, live = surfaces
-        assert len(live) >= 44, (
-            f"the Live Lens draws {len(live)} types, down from 44 — a renderer "
+        assert len(live) >= 45, (
+            f"the Live Lens draws {len(live)} types, down from 45 — a renderer "
             "was removed or the dispatch scan stopped matching")
 
     def test_the_two_surfaces_are_level(self, surfaces):
@@ -134,6 +130,7 @@ class TestTheNewRenderersKeepTheirContent:
         ("glassUpcomingCard", "c.minutes"),        # the countdown
         ("glassHereCard", "c.detail"),
         ("glassLowConfidenceCard", "c.kind"),
+        ("glassPaletteShiftCard", "c.colors"),     # not text at all
     ])
     def test_the_renderer_reads_the_field_that_matters(self, page, fn, field):
         start = page.index("function " + fn + "(")
@@ -157,6 +154,7 @@ class TestTheNewRenderersKeepTheirContent:
         ("LoadingCard", "glassLoadingCard"),
         ("LowConfidenceCard", "glassLowConfidenceCard"),
         ("ErrorCard", "glassErrorCard"),
+        ("PaletteShiftCard", "glassPaletteShiftCard"),
     ])
     def test_the_dispatch_routes_it(self, page, ctype, fn):
         # A renderer nothing dispatches to is a renderer that never runs.

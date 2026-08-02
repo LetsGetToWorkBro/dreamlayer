@@ -33,6 +33,19 @@ class _Brain:
         from dreamlayer.ai_brain.server.server import Brain
         return Brain.push_raw(self, frame)
 
+    def push_event(self, kind, card=None, veil_ok=False):
+        # The REAL funnel, so the Veil and the interruption preferences apply
+        # here exactly as they do in production rather than being stubbed away.
+        from dreamlayer.ai_brain.server.server import Brain
+        self.PROACTIVE_KINDS = Brain.PROACTIVE_KINDS
+        return Brain.push_event(self, kind, card, veil_ok)
+
+    def _may_interrupt(self, kind):
+        return True
+
+    def _attention_allows(self, kind, card):
+        return True
+
 
 class _Baseline:
     prosody_mean = {"pitch_mean": 180.0, "jitter": 0.02, "shimmer": 0.05,
@@ -346,3 +359,103 @@ class TestTheLinkForwardsRawFrames:
             assert br.cards == [], "a raw frame went out as a card"
         finally:
             ln.disconnect()
+
+
+class TestThePaletteReachesBothSurfaces:
+    """The producer that did not exist. `hud/cards.py:palette_shift_card` had no
+    caller anywhere in the tree, so the phone could never receive a
+    PaletteShiftCard — and the phone is the surface that NEEDS one, because the
+    glasses get palette weather natively as a raw frame their animator sweeps
+    and the browser page has no such channel."""
+
+    def _fft(self, loud=True):
+        return [0.8 if loud else 0.02] * 32
+
+    def _reactors(self, brain):
+        return DreamReactors(brain, now_fn=lambda: 1000.0)
+
+    def test_one_beat_paints_the_glass_and_the_phone(self):
+        b = _Brain()
+        q = _sub(b)
+        got = self._reactors(b).note_mic(self._fft(), 0.6, "kitchen")
+        assert got["raw"] == 1, "the glasses got no raw palette frame"
+        assert got["card"] == 1, "the phone got no PaletteShiftCard"
+        kinds = []
+        while not q.empty():
+            ev = q.get_nowait()
+            kinds.append(ev.get("raw", {}).get("t") if ev.get("raw")
+                         else (ev.get("card") or {}).get("type"))
+        assert "palette" in kinds and "PaletteShiftCard" in kinds
+
+    def test_both_carry_the_same_colours(self):
+        # One primitive, one decision. If these ever diverge the phone is
+        # showing a different room than the glasses are.
+        b = _Brain()
+        q = _sub(b)
+        self._reactors(b).note_mic(self._fft(), 0.6, "kitchen")
+        raw = card = None
+        while not q.empty():
+            ev = q.get_nowait()
+            if ev.get("raw"):
+                raw = ev["raw"]
+            elif ev.get("card"):
+                card = ev["card"]
+        assert raw and card
+        assert card["colors"] == raw["colors"]
+
+    def test_the_veil_stops_both(self):
+        b = _Brain(veiled=True)
+        _sub(b)
+        got = self._reactors(b).note_mic(self._fft(), 0.6, "kitchen")
+        assert got == {"raw": 0, "card": 0}
+        assert _drain(b) == [], "a palette crossed the Veil"
+
+    def test_no_reading_paints_nothing_but_a_quiet_room_still_does(self):
+        """`[]` is no microphone; 32 low bands is a quiet room.
+
+        `RecallContext.has_mic()` is True for an empty list, so without an
+        explicit guard the reactor paints the colour of silence for a caller
+        that has no analyser at all — weather invented out of an absent sensor.
+        A genuinely quiet room DOES still get a colour, deliberately: the sky
+        never flatlines.
+        """
+        b = _Brain()
+        _sub(b)
+        assert self._reactors(b).note_mic([], 0.0, "kitchen") == {"raw": 0,
+                                                                 "card": 0}
+        quiet = self._reactors(_Brain())
+        _sub(quiet.brain)
+        assert quiet.note_mic(self._fft(loud=False), 0.01, "kitchen")["raw"] == 1
+
+    def test_it_feeds_the_weather_ledger_too(self):
+        # The same colours are what give Yesterlight a past to walk back into.
+        b = _Brain()
+        _sub(b)
+        r = self._reactors(b)
+        r.note_mic(self._fft(), 0.6, "kitchen")
+        assert r.ledger()._buf, "nothing was recorded for Yesterlight to replay"
+
+    def test_only_a_delivered_beat_counts(self):
+        b = _Brain(veiled=True)
+        _sub(b)
+        r = self._reactors(b)
+        r.note_mic(self._fft(), 0.6, "kitchen")
+        assert r.palette_frames == 0
+
+    def test_the_phone_ships_the_spectrum_not_a_colour(self):
+        """The palette decision must live in `MicReactor`, once.
+
+        A second definition written in JavaScript would drift from the one the
+        glasses run, and the two surfaces would start showing different rooms.
+        """
+        from dreamlayer.ai_brain.server import live
+        assert "dreamBeatToBrain" in live._PAGE
+        assert '"/dreamlayer/dream/pose"' in live._PAGE
+        assert "fft:" in live._PAGE
+
+    def test_the_phone_sends_a_real_pitch(self):
+        # Yesterlight reads pitch in radians. Before this the phone sent none,
+        # so the lens was fed a constant 0 and could never arm.
+        from dreamlayer.ai_brain.server import live
+        assert "dmotion.pitch" in live._PAGE
+        assert "Math.atan2(-ay, -az)" in live._PAGE

@@ -124,11 +124,13 @@ class DreamReactors:
         self._timbre = None
         self._yester = None
         self._ledger = None
+        self._mic = None
         #: Proof counters — what actually reached the glass, per lens. A built
         #: reactor is not a driven one, which is the distinction every promotion
         #: in this tree turns on.
         self.timbre_frames = 0
         self.yesterlight_frames = 0
+        self.palette_frames = 0
 
     # ---------------------------------------------------------------- timbre
 
@@ -167,6 +169,67 @@ class DreamReactors:
         if sent:
             self.timbre_frames += 1
         return sent
+
+    # ------------------------------------------------------------- weather
+
+    def mic(self):
+        if self._mic is None:
+            from ...dream_mode.mic_reactor import MicReactor
+            self._mic = MicReactor(privacy=_Gate(self.brain))
+        return self._mic
+
+    def note_mic(self, fft, amplitude: float = 0.0, place: str = "") -> dict:
+        """One beat of ambient sound becomes the room's colour, on BOTH surfaces.
+
+        `MicReactor` is the real primitive `DreamEngine` uses; the palette logic
+        stays in one place rather than being re-derived in JavaScript for the
+        phone. It refuses on its own when the veil is up — live audio driving a
+        palette frame IS capture.
+
+        The two surfaces take the same colours through different doors, and that
+        asymmetry is in the transports rather than in the content:
+
+          * the GLASSES have a native channel — a raw `palette` frame that
+            `display/palette_animator.lua` animates across the whole disc;
+          * the PHONE has none, so it gets a `PaletteShiftCard`, which is why
+            `hud/cards.py:palette_shift_card` exists at all. Until now nothing
+            called it, so the builder was real and the card was unreachable.
+
+        The same colours are also recorded into the weather ledger, which is
+        what gives Yesterlight a past to walk back into.
+        """
+        bands = list(fft or [])
+        if not bands:
+            # `RecallContext.has_mic()` is True for an EMPTY list, so the
+            # reactor would happily paint the colour of silence here. That is
+            # right for a quiet room and wrong for no room at all: a caller
+            # with no analyser sends `[]`, and turning that into weather is
+            # inventing a reading. Quiet is 32 low bands; nothing is nothing.
+            return {"raw": 0, "card": 0}
+        from ...orchestrator.recall_context import RecallContext
+        ctx = RecallContext(mic_fft=bands,
+                            mic_amplitude=float(amplitude or 0.0))
+        try:
+            cmd = self.mic().tick(ctx)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[dream] mic tick failed: %s", type(exc).__name__)
+            return {"raw": 0, "card": 0}
+        if not cmd:
+            return {"raw": 0, "card": 0}             # veiled, or no mic signal
+        raw = self.brain.push_raw(cmd)
+        colors = list(cmd.get("colors") or [])
+        card = 0
+        if colors:
+            from ...hud.cards import palette_shift_card
+            card = self.brain.push_event(
+                "palette", palette_shift_card(
+                    colors=colors,
+                    duration_ms=int(cmd.get("duration_ms") or 2000),
+                    mood=str(cmd.get("mood") or "neutral")))
+        if raw or card:
+            self.palette_frames += 1
+            self.note_weather(place, cmd, amplitude)
+        return {"raw": raw, "card": card}
 
     # ----------------------------------------------------------- yesterlight
 
@@ -234,6 +297,7 @@ class DreamReactors:
 
     def status(self) -> dict:
         return {"timbre_frames": self.timbre_frames,
+                "palette_frames": self.palette_frames,
                 "yesterlight_frames": self.yesterlight_frames,
                 "yesterlight_active": bool(getattr(self._yester, "active", False))}
 
