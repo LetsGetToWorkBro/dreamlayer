@@ -87,6 +87,24 @@ class TestTheBar:
         assert g.allows("candor", 0.95) is True
         assert g.allows("candor", 0.55) is False
 
+    def test_a_card_exactly_on_the_bar_is_shown(self):
+        """The gate must apply the SAME rule that was tuned, boundary included.
+
+        `_above_confidence` — the rule the grid search scored — is `>=`, so a
+        card at exactly the bar is one the wearer's own labels say to show.
+        Gating with `>` would make the live gate strictly harsher than the rule
+        it was fit from, and the difference is invisible in every test that
+        samples confidences off the grid points.
+        """
+        g = _teach(AttentionGate(), split=0.80)
+        bar = g.bar()
+        assert bar == pytest.approx(0.80)
+        assert g.allows("candor", bar) is True, (
+            "a card sitting exactly on the learned bar was suppressed; the "
+            "gate is stricter than the rule the wearer taught")
+        assert _above_confidence([{"confidence": bar}], bar) == [True], (
+            "the rule and the gate disagree at the boundary")
+
     def test_a_wearer_who_swats_everything_gets_no_bar(self):
         # One label. Confidence does not explain this behaviour, and drawing a
         # threshold anyway would be a coincidence with a number on it.
