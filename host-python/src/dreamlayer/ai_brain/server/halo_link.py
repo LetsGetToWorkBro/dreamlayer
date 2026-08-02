@@ -203,7 +203,22 @@ class HaloLink:
             self.dropped += 1
             return
         try:
-            card = ev.get("card") if isinstance(ev, dict) else None
+            if not isinstance(ev, dict):
+                return
+            # A RAW frame is not a card and does not go through `send_card`.
+            # Dream Mode's reactors (timbre, yesterlight) paint the rim and the
+            # Horizon directly rather than raising a card, so they ride the
+            # bridge's raw channel — which applies its own pause gate
+            # (`bridge/base.pause_allows_raw`) on top of the Veil that already
+            # ran at `push_event`. Both gates are correct and neither is
+            # duplicated here.
+            raw = ev.get("raw")
+            if isinstance(raw, dict) and raw.get("t"):
+                self.bridge.send_raw(raw)
+                self.sent += 1
+                self.last_sent_at = float(self._now())
+                return
+            card = ev.get("card")
             if not isinstance(card, dict):
                 return                                # nothing to draw
             kind = str(ev.get("kind") or "answer_ready")

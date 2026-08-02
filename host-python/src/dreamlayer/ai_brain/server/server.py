@@ -1456,6 +1456,86 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         except Exception:                            # noqa: BLE001
             return {"labelled": 0, "swatted": 0, "bar": 0.0, "fitted": False}
 
+    def lucid_query(self, text: str = "", frame=None) -> dict:
+        """One question, routed to the face or the memory (`lucid_live`)."""
+        try:
+            from .lucid_live import lucid
+            return lucid(self).query(text, frame)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("lucid query failed: %s", type(exc).__name__)
+            return {"ok": False, "answer": "", "kind": "unknown",
+                    "confidence": 0.0}
+
+    def dream_pose(self, pose: dict, colors=None, amplitude: float = 0.0) -> dict:
+        """One Dream Mode beat from the phone: head pose, and the light here.
+
+        Two lenses ride this. The pose drives **Yesterlight** — a held upward
+        look dials the Horizon back through the day. The colours, when the phone
+        sends them, are recorded into the weather ledger so there IS a past to
+        walk back into; a place with nothing recorded correctly refuses to arm
+        rather than inventing an ambience it never saw.
+
+        The place signature comes from the Brain rather than the phone: a client
+        that could name its own place could replay somebody else's.
+        """
+        try:
+            from .dream_reactors import reactors
+            r = reactors(self)
+            place = ""
+            try:
+                place = str(self.private_zone_now() or "") or str(
+                    getattr(self, "_zone_was", "") or "")
+            except Exception:                        # noqa: BLE001
+                place = ""
+            if colors:
+                r.note_weather(place, colors, amplitude)
+            sent = r.note_pose(pose if isinstance(pose, dict) else {}, place)
+            return {"ok": True, "frames": sent, **r.status()}
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("dream pose failed: %s", type(exc).__name__)
+            return {"ok": False, "frames": 0}
+
+    def dream_status(self) -> dict:
+        try:
+            from .dream_reactors import reactors
+            return reactors(self).status()
+        except Exception:                            # noqa: BLE001
+            return {"timbre_frames": 0, "yesterlight_frames": 0,
+                    "yesterlight_active": False}
+
+    def push_raw(self, frame: dict) -> int:
+        """Fan a RAW dream frame out to every connected surface.
+
+        Dream Mode's reactors paint the rim and the Horizon directly rather than
+        raising a card — `{"t": "timbre", …}`, `{"t": "yesterlight", …}` — so
+        they cannot ride `push_event`, whose payload slot is a card the Live
+        Lens renders.
+
+        The Veil is applied here and NOT skippable: every raw frame this method
+        carries derives from live signal (who is speaking, where you are, what
+        the light was), so `veil_ok` has no meaning for it. The bridge applies
+        its own `pause_allows_raw` gate on top, which is the device's rule
+        rather than the wearer's posture — both hold.
+        """
+        if not isinstance(frame, dict) or not frame.get("t"):
+            return 0
+        try:
+            if self.incognito_now():
+                return 0
+        except Exception:                            # noqa: BLE001 — unreadable → drop
+            return 0
+        ev = {"kind": "raw", "safety": False, "raw": dict(frame)}
+        with self._event_lock:
+            subs = list(self._event_subs)
+        sent = 0
+        for q in subs:
+            try:
+                q.put_nowait(ev)
+                sent += 1
+            except Exception:                        # noqa: BLE001 — full, drop
+                continue
+        return sent
+
     def _attention_allows(self, kind: str, card) -> bool:
         """The learned interruption bar (`attention_live`). Fails OPEN, like
         `_may_interrupt` and for the same reason.
@@ -4940,6 +5020,30 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         def _get_halo(self, path, qs):
             self._json(200, brain.halo_status())
 
+        def _post_lucid(self, path, qs):
+            """`{"q": "what did we say about the lease"}` → one answer.
+
+            The router decides for itself whether the question wants the camera
+            or the memory; the caller does not have to know, which is the whole
+            point of the lens.
+            """
+            b = self._body()
+            self._json(200, brain.lucid_query(str(b.get("q", "") or "")))
+
+        def _post_dream_pose(self, path, qs):
+            """A Dream Mode beat: `{"pose": {"pitch": -0.6}, "colors": [...],
+            "amplitude": 0.3}`.
+
+            The phone already samples `devicemotion` for the dream weather; this
+            is the same stream, put to a second use. Deliberately cheap — it
+            carries no captured content, only a head angle and the colours the
+            wearer's own glasses are already showing.
+            """
+            b = self._body()
+            self._json(200, brain.dream_pose(
+                b.get("pose") if isinstance(b.get("pose"), dict) else {},
+                b.get("colors"), float(b.get("amplitude") or 0.0)))
+
         def _post_attention(self, path, qs):
             """What the wearer did with a card: `{"kind", "confidence",
             "dismissed"}`.
@@ -6974,6 +7078,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/truth": _post_truth,
             "/dreamlayer/intro": _post_intro,
             "/dreamlayer/attention": _post_attention,
+            "/dreamlayer/dream/pose": _post_dream_pose,
+            "/dreamlayer/lucid": _post_lucid,
             "/dreamlayer/halo": _post_halo,
             "/dreamlayer/vault/sync": _post_vault_sync,
             "/dreamlayer/ember/tend": _post_ember_tend,

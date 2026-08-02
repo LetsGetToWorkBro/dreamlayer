@@ -174,6 +174,16 @@ class EarHost:
                     veil_ok=False)
         except Exception as exc:                 # noqa: BLE001 — a card must never
             log.warning("[ear] caption push failed: %s", type(exc).__name__)
+        # …and paint that voice's timbre at the rim (Dream Mode's Timbre lens).
+        # Here because this is the one place a speaker LABEL exists: the reactor
+        # needs to know who spoke, and nothing downstream of the caption does.
+        # It reads only the label — never the transcript — and its own cooldown
+        # keeps a talkative room from strobing the rim.
+        try:
+            from .dream_reactors import reactors
+            reactors(self.brain).note_speaker(speaker or "")
+        except Exception as exc:                 # noqa: BLE001 — never break capture
+            log.warning("[ear] timbre push failed: %s", type(exc).__name__)
         # …and CATCH A NAME, when someone introduced themselves. Only a closed
         # grammar of self-introductions ("my name is …", "I'm …") captures
         # anything, so ordinary chatter produces nothing — and hearing a name
