@@ -326,3 +326,93 @@ install — it re-ran the import.
   and filing them there would turn a measurement into a claim — the exact
   failure `HANDOFF.md` warns about two lines after the sentence this entry
   answers.
+
+## Update — 2026-08-02, `persona_tuning` and `typed_models`: both were wired to
+## consumers the product never runs
+
+Two entries moved out of dormancy, and both had the same defect underneath —
+worth recording together because the *shape* is what generalises, not either
+fix.
+
+### `persona_tuning` — a consumer the Brain never builds
+
+Wired in #598 to `MaturityGate.tuned_confidence`. `MaturityGate` is constructed
+at exactly one site, `orchestrator/orchestrator.py`, and `decisions/0001`
+records that the shipped Brain never instantiates an `Orchestrator` — with
+`test_the_orchestrator_is_still_not_resurrected` keeping it that way. So the
+tuner ran in tests and in the simulator and nowhere the wearer could reach.
+
+The verification error is worth naming exactly: I checked that `tune()` had a
+caller and stopped one link short of asking who builds the caller.
+`importable → constructed → called → reachable-from-a-surface` is four links,
+and three of them held.
+
+Fixed the way `decisions/0001` prescribes rather than by repeating its mistake:
+`retention_live.py` did not resurrect the Orchestrator to get `RetentionSweep`
+running, it re-hosted the plain part Brain-side.
+`ai_brain/server/attention_live.py` does the same for the tuning. What was
+genuinely Orchestrator-shaped — the NOVICE/APPRENTICE/RESIDENT ladder, keyed on
+a pairing date the Brain does not track — stayed where it is.
+
+It also closed a real product gap that had nothing to do with the capability:
+`Brain.push_event` had no rate limit, no daily cap and no confidence bar, and
+the wearer's only recourse was switching a whole cue kind off. The label it
+learns from did not exist either — `dismiss_ms` is a client-side expiry timer,
+so nothing ever told the Brain a card had been swatted.
+
+### `typed_models` — the obvious home was the wrong one
+
+`MemoryDB` has accepted a `privacy=` gate that constructs a
+`models_pydantic.MemoryEvent(allowed=...)` before every write since the day it
+was written, and nothing ever passed one. The obvious fix is to pass a gate at
+the Brain's `MemoryDB` sites. **That would have gated nothing**, and the reason
+is the useful part of this entry:
+
+> The shipped Brain calls no `db.add_*` method at all.
+
+Every `add_memory` caller in the tree is Orchestrator-only, the simulator, or
+`ember/ceremony.burn`'s tombstone. The Brain's `MemoryDB` uses are all read
+paths — the retriever, the retention sweep, the ring seed. Wiring the gate
+there would have promoted the capability green while enforcing an invariant on
+a path that never executes: a measurement turned into a claim, which is what
+the Consequences section above warns against.
+
+Blocking the one remaining caller would have been worse than useless. By the
+time `ceremony.burn` writes its tombstone the engram is already blanked and the
+source already purged; the tombstone is the wearer's *deletion receipt*, which
+is precisely why that code swallows its own failures rather than leaving a
+half-burn. A veiled refusal there destroys a record of an erasure.
+
+Where the Brain actually keeps things is the **ring**. `lens_hosts.observe` and
+`world_lens._remember_sighting` append to a `SemanticRingBuffer`, each site
+checking `allow_capture()` first — the latter re-checking for the TOCTOU case —
+and the ring itself checking nothing. That is exactly the shape
+`person_guard`/`voice_guard` had before they were centralised, and exactly what
+a type invariant is for. The ring now takes the same `privacy=` opt-in.
+
+One thing that had to be got right and would have been invisible in testing:
+**seeding is recall, not capture.** `_seed` re-hydrates the ring from rows
+already on disk, and gating it on `allow_capture` would leave the ring empty for
+a whole veiled session, so every ring lens would answer "nothing to report"
+about a timeline that exists — a silence indistinguishable from an absence. It
+goes through a new `restore()`. This only misbehaves on a device that happens to
+be veiled at boot, which no unit test naturally reaches, so it is pinned by
+reading the source of `_seed` rather than its behaviour.
+
+### What would overturn these
+
+For `persona_tuning`: `grep -rn "attention_live" ai_brain/server/server.py`
+returning nothing, or `AttentionGate.tuning_live()` never returning True on a
+Brain with a labelled history.
+
+For `typed_models`: `SemanticRingBuffer.veil_checks` staying 0 on a live Brain
+after a lens `observe()` — which would mean the tripwire is armed and nothing
+crosses it, the same "dormant with extra steps" the bucket above describes.
+
+### The lesson, stated once
+
+Both entries were dormant for a reason no dependency could fix, and in both
+cases the seam named in the catalogue was real, complete and tested. **Ask who
+constructs the consumer, not whether the consumer exists** — and when the
+obvious integration point turns out to be inert, that is a finding to write
+down, not an obstacle to route around by wiring it anyway.
