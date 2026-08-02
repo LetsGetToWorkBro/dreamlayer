@@ -101,12 +101,30 @@ class TestTheBar:
             g.observe("candor", 0.5 + (i % 5) / 10.0, dismissed=False)
         assert g.bar() == 0.0
 
-    def test_the_bar_is_capped(self):
-        # A wearer who swats all but the very surest must not be able to argue
-        # the system into silence; the honest control at that point is the cue
-        # switch they already have.
+    def test_the_bar_is_capped(self, monkeypatch):
+        """A wearer who swats all but the very surest must not be able to argue
+        the system into silence; the honest control at that point is the cue
+        switch they already have.
+
+        The grid's top value equals `BAR_CEILING` today, so the clamp cannot
+        bind on the shipped constants — asserting `bar() <= BAR_CEILING`
+        against them passes with the clamp DELETED, a guard that cannot fire
+        pinned by a test that cannot fail. Widening the grid is what makes the
+        assertion mean something, and it is the exact edit that would otherwise
+        introduce the bug silently.
+        """
+        import dreamlayer.ai_brain.server.attention_live as A
+        monkeypatch.setattr(A, "CONFIDENCE_GRID", (0.80, 0.90, 0.97, 0.99))
         g = _teach(AttentionGate(), split=0.99, lo=0.90, hi=1.0)
-        assert g.bar() <= BAR_CEILING
+        assert g.bar() == BAR_CEILING, (
+            "the wearer's swats justified a bar above the ceiling and it was "
+            "not clamped — at 0.99 almost nothing would ever reach the glass")
+
+    def test_the_cap_does_not_bind_on_the_shipped_grid(self):
+        # The other half: with the real constants the clamp is inert, so it can
+        # never quietly lower a bar the wearer's own behaviour supports.
+        from dreamlayer.ai_brain.server.attention_live import CONFIDENCE_GRID
+        assert max(CONFIDENCE_GRID) <= BAR_CEILING
 
     def test_the_fit_is_cached_until_a_new_label(self):
         g = _teach(AttentionGate())
@@ -190,73 +208,92 @@ class TestItSurvivesARestart:
 
 
 class TestTheFunnelConsultsIt:
-    """`Brain.push_event` is the single site every card passes through
-    (`server.py`). If the gate is not consulted THERE it is not consulted."""
+    """`Brain.push_event` is the single site every card passes through. If the
+    gate is not consulted THERE it is not consulted.
 
-    def _brain(self, tmp_path):
+    Every test here uses a REAL subscriber queue and asserts the count in both
+    directions. The first version asserted `== 0` against an EMPTY
+    `_event_subs`, which is 0 whether the gate ran or not — so disabling the
+    gate outright left all of them green (mutation M1). A dropped card and a
+    card with nobody listening are the same number; only a passing case tells
+    them apart.
+    """
+
+    def _brain(self, tmp_path, monkeypatch, subs=1):
+        import queue
+        import threading
+
         from dreamlayer.ai_brain.server.server import Brain
         b = Brain.__new__(Brain)
         b.PROACTIVE_KINDS = Brain.PROACTIVE_KINDS
         b._attention = AttentionGate(tmp_path / "attention.json")
+        monkeypatch.setattr(Brain, "incognito_now", lambda s: False)
+        monkeypatch.setattr(Brain, "_may_interrupt", lambda s, k: True)
+        b._event_lock = threading.Lock()
+        b._event_subs = [queue.Queue(maxsize=8) for _ in range(subs)]
         return b
 
     def test_a_below_bar_proactive_card_is_dropped(self, tmp_path, monkeypatch):
         from dreamlayer.ai_brain.server.server import Brain
-        b = self._brain(tmp_path)
+        b = self._brain(tmp_path, monkeypatch)
         _teach(b._attention, split=0.80)
-        monkeypatch.setattr(Brain, "incognito_now", lambda s: False)
-        monkeypatch.setattr(Brain, "_may_interrupt", lambda s, k: True)
-        import threading
-        b._event_lock, b._event_subs = threading.Lock(), []
+        assert b._attention.bar() == pytest.approx(0.80)
         assert Brain.push_event(b, "candor", {"confidence": 0.55}) == 0
+        assert b._event_subs[0].empty(), "the card reached the queue anyway"
 
     def test_an_above_bar_card_reaches_the_fan_out(self, tmp_path, monkeypatch):
+        # The non-vacuity half: this returns 1 only because a live subscriber
+        # is listening, so the 0 above is a DROP and not an empty room.
         from dreamlayer.ai_brain.server.server import Brain
-        import queue
-        import threading
-        b = self._brain(tmp_path)
+        b = self._brain(tmp_path, monkeypatch)
         _teach(b._attention, split=0.80)
-        monkeypatch.setattr(Brain, "incognito_now", lambda s: False)
-        monkeypatch.setattr(Brain, "_may_interrupt", lambda s, k: True)
-        q: queue.Queue = queue.Queue(maxsize=4)
-        b._event_lock, b._event_subs = threading.Lock(), [q]
         assert Brain.push_event(b, "candor", {"confidence": 0.95}) == 1
+        assert b._event_subs[0].get_nowait()["kind"] == "candor"
+
+    def test_with_no_history_the_same_card_gets_through(self, tmp_path,
+                                                        monkeypatch):
+        # The floor, stated at the funnel: an untaught gate changes nothing.
+        from dreamlayer.ai_brain.server.server import Brain
+        b = self._brain(tmp_path, monkeypatch)
+        assert Brain.push_event(b, "candor", {"confidence": 0.05}) == 1
 
     def test_a_non_proactive_card_is_never_gated(self, tmp_path, monkeypatch):
         # A direct answer the wearer asked for is not an interruption, and a
         # bar learned from unsolicited cards has no business suppressing it.
         from dreamlayer.ai_brain.server.server import Brain
-        import queue
-        import threading
-        b = self._brain(tmp_path)
+        b = self._brain(tmp_path, monkeypatch)
         _teach(b._attention, split=0.80)
-        monkeypatch.setattr(Brain, "incognito_now", lambda s: False)
-        monkeypatch.setattr(Brain, "_may_interrupt", lambda s, k: True)
-        q: queue.Queue = queue.Queue(maxsize=4)
-        b._event_lock, b._event_subs = threading.Lock(), [q]
         assert "saved_memory" not in Brain.PROACTIVE_KINDS
         assert Brain.push_event(b, "saved_memory", {"confidence": 0.01}) == 1
+
+    def test_a_card_with_no_confidence_is_never_gated_at_the_funnel(
+            self, tmp_path, monkeypatch):
+        from dreamlayer.ai_brain.server.server import Brain
+        b = self._brain(tmp_path, monkeypatch)
+        _teach(b._attention, split=0.80)
+        assert Brain.push_event(b, "candor", {"primary": "no confidence"}) == 1
 
     def test_a_safety_push_skips_the_bar(self, tmp_path, monkeypatch):
         # `veil_ok` already skips the Veil and the preferences; the softest of
         # the three gates must not be the one that stops a smoke alarm.
         from dreamlayer.ai_brain.server.server import Brain
-        import queue
-        import threading
-        b = self._brain(tmp_path)
+        b = self._brain(tmp_path, monkeypatch)
         _teach(b._attention, split=0.80)
-        q: queue.Queue = queue.Queue(maxsize=4)
-        b._event_lock, b._event_subs = threading.Lock(), [q]
         assert Brain.push_event(b, "hark", {"confidence": 0.01},
                                 veil_ok=True) == 1
 
     def test_the_veil_still_wins(self, tmp_path, monkeypatch):
         from dreamlayer.ai_brain.server.server import Brain
-        import threading
-        b = self._brain(tmp_path)
+        b = self._brain(tmp_path, monkeypatch)
         monkeypatch.setattr(Brain, "incognito_now", lambda s: True)
-        b._event_lock, b._event_subs = threading.Lock(), []
         assert Brain.push_event(b, "candor", {"confidence": 1.0}) == 0
+
+    def test_it_reaches_every_subscriber_it_allows(self, tmp_path, monkeypatch):
+        from dreamlayer.ai_brain.server.server import Brain
+        b = self._brain(tmp_path, monkeypatch, subs=3)
+        _teach(b._attention, split=0.80)
+        assert Brain.push_event(b, "candor", {"confidence": 0.99}) == 3
+        assert Brain.push_event(b, "candor", {"confidence": 0.10}) == 0
 
 
 class TestThePromotionIsEarned:
