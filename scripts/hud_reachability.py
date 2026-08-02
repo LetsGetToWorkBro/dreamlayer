@@ -224,17 +224,22 @@ def _inline_card_types(reachable: set) -> dict[str, set]:
 
 
 # Card types the Brain demonstrably pushes but `_pushed_types` cannot NAME,
-# because the push site's card expression defeats a one-hop AST resolver. Both
-# entries are verified by reading the call site, and both are listed here rather
-# than left silent so the resolver's blind spot is data instead of a gap:
+# because the push site's card expression defeats a one-hop AST resolver. Every
+# entry is verified by reading the call site, and every one is listed here
+# rather than left silent so the resolver's blind spot is data instead of a
+# gap. An entry whose site the resolver learns to name must COME OUT — a stale
+# entry would misdescribe the blind spot:
 #
-#   * ConsistencyCard  — lens_hosts.py:492 `self._push("candor", r.card)`. The
-#     card is an ATTRIBUTE of the engine's result dataclass; naming it would
-#     need real type inference, not a name lookup.
-#   * QuestRewardCard  — lens_hosts.py:601 `card = reward.to_hud_card()`. The
-#     method name is defined nine times across the tree with a different card
-#     type each, so `_fn_card_types` deliberately refuses to resolve it.
-#   * IntroOfferCard   — intro_live.py `card = cap.heard(text)` then
+#   * ConsistencyCard  — lens_hosts.py:507 `self._push("candor", r.card)`. The
+#     card is an ATTRIBUTE of the engine's result dataclass, and `candor.check`
+#     is defined in another module (orchestrator/consistency.py); naming it
+#     would need real type inference, not a name lookup.
+#   * QuestRewardCard  — lens_hosts.py:616 `card = reward.to_hud_card()`. The
+#     receiver is `self.saga.complete(...)` — a producing call defined in
+#     another module (orchestrator/quest.py), past the resolver's same-file
+#     stopping point, so the class-qualified `to_hud_card` map deliberately
+#     does not reach it.
+#   * IntroOfferCard   — intro_live.py:139 `card = cap.heard(text)` then
 #     `self._push(card)`. `IntroductionCapture.heard` returns EITHER the offer
 #     card or (under `intro_auto_keep`) the kept one, so the resolver's refusal
 #     is correct rather than a shortfall: the type genuinely is not decided at
@@ -242,6 +247,30 @@ def _inline_card_types(reachable: set) -> dict[str, set]:
 #     where the card is a dict literal.
 _BRAIN_ONLY_PUSHED = frozenset({"ConsistencyCard", "QuestRewardCard",
                                 "IntroOfferCard"})
+
+
+def _fn_card_types_found(fn, builder_types: dict) -> set:
+    """The card types ONE function builds, by the two shapes that occur in the
+    tree: a literal ``"type": "XCard"`` dict in its body, or a returned
+    `hud.cards` builder call. A set, because a function may do both — and the
+    maps built from this void any name that does.
+    """
+    found: set[str] = set()
+    for node in ast.walk(fn):
+        ctype = ""
+        if isinstance(node, ast.Dict):
+            for k, v in zip(node.keys, node.values):
+                if (isinstance(k, ast.Constant) and k.value == "type"
+                        and isinstance(v, ast.Constant)
+                        and str(v.value).endswith("Card")):
+                    ctype = v.value
+        elif isinstance(node, ast.Return) and isinstance(node.value, ast.Call):
+            nm = (getattr(node.value.func, "id", None)
+                  or getattr(node.value.func, "attr", None))
+            ctype = builder_types.get(nm or "", "")
+        if ctype:
+            found.add(ctype)
+    return found
 
 
 def _fn_card_types(reachable: set) -> dict[str, str]:
@@ -278,23 +307,64 @@ def _fn_card_types(reachable: set) -> dict[str, str]:
         for fn in ast.walk(tree):
             if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            for node in ast.walk(fn):
-                found = ""
-                if isinstance(node, ast.Dict):
-                    for k, v in zip(node.keys, node.values):
-                        if (isinstance(k, ast.Constant) and k.value == "type"
-                                and isinstance(v, ast.Constant)
-                                and str(v.value).endswith("Card")):
-                            found = v.value
-                elif isinstance(node, ast.Return) and isinstance(node.value, ast.Call):
-                    nm = (getattr(node.value.func, "id", None)
-                          or getattr(node.value.func, "attr", None))
-                    found = builder_types.get(nm or "", "")
-                if found:
-                    seen.setdefault(fn.name, set()).add(found)
+            found = _fn_card_types_found(fn, builder_types)
+            if found:
+                seen.setdefault(fn.name, set()).update(found)
     for name, kinds in seen.items():
         out[name] = kinds.pop() if len(kinds) == 1 else ""
     return out
+
+
+def _class_card_types(reachable: set) -> dict[str, str]:
+    """defining class → the card type its `to_hud_card` method builds.
+
+    `_fn_card_types` keys by bare name, so it must void `to_hud_card` — it is
+    defined nine times across the tree, returning a different card type each
+    time, and the wrong pick once reported QuestRewardCard as never-pushed and
+    WaypathCard as pushed. But the codebase uses `x.to_hud_card()` as a
+    CONVENTION for "the receiver names its own card", and keying by the
+    DEFINING CLASS keeps that convention resolvable where the receiver's
+    class is locally exact — the only place `_pushed_types` will look one up.
+
+    Same void-on-doubt rule as the bare-name map: a class whose method names
+    more than one card type, or two reachable classes sharing a name, maps to
+    ``""`` and its push sites count as unresolved. An honest unknown is the
+    only safe answer here; guessing produces confident nonsense in both
+    directions.
+    """
+    lens = _lens_module()
+    builder_types = _card_types()
+    seen: dict[str, set] = {}
+    for path in lens._sources():
+        if lens._module_name(path) not in reachable:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            for fn in node.body:
+                if (isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        and fn.name == "to_hud_card"):
+                    found = _fn_card_types_found(fn, builder_types)
+                    if found:
+                        seen.setdefault(node.name, set()).update(found)
+    return {name: (kinds.pop() if len(kinds) == 1 else "")
+            for name, kinds in seen.items()}
+
+
+def _own_nodes(fn):
+    """Every node belonging to THIS function, stopping at a nested `def`."""
+    stack = list(ast.iter_child_nodes(fn))
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.Lambda, ast.ClassDef)):
+            continue                      # its returns are its own
+        yield node
+        stack.extend(ast.iter_child_nodes(node))
 
 
 def _pushed_types(reachable: set) -> dict[str, set]:
@@ -308,9 +378,25 @@ def _pushed_types(reachable: set) -> dict[str, set]:
     it meant "pushed" would have manufactured seven defects that do not exist.
 
     Resolution is deliberately one hop: a direct builder call, a dict literal
-    naming its own `"type"`, or a local name assigned from either one earlier in
-    the same function. All three shapes occur; anything deeper is reported as
-    unresolved rather than guessed at.
+    naming its own `"type"`, or a local name assigned from either one earlier
+    in the same function — plus three further LOCAL shapes that are still
+    reading, not inference:
+
+      * a constant-keyed SUBSCRIPT assigned earlier in the same function
+        (`out["card"] = cards.deviation_alert(...)` … `_push(k, out["card"])`),
+        recorded by the same `assigns` pass that records bare names;
+      * an `IfExp`, whose branches are resolved independently — every branch
+        that names a type is a truthful observation (this map is existential:
+        it records which modules CAN push a type) — and the site stays
+        unresolved iff at least one branch cannot be named;
+      * `x.to_hud_card()` where x's class is LOCALLY EXACT: x assigned in the
+        same function from a constructor call, or from a producing function
+        defined in the SAME FILE whose return is a constructor call. The bare
+        name stays void; the receiver resolves through the class-qualified
+        `_class_card_types` map. A cross-module receiver is real type
+        inference, not a name lookup, and stays unresolved.
+
+    Anything deeper is reported as unresolved rather than guessed at.
 
     WHICH ARGUMENT holds the card is read from the pusher's own signature, not
     assumed. The dominant shape is `push_event(kind, card)`, so a first version
@@ -326,6 +412,7 @@ def _pushed_types(reachable: set) -> dict[str, set]:
     """
     lens = _lens_module()
     fn_types = _fn_card_types(reachable)
+    class_types = _class_card_types(reachable)
     out: dict[str, set] = {}
     unresolved: list[str] = []
     for path in lens._sources():
@@ -347,23 +434,86 @@ def _pushed_types(reachable: set) -> dict[str, set]:
                     and node.name in ("_push", "push_event")):
                 params = [a.arg for a in node.args.args if a.arg != "self"]
                 local_pusher_arity[node.name] = len(params)
+        # Functions defined in THIS FILE whose return is a constructor call of
+        # a class with an exact `to_hud_card`. `reward = _make_reward()` then
+        # pins the receiver's class without ever leaving the file — the
+        # issue's same-file stopping point, applied to the receiver. A
+        # function returning more than one class voids, as always.
+        fn_returns_class: dict[str, str] = {}
+        returns_seen: dict[str, set] = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            classes = {r.value.func.id for r in _own_nodes(node)
+                       if isinstance(r, ast.Return)
+                       and isinstance(r.value, ast.Call)
+                       and isinstance(r.value.func, ast.Name)
+                       and r.value.func.id in class_types}
+            if classes:
+                returns_seen.setdefault(node.name, set()).update(classes)
+        fn_returns_class = {n: cs.pop() for n, cs in returns_seen.items()
+                            if len(cs) == 1}
         for fn in ast.walk(tree):
             if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             assigns: dict[str, ast.AST] = {}
+            sub_assigns: dict[tuple[str, str], ast.AST] = {}
+            local_classes: dict[str, str] = {}
             for node in ast.walk(fn):
                 if isinstance(node, ast.Assign) and len(node.targets) == 1:
                     tgt = node.targets[0]
                     if isinstance(tgt, ast.Name):
                         assigns.setdefault(tgt.id, node.value)
+                        if (isinstance(node.value, ast.Call)
+                                and isinstance(node.value.func, ast.Name)):
+                            cls = (node.value.func.id
+                                   if node.value.func.id in class_types
+                                   else fn_returns_class.get(
+                                       node.value.func.id, ""))
+                            if cls:
+                                local_classes.setdefault(tgt.id, cls)
+                    elif (isinstance(tgt, ast.Subscript)
+                            and isinstance(tgt.value, ast.Name)
+                            and isinstance(tgt.slice, ast.Constant)
+                            and isinstance(tgt.slice.value, str)):
+                        # out["card"] = cards.deviation_alert(...) — the same
+                        # one-hop assignment, through a constant string key.
+                        sub_assigns.setdefault((tgt.value.id, tgt.slice.value),
+                                               node.value)
 
             def _resolve(expr, depth=0):
+                """(the types EXPR can name, True iff NOTHING was left unnamed).
+
+                A SET because an `IfExp` can be either of its branches; the
+                completeness flag because naming one branch must not silence
+                the other.
+                """
                 if depth > 1 or expr is None:
-                    return ""
+                    return set(), False
+                if isinstance(expr, ast.IfExp):
+                    types, complete = set(), True
+                    for branch in (expr.body, expr.orelse):
+                        btypes, bcomplete = _resolve(branch, depth)
+                        types |= btypes
+                        complete = complete and bcomplete
+                    return types, complete
                 if isinstance(expr, ast.Call):
+                    # `reward.to_hud_card()` — the convention the bare-name
+                    # map must void (nine definitions, nine card types), so it
+                    # resolves through the RECEIVER's class, and only when that
+                    # class was established locally and exactly. Anything else
+                    # falls through to the bare name, which stays void.
+                    if (isinstance(expr.func, ast.Attribute)
+                            and expr.func.attr == "to_hud_card"
+                            and isinstance(expr.func.value, ast.Name)):
+                        cls = local_classes.get(expr.func.value.id, "")
+                        if cls:
+                            ctype = class_types.get(cls, "")
+                            return ({ctype} if ctype else set()), bool(ctype)
                     nm = (getattr(expr.func, "id", None)
                           or getattr(expr.func, "attr", None))
-                    return fn_types.get(nm or "", "")
+                    ctype = fn_types.get(nm or "", "")
+                    return ({ctype} if ctype else set()), bool(ctype)
                 if isinstance(expr, ast.Dict):
                     # A card built inline at the push site names its own type;
                     # reading the literal is not inference, it is reading.
@@ -372,11 +522,21 @@ def _pushed_types(reachable: set) -> dict[str, set]:
                                 and isinstance(v, ast.Constant)
                                 and isinstance(v.value, str)
                                 and v.value.endswith("Card")):
-                            return v.value
-                    return ""
+                            return {v.value}, True
+                    return set(), False
                 if isinstance(expr, ast.Name):
                     return _resolve(assigns.get(expr.id), depth + 1)
-                return ""
+                if isinstance(expr, ast.Subscript):
+                    # out["card"] at the push site finds the constant-keyed
+                    # assignment recorded above — same hop as a bare name.
+                    if (isinstance(expr.value, ast.Name)
+                            and isinstance(expr.slice, ast.Constant)
+                            and isinstance(expr.slice.value, str)):
+                        return _resolve(
+                            sub_assigns.get((expr.value.id, expr.slice.value)),
+                            depth + 1)
+                    return set(), False
+                return set(), False
 
             if fn.name in ("_push", "push_event"):
                 continue          # the fan-out inside the pusher, not a push site
@@ -397,10 +557,10 @@ def _pushed_types(reachable: set) -> dict[str, set]:
                 if arg is None:
                     continue      # no card slot at all — a same-named method on
                                   # something else (brain_rc's deployer), not ours
-                ctype = _resolve(arg)
-                if ctype:
+                ctypes, complete = _resolve(arg)
+                for ctype in ctypes:
                     out.setdefault(ctype, set()).add(mod)
-                else:
+                if not complete:
                     unresolved.append(f"{mod.replace(PKG + '.', '')}:{node.lineno}")
     return out, unresolved
 
