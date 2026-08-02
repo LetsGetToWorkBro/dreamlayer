@@ -23,8 +23,18 @@ the arc.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections import deque
+
+log = logging.getLogger("dreamlayer.maturity")
+
+
+def _above_confidence(rows, min_confidence: float = 0.85):
+    """The gate's own rule, in the shape a tuner can score: admit a card whose
+    confidence clears the bar. Module-level because `FunctionClassifier`
+    requires a picklable callable — no lambdas."""
+    return [float(r.get("confidence", 0.0)) >= min_confidence for r in rows]
 
 OBSERVER = "observer"
 APPRENTICE = "apprentice"
@@ -47,6 +57,24 @@ REGRESS_WINDOW = 20
 REGRESS_DISMISS = 0.60
 REGRESS_HOLD_S = 24 * 3600.0
 
+# --- the learned half of APPRENTICE_MIN_CONFIDENCE --------------------------
+#
+# 0.85 is a hand-picked guess, and it is the same guess for everyone. The
+# wearer meanwhile labels this exact question all day: a proactive card arrives
+# carrying a confidence, and they keep it or swat it. `tuned_confidence()`
+# fits the SAME readable rule — "interrupt above X" — to that history
+# (orchestrator/persona_humanlearn.tune, the `persona_tuning` capability).
+#
+# It can only ever RAISE the bar. A learned threshold below the hand-picked
+# floor would let the system talk its way into interrupting more using the
+# wearer's own annoyance as the argument, and a trust mechanism that can
+# loosen itself from its own output is not a trust mechanism. Tightening is
+# safe in a way loosening is not, so only tightening is possible.
+CONFIDENCE_GRID = (0.85, 0.88, 0.90, 0.92, 0.95, 0.97)
+#: Labelled cards before the fit is consulted at all. Above
+#: `persona_humanlearn.MIN_EXAMPLES` on purpose: this one gates INTERRUPTIONS.
+TUNE_MIN_CARDS = 20
+
 _SETTINGS_KEY = "maturity"
 
 
@@ -61,6 +89,12 @@ class MaturityGate:
         self.paired_at = self._now()
         self.events_seen = 0
         self._cards: deque[bool] = deque(maxlen=APPRENTICE_WINDOW)   # True = dismissed
+        # (features, dismissed) for the cards whose confidence we were told.
+        # Parallel to `_cards` rather than replacing it: every existing gate
+        # reads that deque, and a saved profile written before this existed
+        # must keep working untouched.
+        self._labelled: deque = deque(maxlen=APPRENTICE_WINDOW)
+        self._tuned_confidence: float = 0.0
         self.regressed_until = 0.0
         self._resident = False        # RESIDENT is sticky once earned
         self._sent_today = 0
@@ -75,11 +109,25 @@ class MaturityGate:
         if self.events_seen % 25 == 0:
             self._save()
 
-    def observe_card(self, dismissed: bool, now: float | None = None) -> None:
+    def observe_card(self, dismissed: bool, now: float | None = None,
+                     confidence: float | None = None, kind: str = "") -> None:
         """A proactive card was resolved (telemetry CARD_DISMISSED method
-        'tap'/'expire' → dismissed=True when the wearer swatted it)."""
+        'tap'/'expire' → dismissed=True when the wearer swatted it).
+
+        `confidence`/`kind` are optional and additive: a caller that does not
+        supply them behaves exactly as before, and the labelled log simply
+        stays empty, which `tuned_confidence()` reports as "not enough".
+        """
         now = self._now() if now is None else now
         self._cards.append(bool(dismissed))
+        if confidence is not None:
+            try:
+                self._labelled.append(
+                    ({"confidence": max(0.0, min(1.0, float(confidence))),
+                      "kind": str(kind or "")}, bool(dismissed)))
+                self._tuned_confidence = 0.0      # the fit is stale now
+            except (TypeError, ValueError):
+                pass                             # a bad number is not a label
         recent = list(self._cards)[-REGRESS_WINDOW:]
         if len(recent) >= REGRESS_WINDOW and \
                 sum(recent) / len(recent) > REGRESS_DISMISS:
@@ -126,12 +174,48 @@ class MaturityGate:
         if st == APPRENTICE:
             if kind and kind not in APPRENTICE_KINDS:
                 return False
-            if confidence < APPRENTICE_MIN_CONFIDENCE:
+            if confidence < (self.tuned_confidence()
+                             or APPRENTICE_MIN_CONFIDENCE):
                 return False
             if self._sent_count(now) >= APPRENTICE_DAILY_CAP:
                 return False
             self._mark_sent(now)
         return True
+
+    def tuned_confidence(self) -> float:
+        """The confidence bar this wearer's own dismissals argue for, or 0.0.
+
+        Fitted to the SAME rule the gate applies — "interrupt above X" — so the
+        answer stays something you can say out loud. Clamped to
+        APPRENTICE_MIN_CONFIDENCE from below: see CONFIDENCE_GRID for why only
+        tightening is on offer.
+
+        Cached until the next labelled card, because a grid search per card is
+        work the interrupt path should not pay for.
+        """
+        if self._tuned_confidence:
+            return self._tuned_confidence
+        if len(self._labelled) < TUNE_MIN_CARDS:
+            return 0.0
+        try:
+            from .persona_humanlearn import tune
+            rows = [f for f, _d in self._labelled]
+            # KEPT is the positive class: the bar should admit what the wearer
+            # welcomed. Labelling by dismissal would fit the rule to what they
+            # swatted and then admit exactly that.
+            labels = [not d for _f, d in self._labelled]
+            best = tune(_above_confidence, rows, labels,
+                        {"min_confidence": list(CONFIDENCE_GRID)})
+        except Exception as exc:                     # noqa: BLE001
+            log.debug("[maturity] confidence tuning failed: %s",
+                      type(exc).__name__)
+            return 0.0
+        if not best:
+            return 0.0
+        self._tuned_confidence = max(APPRENTICE_MIN_CONFIDENCE,
+                                     float(best.params.get("min_confidence",
+                                                           0.0)))
+        return self._tuned_confidence
 
     def allows_hark(self, now: float | None = None) -> bool:
         """Audible interruptions are RESIDENT-only — the last privilege
@@ -145,6 +229,9 @@ class MaturityGate:
             "recalibrating": self.recalibrating(now),
             "events_seen": self.events_seen,
             "dismiss_rate": round(self._dismiss_rate(), 3),
+            "confidence_bar": round(self.tuned_confidence()
+                                    or APPRENTICE_MIN_CONFIDENCE, 3),
+            "labelled_cards": len(self._labelled),
             "age_hours": round((now - self.paired_at) / 3600.0, 1),
         }
 
@@ -185,6 +272,17 @@ class MaturityGate:
             self._sent_day = int(d.get("sent_day", self._sent_day))
             for dismissed in d.get("cards", []):
                 self._cards.append(bool(dismissed))
+            # A profile written before the labelled log existed simply has no
+            # "labelled" key, and the fit stays unavailable until the wearer
+            # resolves TUNE_MIN_CARDS more — which is the honest state, not a
+            # regression.
+            for row in d.get("labelled", []):
+                try:
+                    self._labelled.append(({
+                        "confidence": float(row["confidence"]),
+                        "kind": str(row.get("kind", ""))}, bool(row["d"])))
+                except (TypeError, ValueError, KeyError):
+                    continue      # one bad row must not drop the rest
         except Exception:
             pass                  # a corrupt blob never blocks boot
 
@@ -200,6 +298,9 @@ class MaturityGate:
                 "sent_today": self._sent_today,
                 "sent_day": self._sent_day,
                 "cards": [bool(x) for x in self._cards],
+                "labelled": [{"confidence": f["confidence"],
+                              "kind": f.get("kind", ""), "d": bool(dis)}
+                             for f, dis in self._labelled],
             }))
         except Exception:
             pass
@@ -212,7 +313,11 @@ class ResidentGate:
 
     def observe_event(self, n: int = 1) -> None: ...
 
-    def observe_card(self, dismissed: bool, now=None) -> None: ...
+    def observe_card(self, dismissed: bool, now=None,
+                     confidence=None, kind: str = "") -> None: ...
+
+    def tuned_confidence(self) -> float:
+        return 0.0
 
     def state(self, now=None) -> str:
         return RESIDENT

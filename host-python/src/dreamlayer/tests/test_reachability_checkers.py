@@ -1363,15 +1363,24 @@ class TestPiiRedactionIsNotCriedWolfOn:
         bill of health. If one of these gets wired (that is the hope — see the
         tracking issues), the fix is to wire it and update this assertion, the
         same retirement `test_the_gap_is_closed_and_the_scan_could_still_see_one`
-        spells out."""
+        spells out.
+
+        `("persona_tuning", "hulearn")` was RETIRED from this list on
+        2026-08-02, which is the retirement working: `persona_humanlearn.tune`
+        now calls `FunctionClassifier` for real, so the probe became a caller.
+        Retire the others the same way when their turn comes — do not relax the
+        assertion to keep them.
+        """
         probe = {(k, m) for k, m, _s, _w in dep_buckets["probe"]}
         for entry in (("structured_output", "outlines"),
                       ("structured_output", "instructor"),
-                      ("typed_pipeline", "pydantic_ai"),
-                      ("persona_tuning", "hulearn")):
+                      ("typed_pipeline", "pydantic_ai")):
             assert entry in probe, (
                 f"{entry} is no longer probe-only — either it got wired "
                 "(update this test) or the checker stopped reading seams")
+        assert ("persona_tuning", "hulearn") not in probe, (
+            "hulearn is probe-only again — persona_humanlearn stopped calling "
+            "FunctionClassifier, so the capability is a claim once more")
 
 
 class TestTheDependencyCheckerSeesTheWholeCatalogue:

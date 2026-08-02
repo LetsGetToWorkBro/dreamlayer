@@ -152,12 +152,69 @@ class RCOps(BrainHost):
     #: behaviour outside the 15, and `budgets.verify()` still gates deployment.
     _COMPOSE_RESTATE = (
         "Rewrite the request below as ONE short command naming exactly one of "
-        "these behaviours: round timer, interval timer, stopwatch, counter, "
-        "points marker, battery warning, teleprompter, coaching cue, next "
-        "class, subtitles, habit reminder, react timer, gesture repeater, "
-        "speaker indicator. Keep any duration or count the request mentions. "
-        "Answer with the command only — no explanation, no quotes.\n\n"
-        "Request: ")
+        "these behaviours: round timer, interval timer, overtime timer, "
+        "stopwatch, counter, points marker, battery warning, teleprompter, "
+        "coaching cue, next class, subtitles, habit reminder, react timer, "
+        "gesture repeater, speaker indicator. Keep any duration or count the "
+        "request mentions. Answer with the command only — no explanation, no "
+        "quotes.\n\nRequest: ")
+
+    #: The fifteen phrasings `IntentParser` reads, as an enum the MODEL SERVER
+    #: constrains its own sampler to. This is what `structured_output` was for
+    #: and could not deliver: `outlines` constrains a sampler in this process
+    #: and the model here is an HTTP call; `instructor` patches an OpenAI client
+    #: object that does not exist on this path; and either would have put the
+    #: model's structured answer where `intent_parser_llm`'s design explicitly
+    #: forbids it — CHOOSING the behaviour rather than suggesting a phrasing.
+    #: Constraining the restatement leaves the deterministic matcher deciding,
+    #: which is the whole safety story, and needs no dependency at all.
+    _RESTATE_SCHEMA = {
+        "type": "object",
+        "properties": {
+            "behaviour": {"type": "string", "enum": [
+                "round timer", "interval timer", "overtime timer", "stopwatch",
+                "counter", "points marker", "battery warning", "teleprompter",
+                "coaching cue", "next class", "subtitles", "habit reminder",
+                "react timer", "gesture repeater", "speaker indicator"]},
+            "amount": {"type": ["integer", "null"]},
+            "unit": {"type": ["string", "null"],
+                     "enum": ["seconds", "minutes", None]},
+        },
+        "required": ["behaviour"],
+    }
+
+    @classmethod
+    def _restatement_of(cls, reply: str) -> str:
+        """A constrained JSON answer → the command the matchers read, or "".
+
+        Returns "" for anything that is not one of the fifteen. A server that
+        ignored `format` answers prose, and prose that happens to parse as JSON
+        with a made-up behaviour is exactly the thing the enum exists to refuse
+        — so the check is against the enum, not against JSON-ness.
+        """
+        import json as _json
+        try:
+            got = _json.loads(reply)
+        except (TypeError, ValueError):
+            return ""
+        if not isinstance(got, dict):
+            return ""
+        behaviour = str(got.get("behaviour") or "").strip().lower()
+        # Read off the schema itself so the two can never disagree — a second
+        # hand-kept list is how a name gets added to one and not the other.
+        props: dict = cls._RESTATE_SCHEMA["properties"]      # type: ignore[assignment]
+        if behaviour not in props["behaviour"]["enum"]:
+            return ""
+        amount, unit = got.get("amount"), got.get("unit")
+        try:
+            n = int(amount) if amount is not None else None
+        except (TypeError, ValueError):
+            n = None
+        if n is None or n <= 0:
+            return behaviour
+        u = str(unit or "").strip().lower()
+        return f"{behaviour} {n} {u}" if u in ("seconds", "minutes") \
+            else f"{behaviour} {n}"
 
     def _compose_suggester(self):
         """The model that turns messy phrasing into the closed grammar, or None.
@@ -188,8 +245,20 @@ class RCOps(BrainHost):
             return None
 
         def suggest(text: str) -> str:
+            prompt = self._COMPOSE_RESTATE + text
             try:
-                return backend.chat(self._COMPOSE_RESTATE + text) or ""
+                # Constrained first: the server picks tokens only from the
+                # fifteen, so the restatement cannot land outside the grammar.
+                try:
+                    got = self._restatement_of(
+                        backend.chat(prompt, schema=self._RESTATE_SCHEMA) or "")
+                except TypeError:
+                    got = ""                  # a backend whose chat takes no
+                if got:                       # schema — the old signature
+                    return got
+                # …then unconstrained, because a server that ignores `format`
+                # (or has none) must leave the wearer exactly where they were.
+                return backend.chat(prompt) or ""
             except Exception as exc:          # noqa: BLE001 — never break compose
                 log.debug("[rc] compose suggestion failed: %s", type(exc).__name__)
                 return ""

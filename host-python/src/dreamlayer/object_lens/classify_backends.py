@@ -124,6 +124,39 @@ class YoloClassifier:
             except Exception as exc:
                 log.warning("[yolo] load failed: %s; mock fallback", exc)
 
+    def detect(self, frame, min_confidence: float = 0.25) -> Optional[list]:
+        """EVERY box in the frame as ``(label, confidence, (cx, cy))``, with the
+        centroid normalised to [0, 1] — not just the winner `__call__` returns.
+
+        This is the spatial half of the ladder, and it existed nowhere: the
+        tracker in `dream_mode/track_supervision.py` has taken
+        ``[(cx, cy), …]`` since it was written and nothing in the tree ever
+        produced a list. `__call__` throws the geometry away because the Object
+        Lens wants one subject; a trail wants all of them and where they are.
+
+        None (not `[]`) when there is no model, so a caller can tell "this
+        backend cannot see position" from "it saw nothing".
+        """
+        if self._model is None:
+            return None
+        try:
+            res = self._model(frame, verbose=False)[0]
+            h, w = (float(x) for x in res.orig_shape[:2])
+            if w <= 0 or h <= 0:
+                return []
+            out = []
+            for b in res.boxes:
+                conf = float(b.conf[0])
+                if conf < min_confidence:
+                    continue
+                x1, y1, x2, y2 = (float(v) for v in b.xyxy[0].tolist())
+                out.append((str(res.names[int(b.cls[0])]), conf,
+                            ((x1 + x2) / 2.0 / w, (y1 + y2) / 2.0 / h)))
+            return out
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[yolo] detect failed: %s", exc)
+            return None
+
     def __call__(self, frame) -> Optional[Tuple[str, float]]:
         if self._model is None:
             return None
@@ -403,3 +436,41 @@ def default_classifier(labels: Optional[list[str]] = None,
         # heuristic — the old `and labels` gate made it unreachable).
         return ClipClassifier(labels or COMMON_OBJECT_LABELS)
     return HeuristicVisionClassifier() if heuristic_fallback else None
+
+
+def detections(classifier, frame, min_confidence: float = 0.25) -> list:
+    """``[(label, confidence, centroid_or_None), …]`` from any ladder rung.
+
+    One call site, two honest answers. A rung that can localise (YOLO) exposes
+    `detect` and every box comes back with a normalised centroid. Every other
+    rung answers one label for the whole frame, and gets ONE entry with
+    ``centroid=None`` — not a fabricated centre point.
+
+    That distinction is the whole reason this returns a triple. A head-mounted
+    camera's centre is where the wearer is looking, so "centre of frame" would
+    look like a perfectly reasonable stand-in — and it would make every
+    label-only rung report an object that never moves, at the same spot,
+    forever. Anything downstream reasoning about position would then be reading
+    a constant it invented. ``None`` says "I know what, not where", and lets the
+    caller decide what that is worth.
+    """
+    detect = getattr(classifier, "detect", None)
+    if callable(detect):
+        try:
+            rows = detect(frame, min_confidence)
+        except TypeError:                # a `detect` with a different signature
+            rows = detect(frame)
+        if rows is not None:
+            return [(str(lab), float(conf), cen) for lab, conf, cen in rows
+                    if str(lab).strip()]
+    try:
+        hit = classifier(frame)
+    except Exception as exc:                         # noqa: BLE001
+        log.warning("[detections] ladder failed: %s", exc)
+        return []
+    if not hit:
+        return []
+    label, conf = hit
+    if not str(label).strip() or float(conf) < min_confidence:
+        return []
+    return [(str(label), float(conf), None)]

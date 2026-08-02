@@ -401,10 +401,89 @@ def scan_source(source: str, allowed_capabilities) -> list:
     return scanner.issues
 
 
+def scan_wasm(payload: bytes, allowed_capabilities, expect_exports=(),
+              host_module: str = "dreamlayer") -> list:
+    """The `.wasm` counterpart of `scan_source` — step 3 for a guest package.
+
+    Two questions, both answered from the module's own binary sections with no
+    runtime and nothing executed (see plugins/wasm_scan.py):
+
+      1. Does it import a host function no declared capability grants? That is
+         the manifest-vs-reality lie, and it is the one the Python scan CANNOT
+         reliably catch (reaching a capability in Python does not require naming
+         it). Here it can: a guest reaches the host only through an import, and
+         imports are declared in the binary.
+      2. Does it export what the host is about to call — `memory`, the
+         allocator, the build function the manifest names? A package missing
+         one of those cannot work, and failing at install with the missing name
+         beats failing on the glass with nothing.
+
+    Unlike its Python sibling this check has a real counterpart at run time:
+    `WasmCapabilityHost` re-asks question 1 with wasmtime's own parser before
+    the guest runs, and refuses there too. This one exists so the answer
+    arrives before the package is written to disk.
+
+    `host_module` names the import namespace the guest's runtime provides —
+    `"dreamlayer"` for the component host, `"extism:host/env"` for Extism. It
+    is a parameter rather than two functions because the QUESTIONS are the
+    same; only the answer to "whose namespace is legitimate" differs.
+    """
+    from .wasm_component_host import (capability_function_names,
+                                      capability_of_function,
+                                      granted_interfaces)
+    from .wasm_scan import MalformedModule, module_exports, module_imports
+
+    try:
+        imports = module_imports(payload)
+        exports = {name for name, _kind in module_exports(payload)}
+    except MalformedModule as e:
+        # Fatal, not skippable: a module this reader cannot follow is one whose
+        # imports were never checked, and "unscanned" must never read as "clean".
+        return [f"not a usable WebAssembly module: {e}"]
+
+    catalog = capability_function_names()
+    allowed_fns: set = set()
+    for wit in granted_interfaces(allowed_capabilities):
+        allowed_fns |= catalog.get(wit, set())
+
+    if host_module != "dreamlayer":
+        # Extism. Its guests reach the runtime's own PDK ABI
+        # (`extism:host/env`: alloc, store_u8, output_set…), which is not a
+        # capability and not ours to grant — the host runs them with
+        # `functions=[]`, so NOTHING outside that module can even link. The
+        # check is therefore all-or-nothing on the module name, and it is the
+        # stricter of the two: an Extism guest has no way to declare its way to
+        # a power, because there is no power to declare.
+        return ([f"imports {m}.{f}, outside the {host_module} surface"
+                 for m, f in imports if m != host_module]
+                + [f"exports no {w!r} — the host could not call it"
+                   for w in expect_exports if w and w not in exports])
+
+    issues = []
+    for mod, fname in imports:
+        if mod != "dreamlayer":
+            # No ambient authority: anything outside the host namespace is not
+            # a power the host provides, whatever the manifest declares.
+            issues.append(f"imports {mod}.{fname}, outside the host surface")
+        elif fname not in allowed_fns:
+            cap = capability_of_function(fname)
+            issues.append(
+                f"imports {fname!r} but did not declare requires:[{cap}]"
+                if cap else f"imports unknown host function {fname!r}")
+    for want in expect_exports:
+        if want and want not in exports:
+            issues.append(f"exports no {want!r} — the host could not call it")
+    return issues
+
+
 def smoke_load(package: PluginPackage, host_capabilities=frozenset()) -> list:
     """Import the payload in a fresh namespace, build the plugin, and register it
     against a *mock* context. Returns issues ([] = it ran clean). Executes code,
     so run it only after the static scan passes."""
+    if package.manifest.is_extism:
+        return _smoke_extism(package)
+    if package.manifest.is_wasm:
+        return _smoke_wasm(package)
     issues: list = []
     ns: dict = {"__name__": f"dreamlayer_plugin_{package.manifest.name}"}
     try:
@@ -427,6 +506,55 @@ def smoke_load(package: PluginPackage, host_capabilities=frozenset()) -> list:
     except Exception as e:
         issues.append(f"register() raised: {e!r}")
     return issues
+
+
+def _smoke_wasm(package: PluginPackage) -> list:
+    """Instantiate the guest with exactly its declared capabilities linked.
+
+    The wasm analogue of "import it and build the factory", and the cheaper
+    half of the bargain: instantiation is where a guest importing an undeclared
+    power fails, and it runs no guest code of its own beyond the start section.
+    Fuel, an epoch deadline and a memory ceiling bound even that.
+
+    With no runtime installed there is nothing to try, and saying so with `[]`
+    is the honest answer — `scan_wasm` has already read the same imports
+    statically, so the author is not left with an unchecked package.
+    """
+    from .wasm_component_host import (WasmCapabilityHost, available,
+                                      granted_interfaces)
+    if not available():
+        return []
+    try:
+        host = WasmCapabilityHost(
+            package.wasm_bytes(),
+            granted=granted_interfaces(package.manifest.requires))
+        host.instantiate()
+    except Exception as e:
+        return [f"failed to instantiate: {e!r}"]
+    return []
+
+
+def _smoke_extism(package: PluginPackage) -> list:
+    """Call the guest's entry once with an empty sighting.
+
+    Extism constructs its plugin per call, so there is no instantiate step to
+    check on its own — the first real call IS the smoke test. `run` answers
+    None for a trap, a timeout, a missing export or an unlinkable import, and
+    that is the failure this reports.
+
+    An EMPTY reply is not a failure. `{}` is not a real sighting, and "nothing
+    to say about this one" is the answer a well-behaved provider gives most of
+    the time; calling it broken would fail the gate on correct plugins.
+    """
+    from .extism_host import default_extism_host
+    host = default_extism_host()
+    if host is None:
+        return []                        # no runtime here; the scan already ran
+    out = host.run(package.wasm_bytes(), package.manifest.factory, b"{}")
+    if out is None:
+        return [f"the guest returned nothing from "
+                f"{package.manifest.factory!r} (trap, timeout, or a bad import)"]
+    return []
 
 
 def check_signature(package: PluginPackage,
@@ -518,8 +646,35 @@ def validate(package: PluginPackage, host_capabilities=frozenset(),
     if missing:                                  # capability grantable here?
         report.add_error("this device can't grant: " + ", ".join(missing))
 
-    for issue in scan_source(package.source, m.requires):   # 3. static scan
-        report.add_error(issue)
+    if m.carries_wasm:                           # 3. static scan, wasm flavour
+        # A `.wasm` payload rides in `source` as base64 (package.py explains
+        # why), and base64 is not Python — so scanning it as source reported
+        # "syntax error: cannot assign to expression", and EVERY wasm package
+        # failed the gate before this branch existed. Routing a wasm package to
+        # the component host in store.py was necessary and not sufficient: it
+        # could never reach the loader.
+        try:
+            payload = package.wasm_bytes()
+        except ValueError as e:
+            report.add_error(str(e))
+            payload = b""
+        if payload and m.is_extism:
+            # Extism owns both sides of the memory dance through its PDK, so
+            # the only export to insist on is the one the host will call.
+            from .extism_plugin_host import HOST_MODULE
+            for issue in scan_wasm(payload, m.requires,
+                                   expect_exports=(m.factory,),
+                                   host_module=HOST_MODULE):
+                report.add_error(issue)
+        elif payload:
+            from .wasm_plugin_host import ALLOC_EXPORT
+            for issue in scan_wasm(payload, m.requires,
+                                   expect_exports=("memory", ALLOC_EXPORT,
+                                                   m.factory)):
+                report.add_error(issue)
+    else:
+        for issue in scan_source(package.source, m.requires):
+            report.add_error(issue)
 
     # 4. smoke load only if nothing structural is already wrong
     if run_smoke and not report.errors:

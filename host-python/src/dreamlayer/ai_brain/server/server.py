@@ -439,6 +439,20 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         from ...orchestrator.waypath import WaypathLens
         self.waypath = WaypathLens()
         self._load_waypath()
+        # …and the half that never existed: an anchor dropped because the
+        # glasses SAW you walk away from something, not because you narrated
+        # it. The ambient look loop feeds this (live._trail_frame); the tracker
+        # is optional and gives it stable identity when supervision is
+        # installed — `SupervisionTracker` has taken a centroid list since it
+        # was written and nothing in the tree ever produced one.
+        from ...orchestrator.object_trail import ObjectTrail
+        tracker = None
+        try:
+            from ...dream_mode.track_supervision import SupervisionTracker
+            tracker = SupervisionTracker()
+        except Exception:                              # noqa: BLE001
+            pass
+        self.object_trail = ObjectTrail(tracker=tracker)
         # Reality Compiler v2 (the Rehearsal paradigm, docs/RC_V2_*.md): the
         # phone performs a behavior as beats; the Brain infers → verifies →
         # signs → hot-swaps a Figment. The vault (signed, on-device storage)
@@ -2324,6 +2338,13 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         import os as _os
         n = self.waypath.forget_all()
         self._save_waypath()
+        # The trail is held only in memory, but it is a list of the wearer's
+        # things and where they were — erase-everything has to reach it too, or
+        # the next departure re-anchors what was just wiped.
+        try:
+            self.object_trail.forget_all()
+        except Exception:                            # noqa: BLE001
+            pass
         # The memory DB, through the real cascade. Wired exactly the way
         # `_ember_burn` wires it, so vectors and the ANN index go too — a row
         # deleted while its embedding survives is a memory you can still find.
@@ -3226,6 +3247,60 @@ def _capability_payload(brain: Brain) -> dict:
         vr = brain.voice_recall()
         if vr is not None and vr.enabled and vr.model_available:
             env["DL_WIRED_SPEAKER_ID"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `wasm_plugins`, same rule again: wasmtime importing is not a guest. The
+    # flag follows a `.wasm` package that is instantiated RIGHT NOW in the
+    # in-process component host — capability-enforced, zero ambient authority —
+    # because that is the only condition under which the tier is in use. Remove
+    # the plugin and the capability goes back down.
+    try:
+        from ...plugins.wasm_plugin_host import live_guests
+        if live_guests() > 0:
+            env["DL_WIRED_WASM_PLUGINS"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `extism_plugins` — the second WASM runtime, same rule and its own count,
+    # because the two hosts confine differently and a wearer running one is not
+    # running the other.
+    try:
+        from ...plugins.extism_plugin_host import live_guests as _extism_live
+        if _extism_live() > 0:
+            env["DL_WIRED_EXTISM_PLUGINS"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `object_tracking` — supervision importing is not a tracked object, and
+    # neither is a ByteTrack that was constructed and never handed a centroid
+    # (which is what it was for as long as nothing produced any). The flag
+    # follows the ambient trail having actually keyed a sighting by track id,
+    # through the real library rather than its centroid fallback.
+    try:
+        if brain.object_trail.tracking_live():
+            env["DL_WIRED_OBJECT_TRACKING"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `diarization` — diart importing is not a diarized turn, and neither is a
+    # pipeline that has only ever heard one voice (its fallback answers exactly
+    # that for everything). The flag follows the capture pipeline having
+    # genuinely SPLIT a segment into more than one anonymous speaker.
+    try:
+        # Either ear counts, exactly as the ear's own cap union does above: the
+        # Mac's own mic or the phone streaming in.
+        for _e in (getattr(brain, "_ear", None),
+                   getattr(brain, "_remote_ear", None)):
+            pipe = getattr(_e, "_pipe", None)
+            if pipe is not None and getattr(pipe, "last_voices", 0) > 1:
+                env["DL_WIRED_DIARIZATION"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `event_bus` — a `MeshEventBus` exists only around a MeshManager that has
+    # joined a circle, and until GhostMode was reachable nothing ever joined
+    # one. The flag follows a circle live on this Brain right now, so it goes
+    # back down when the evening ends.
+    try:
+        from .live_circle import room as _circle_room
+        if _circle_room(brain).members_live() > 0:
+            env["DL_WIRED_EVENT_BUS"] = "1"
     except Exception:                           # noqa: BLE001
         pass
     packs = packs_report(env=env)
@@ -5901,6 +5976,47 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             self._json(200, room(brain).gift(str(b.get("sid", "")),
                                              b.get("colors") or []))
 
+        def _post_circle_form(self, path, qs):
+            """GhostMode: start a circle and get the three-word code to say to
+            the room. The real confluence.mesh.MeshManager underneath — group
+            keys, HMAC'd packets, replay and stranger rejection — which nothing
+            in the tree had ever constructed, so this headline was unreachable
+            from every surface a wearer has."""
+            from .live_circle import room
+            b = self._body()
+            self._json(200, room(brain).form(str(b.get("sid", ""))))
+
+        def _post_circle_join(self, path, qs):
+            from .live_circle import room
+            b = self._body()
+            self._json(200, room(brain).join(str(b.get("sid", "")),
+                                             str(b.get("group", "")),
+                                             str(b.get("code", ""))))
+
+        def _post_circle_leave(self, path, qs):
+            from .live_circle import room
+            b = self._body()
+            self._json(200, room(brain).leave(str(b.get("sid", ""))))
+
+        def _post_circle_alias(self, path, qs):
+            """Name a pulse locally — "that one is Maya". Never crosses: the
+            mesh carries anonymous member ids and nothing else."""
+            from .live_circle import room
+            b = self._body()
+            self._json(200, room(brain).alias(str(b.get("sid", "")),
+                                              str(b.get("member", "")),
+                                              str(b.get("name", ""))))
+
+        def _post_circle_pulse(self, path, qs):
+            """One beat into the circle: my feeling out, everyone's in, plus the
+            differentially-private summary of how the room feels. The veil
+            silences the sending half completely."""
+            from .live_circle import room
+            b = self._body()
+            self._json(200, room(brain).pulse(
+                str(b.get("sid", "")), str(b.get("kind", "weather")),
+                b.get("body") or {}))
+
         def _post_live_weather(self, path, qs):
             """One dream-cadence weather beat: my state+palette in, MY sky's
             frames out (merged blend / split seam / solo) — the real
@@ -6621,6 +6737,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/live/confluence/accept": _post_conf_accept,
             "/dreamlayer/live/confluence/dissolve": _post_conf_dissolve,
             "/dreamlayer/live/confluence/gift": _post_conf_gift,
+            "/dreamlayer/live/circle/form": _post_circle_form,
+            "/dreamlayer/live/circle/join": _post_circle_join,
+            "/dreamlayer/live/circle/leave": _post_circle_leave,
+            "/dreamlayer/live/circle/alias": _post_circle_alias,
+            "/dreamlayer/live/circle/pulse": _post_circle_pulse,
             "/dreamlayer/live/weather": _post_live_weather,
             "/dreamlayer/downloads/cancel": _post_downloads_cancel,
             "/dreamlayer/discoveries": _post_discoveries,

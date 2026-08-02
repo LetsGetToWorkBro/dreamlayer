@@ -289,6 +289,27 @@ sense of *warmer / colder*. That is all it is willing to send.
 - **Leave.** Leaving is unilateral and local (`leave()` dissolves your view);
   there is no "leave" packet and no permission needed.
 
+### 11.1 Where a circle is formed today
+
+Pre-hardware, the Brain plays the honest role it can — the **meeting point** —
+exactly as `live_confluence.py` does for the pairwise bond. `LiveCircle`
+(`ai_brain/server/live_circle.py`) holds one real `MeshManager` per session and
+an inbox per member, standing in for the coded-PHY flood:
+
+| Route | What it does |
+|---|---|
+| `POST /dreamlayer/live/circle/form` | mints `(group_id, code)` — the three words you say to the room |
+| `POST /dreamlayer/live/circle/join` | joins by code (the group id is optional; nobody says one aloud) |
+| `POST /dreamlayer/live/circle/pulse` | one beat: your feeling out, everyone's in, plus the DP group summary |
+| `POST /dreamlayer/live/circle/alias` | names a pulse **locally**; never crosses |
+| `POST /dreamlayer/live/circle/leave` | unilateral, per §11 |
+
+Everything normative above is enforced by `MeshManager` itself — the room adds
+no crypto, no receive rule, and no vocabulary of its own. Traffic in both
+directions goes through `MeshEventBus`, which publishes only when the mesh
+actually produced a packet, so a subscriber can never observe one the Veil
+refused to make.
+
 ---
 
 ## 12. Rate limiting, size, and duty cycle
@@ -375,6 +396,8 @@ rate-clamping and the Veil).
 | Pairwise (2-member) special case | `confluence/bond.py` (`BondManager`) |
 | The Beacon | `confluence/beacon.py` (`Beacon`, `dist_band`, `BeaconContact`) |
 | Transport seam / in-memory bus | `confluence/mesh.py` (`MeshTransport`, `InMemoryBus`); `confluence/relay_transport.py` for the phone-relayed path |
+| The room a circle is actually formed in | `ai_brain/server/live_circle.py` (`LiveCircle`, routes `/dreamlayer/live/circle/*`) |
+| Pub/sub around mesh traffic | `confluence/emitter_pyee.py` (`MeshEventBus`) |
 | Frame envelope (length header + canonical JSON) | `reality_compiler/v2/transport.py` |
 | Figment `bond:` events produced from packets | `reality_compiler/v2/figment.py` (`BOND_EVENTS`, `bond:tag:<t>`) |
 | Platform placement | [`PLATFORM.md`](./PLATFORM.md) Pillar 2 |

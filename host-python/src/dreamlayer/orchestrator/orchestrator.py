@@ -1077,8 +1077,18 @@ class Orchestrator(
                 # treat expire as a dismissal. Counting only 'tap' let an ignored
                 # (expired) card lower the dismiss rate, promoting the very
                 # wearer who tuned it out. Match the two signals.
+                # The card's own confidence rides along when the telemetry
+                # carries it: that is the LABEL the confidence bar is fitted
+                # to (maturity.tuned_confidence). Absent, the call behaves
+                # exactly as it always did.
+                try:
+                    conf = (float(p["confidence"])
+                            if p.get("confidence") is not None else None)
+                except (TypeError, ValueError):
+                    conf = None
                 self.maturity.observe_card(
-                    dismissed=p.get("method") in ("tap", "expire"))
+                    dismissed=p.get("method") in ("tap", "expire"),
+                    confidence=conf, kind=str(p.get("card_type", "")))
             elif p.get("event") == "CARD_SHOWN":
                 # a card actually reached the glass — the moment plugins react to
                 self.publish_plugin_event(

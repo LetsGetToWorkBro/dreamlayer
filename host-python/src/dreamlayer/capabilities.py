@@ -194,7 +194,7 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("structured_output", "Schema-constrained LLM intent parsing", "structured",
         ("outlines", "instructor"), "structured",
         "reality_compiler/intent_parser_llm.py",
-        gain="a wired local model already restates free-form speech into the closed grammar; these constrain the model AT GENERATION so a malformed suggestion can't be produced in the first place", impact=2, before=4, after=4.5),
+        gain="a wired local model already restates free-form speech into the closed grammar, and the model server already constrains that restatement to the fifteen behaviours at generation (Ollama's own schema field); these two libraries would each need something this path does not have — a sampler in this process, or an OpenAI client object — so installing them adds nothing here", impact=1, before=4.5, after=4.6),
     Cap("typed_models", "Veil-as-type-invariant memory records", "structured",
         ("pydantic",), "structured", "memory/models_pydantic.py",
         gain="baseline guard is a runtime check; this makes a veiled memory impossible to even construct", impact=3, before=3.5, after=5),
@@ -625,8 +625,21 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # ai_brain/server/ear.py EAR_CAPS — set while the microphone is open
     "voice_vad", "local_asr", "mic_capture", "asr_moonshine", "onnx_speech",
     "sound_events", "bird_song", "live_interpret",
-    # …and these five, each from its own live path (DL_WIRED_<KEY>)
+    # …and these six, each from its own live path (DL_WIRED_<KEY>)
     "crdt_sync", "dashboard", "dream_style", "social_graph", "speaker_id",
+    # `wasm_plugins` and `extism_plugins` joined them once a `.wasm` package
+    # format existed for the store to route: each flag follows a guest loaded in
+    # THAT runtime right now, not the wheel being importable.
+    "wasm_plugins", "extism_plugins",
+    # …and `object_tracking` once the ambient look loop produced the centroids
+    # `SupervisionTracker` had always taken and never been given, and
+    # `event_bus` once a GhostMode circle could be formed at all — its
+    # `MeshEventBus` wraps a `MeshManager` nothing had ever constructed.
+    "object_tracking", "event_bus",
+    # …and `diarization`, once the capture pipeline could be handed a streaming
+    # diarizer at all. Promoted only on a segment genuinely split into more
+    # than one voice — the fallback answers one for everything.
+    "diarization",
 })
 
 

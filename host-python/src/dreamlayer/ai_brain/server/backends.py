@@ -585,18 +585,30 @@ class OllamaBackend:
         except Exception:                    # noqa: BLE001 - never break the ask
             pass
 
-    def _gen(self, model: str, prompt: str, images=None) -> str:
-        payload = {"model": model, "prompt": prompt, "stream": False}
+    def _gen(self, model: str, prompt: str, images=None, schema=None) -> str:
+        """One completion. `schema` is a JSON Schema the SERVER constrains its
+        own sampler to — Ollama's `format` field, structured output done where
+        the tokens are chosen rather than by a library that would need the
+        sampler in this process.
+
+        Not a promise: an older server ignores or rejects `format`, which is why
+        every caller of this treats an empty answer as "ask again unconstrained"
+        rather than as a failure. A constrained reply that never comes must cost
+        the wearer nothing they had before.
+        """
+        payload: dict = {"model": model, "prompt": prompt, "stream": False}
         if images:
             payload["images"] = images
+        if schema is not None:
+            payload["format"] = schema
         url = self._endpoint("/api/generate")
         if url is None:
             return ""
         out = self._post(url, payload)
         return (out or {}).get("response", "").strip()
 
-    def chat(self, prompt: str) -> str:
-        return self._gen(self.config.ollama_chat_model, prompt)
+    def chat(self, prompt: str, schema=None) -> str:
+        return self._gen(self.config.ollama_chat_model, prompt, schema=schema)
 
     def vision(self, label: str, image_b64: Optional[str], want: str) -> str:
         detail = "one rich, useful sentence" if want == "more" else "a few words"
