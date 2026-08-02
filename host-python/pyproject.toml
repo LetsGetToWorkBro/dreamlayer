@@ -39,7 +39,12 @@ voice    = ["silero-vad>=6,<7", "faster-whisper>=1,<2", "openwakeword>=0.6,<1", 
 # opt-in only, so it is NOT in any deployment profile: `pip install dreamlayer[voice-clone]`
 voice-clone = ["coqui-tts>=0.24,<1"]
 asr-extra = ["whisperx>=3,<4"]
-structured = ["outlines>=1,<2", "instructor>=1,<2", "pydantic>=2,<3", "pydantic-ai>=1.102.0,<2"]
+# `pydantic-ai` was dropped from this group with the `typed_pipeline` claim
+# (#577): the only code that named it was an availability probe, and the wheel
+# brings ~60 packages (anthropic, google-genai, logfire, opentelemetry, …) that
+# every `structured` install — and so profile-phone/mac/cloud — was paying for.
+# The group itself stays; `outlines`/`instructor`/`pydantic` are its real members.
+structured = ["outlines>=1,<2", "instructor>=1,<2", "pydantic>=2,<3"]
 llm      = ["litellm>=1,<2"]
 intelligence = ["speechbrain>=1,<2", "spacy>=3,<4", "river>=0.23,<1", "human-learn>=0.3,<1", "supervision>=0.29,<1"]
 # a tiny generalist NER (GLiNER) for sharper commitment / entity extraction than
