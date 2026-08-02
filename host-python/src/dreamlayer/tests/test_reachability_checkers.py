@@ -1368,19 +1368,23 @@ class TestPiiRedactionIsNotCriedWolfOn:
         `("persona_tuning", "hulearn")` was RETIRED from this list on
         2026-08-02, which is the retirement working: `persona_humanlearn.tune`
         now calls `FunctionClassifier` for real, so the probe became a caller.
-        Retire the others the same way when their turn comes — do not relax the
-        assertion to keep them.
+        `("typed_pipeline", "pydantic_ai")` was retired on 2026-08-03 the OTHER
+        way (#577): nothing was wired, the capability was dropped instead, so
+        there is no declaration left for the checker to audit. Both exits close
+        the finding; neither is relaxing the assertion to keep the entry.
         """
         probe = {(k, m) for k, m, _s, _w in dep_buckets["probe"]}
         for entry in (("structured_output", "outlines"),
-                      ("structured_output", "instructor"),
-                      ("typed_pipeline", "pydantic_ai")):
+                      ("structured_output", "instructor")):
             assert entry in probe, (
                 f"{entry} is no longer probe-only — either it got wired "
                 "(update this test) or the checker stopped reading seams")
         assert ("persona_tuning", "hulearn") not in probe, (
             "hulearn is probe-only again — persona_humanlearn stopped calling "
             "FunctionClassifier, so the capability is a claim once more")
+        assert not [k for k, _m in probe if k == "typed_pipeline"], (
+            "typed_pipeline declares a probe-only dependency again — #577 "
+            "dropped the claim; re-declaring it needs a caller first")
 
 
 class TestTheDependencyCheckerSeesTheWholeCatalogue:

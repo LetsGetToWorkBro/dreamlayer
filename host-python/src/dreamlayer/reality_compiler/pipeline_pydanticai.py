@@ -1,12 +1,20 @@
-"""Typed pipeline runner (pydantic-ai) — models the RC v2 stages
-rehearse → choreograph → verify → sign → deploy as a typed node graph.
+"""Typed pipeline runner — runs the RC v2 stages
+rehearse → choreograph → verify → sign → deploy in order, threading each
+stage's output into the next and stopping at the first failure.
 (The v1 codegen pipeline this originally mirrored was removed; the runner
 is stage-agnostic — callers supply the stages.)
 
-ADD-alongside module. Lazy-imports pydantic-ai
-(extras group `structured`); the always-available fallback is a simple typed
-sequential runner that threads each stage's output into the next and stops on
-the first failure.
+Nothing optional is imported here, and that is the point. This module used to
+open with a probe for the agent framework in the `structured` extras group and
+declare the `typed_pipeline` capability off it, describing itself as a typed
+node graph with the sequential runner as a fallback. There was no node graph:
+the import sat under `# noqa: F401` and was never referenced again, so
+installing the wheel (and the ~60 packages behind it) moved the capability
+meter from "missing" to "dormant" while `run()` executed byte-identical code.
+The claim was dropped rather than implemented (#577) — the sequential runner is
+the only implementation, it records what ran (`trace`) and where it failed
+(`failed_at`) on every call, and it needs nothing installed to do it. The
+module name is left alone so existing imports keep working.
 """
 from __future__ import annotations
 import logging
@@ -14,14 +22,6 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, List, Optional, Tuple
 
 log = logging.getLogger("dreamlayer.pipeline_pydanticai")
-
-try:
-    import pydantic_ai  # type: ignore  # noqa: F401
-    _HAS_PYDANTIC_AI = True
-except ImportError:
-    _HAS_PYDANTIC_AI = False
-
-available = _HAS_PYDANTIC_AI
 
 
 @dataclass

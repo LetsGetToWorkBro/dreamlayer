@@ -52,7 +52,7 @@ class TestTheDistinctionIsReal:
             assert cap.wires_on_install(c) is True, key
 
     def test_a_dormant_adapter_with_no_live_caller_does_not(self):
-        for key in ("typed_pipeline", "memory_dedup", "asr_alignment",
+        for key in ("memory_dedup", "asr_alignment",
                     "persona_tuning", "wake_word"):
             c = cap._BY_KEY.get(key)
             if c is None:
@@ -364,7 +364,7 @@ class TestTheCLISaysItToo:
             assert "nothing calls it" not in hint, key
 
     def test_an_inert_one_says_the_install_will_not_call_it(self):
-        for key in ("typed_docs", "typed_pipeline", "persona_tuning"):
+        for key in ("typed_docs", "persona_tuning"):
             c = cap._BY_KEY.get(key)
             if c is None:
                 continue
