@@ -3279,6 +3279,20 @@ def _capability_payload(brain: Brain) -> dict:
             env["DL_WIRED_OBJECT_TRACKING"] = "1"
     except Exception:                           # noqa: BLE001
         pass
+    # `diarization` — diart importing is not a diarized turn, and neither is a
+    # pipeline that has only ever heard one voice (its fallback answers exactly
+    # that for everything). The flag follows the capture pipeline having
+    # genuinely SPLIT a segment into more than one anonymous speaker.
+    try:
+        # Either ear counts, exactly as the ear's own cap union does above: the
+        # Mac's own mic or the phone streaming in.
+        for _e in (getattr(brain, "_ear", None),
+                   getattr(brain, "_remote_ear", None)):
+            pipe = getattr(_e, "_pipe", None)
+            if pipe is not None and getattr(pipe, "last_voices", 0) > 1:
+                env["DL_WIRED_DIARIZATION"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
     # `event_bus` — a `MeshEventBus` exists only around a MeshManager that has
     # joined a circle, and until GhostMode was reachable nothing ever joined
     # one. The flag follows a circle live on this Brain right now, so it goes

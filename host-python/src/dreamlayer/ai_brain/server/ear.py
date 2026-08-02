@@ -87,6 +87,8 @@ class EarHost:
         self._lock = threading.RLock()
         self._bird = None
         self._bird_built = False
+        # None = not tried, False = tried and unavailable, else the diarizer.
+        self._diar: object = None
         self._last_answer_ts = 0.0
         self.last_heard = ""
         self.heard_count = 0
@@ -401,6 +403,28 @@ class EarHost:
         except Exception:                            # noqa: BLE001
             return
 
+    def _diarizer(self):
+        """The streaming diarizer, or None when diart is not installed.
+
+        Built once and held for the life of the pipeline: diart clusters
+        WITHIN a stream, so a fresh one per segment would restart the labels
+        every utterance and `spk0` would mean a different person each time.
+        """
+        if self._diar is None:
+            try:
+                from ...social_lens.diarize_diart import DiartDiarizer
+                d = DiartDiarizer()
+                # The fallback answers one speaker for everything, which the
+                # capture path already treats as "unattributed" — holding it
+                # would be a seam that can only ever return its own null.
+                self._diar = d if getattr(d, "_pipeline", None) is not None \
+                    else False
+            except Exception as exc:             # noqa: BLE001
+                log.info("[ear] diarization unavailable: %s",
+                         type(exc).__name__)
+                self._diar = False
+        return self._diar or None
+
     def _voice_seam(self):
         """(embedder, resolver, enrolled_names) for the CapturePipeline, or
         (None, None, None) when voice recall is off, unconsented, or has no
@@ -611,10 +635,16 @@ class EarHost:
             # stranger whose vector is dropped. Auto-enrol widens the list — it
             # does not remove the check.
             speaker, resolver, enrolled = self._voice_seam()
+            # Anonymous turn-taking, a different question from identity: how
+            # many voices are in this segment. It only ever fills a label the
+            # resolver left blank, so a real name always wins, and its tags
+            # (`spk0`/`spk1`) mean nothing outside the stream that made them —
+            # nothing is enrolled, matched or persisted by this path.
             pipe = CapturePipeline(self, vad=vad, asr=asr,
                                    tagger=tagger, bird=self._bird,
                                    speaker=speaker, speaker_resolver=resolver,
-                                   enrolled_speakers=enrolled)
+                                   enrolled_speakers=enrolled,
+                                   diarizer=self._diarizer())
             try:
                 pipe.start(mic)
             except Exception as exc:             # noqa: BLE001 — a dead mic isn't fatal

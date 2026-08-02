@@ -40,7 +40,7 @@ class CapturePipeline:
 
     def __init__(self, orch, vad=None, asr=None, speaker=None, wake=None,
                  speaker_resolver=None, tagger=None, bird=None,
-                 enrolled_speakers=None,
+                 enrolled_speakers=None, diarizer=None,
                  sample_rate: int = SAMPLE_RATE,
                  silence_hang_ms: float = SILENCE_HANG_MS,
                  max_segment_ms: float = MAX_SEGMENT_MS,
@@ -63,6 +63,21 @@ class CapturePipeline:
         # Speaker embeddings identify; the ledger wants a label, so keep them
         # separate rather than mislabelling a caption with a raw vector.
         self.speaker_resolver = speaker_resolver
+        # Streaming diarization (DiartDiarizer), optional. It answers a DIFFERENT
+        # question from `speaker`/`speaker_resolver`: not "who is this" but "how
+        # many voices are in this segment and when did they change" — anonymous
+        # `spk0`/`spk1` tags that mean nothing outside the stream that made them.
+        #
+        # It fills the label ONLY where identity did not, so a name always wins.
+        # Before this, an unidentified conversation folded into the ledger with
+        # every turn attributed to the same nobody, and two people talking read
+        # as one person contradicting themselves — which is exactly what the
+        # Candor and Veritas paths key on.
+        self.diarizer = diarizer
+        #: How many distinct anonymous voices the last segment carried. The
+        #: promotion proof for `diarization`: the fallback answers one voice for
+        #: everything, so >1 is the real pipeline having genuinely split a turn.
+        self.last_voices = 0
         # Optional explicit allowlist of enrolled speaker labels. When given,
         # voice_guard requires a resolved label to be a member before a voiceprint
         # is retained (self always passes); None → the resolver's own name-vs-
@@ -255,10 +270,45 @@ class CapturePipeline:
             except Exception as exc:
                 if self._health() is not None:
                     self._health().record_failure("asr", exc)
+        if not label:
+            label = self._diarized_label(segment)
         self._acoustic_context(segment)
         self._speech_audio(segment)
         self._route(text, label)
         return text
+
+    def _diarized_label(self, segment) -> str:
+        """An anonymous turn tag for a segment identity could not name.
+
+        Never overrides a name — the caller only asks when the label is still
+        empty. Returns "" for the single-speaker case as well as the absent
+        one: tagging a solo utterance `spk0` would put a pseudo-speaker into the
+        ledger where today there is an honest blank, and every downstream
+        consumer already reads "" as unattributed.
+        """
+        if self.diarizer is None:
+            return ""
+        try:
+            turns = self.diarizer.turns(segment) or []
+        except Exception as exc:                 # noqa: BLE001 — never break capture
+            self._record(exc)
+            return ""
+        voices = {str(t.get("speaker", "")) for t in turns if t.get("speaker")}
+        self.last_voices = len(voices)
+        if len(voices) < 2:
+            return ""                            # one voice is not a turn-take
+        # The segment carried more than one voice. Name the one that held it
+        # longest — the utterance ASR transcribed is overwhelmingly theirs.
+        best, best_span = "", -1.0
+        for t in turns:
+            spk = str(t.get("speaker", ""))
+            try:
+                span = float(t.get("end") or 0.0) - float(t.get("start") or 0.0)
+            except (TypeError, ValueError):
+                span = 0.0
+            if spk and span > best_span:
+                best, best_span = spk, span
+        return best
 
     def _speech_audio(self, segment) -> None:
         """Hand the raw speech segment to the hub's live-interpreter seam (if it
