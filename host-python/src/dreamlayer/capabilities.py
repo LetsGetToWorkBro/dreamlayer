@@ -681,6 +681,10 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # observer having started — a filesystem that emits nothing starts one
     # just as happily.
     "fs_watch",
+    # …and `mesh_range`, once the Brain could open a Meshtastic node and put
+    # a typed line on it. Promoted on a line that CROSSED, either way — a
+    # radio with no peer in range connects perfectly and carries nothing.
+    "mesh_range",
     # …and `lan_discovery`, once the Brain announced itself at all. Promoted on
     # a service REGISTERED, which is the strongest evidence mDNS offers a
     # publisher — there is no acknowledgement to wait for — and still far more

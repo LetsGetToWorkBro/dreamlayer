@@ -136,7 +136,8 @@ _NOT_YET_HOSTED = {
     # Assistant and pushes the household alerts `home_alerts` already built.
     # `lan_discovery` left next — `ai_brain/server/discovery_live.py` advertises
     # the Brain on start and the CLI browses for it when no `--brain` is given.
-    "mesh_range": "the tincan bond stays Bluetooth-range instead of miles",
+    # `mesh_range` left next — `ai_brain/server/mesh_live.py` opens a local
+    # Meshtastic node; POST /dreamlayer/mesh/send is the only way to it.
     # `fs_watch` left next — `ai_brain/server/fs_watch_live.py` puts a
     # watchdog observer on every watched folder and debounces it into one
     # reindex; the timer stays as insurance, slowed to 5 minutes.

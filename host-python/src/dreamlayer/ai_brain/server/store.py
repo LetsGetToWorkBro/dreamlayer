@@ -546,6 +546,10 @@ class BrainConfig:
     immich_api_key: str = ""
     home_assistant_url: str = ""    # Home Assistant on the LAN (presence/context)
     home_assistant_token: str = ""
+    # A Meshtastic node reachable over TCP on the LAN. Blank means "look for a
+    # radio on USB", which is the common case — this is for a node that lives
+    # somewhere else on the network rather than plugged into this Mac.
+    mesh_tcp_host: str = ""
     dawarich_url: str = ""          # self-hosted Dawarich on the LAN (location)
     dawarich_api_key: str = ""
     # -- the always-on ear (voice capture) ---------------------------------

@@ -1883,6 +1883,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "contacts_sync", "reminders_sync", "reminder_lists",
                   "sources_sync", "immich_base_url", "immich_api_key",
                   "home_assistant_url", "home_assistant_token",
+                  "mesh_tcp_host",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
                   "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
                   "interpret_enabled", "interpret_target", "truth_lens_enabled",
@@ -3634,6 +3635,16 @@ def _capability_payload(brain: Brain) -> dict:
     # service is in neither set. Its liveness rides `HomeHUD.status()`, which
     # says something a flag could not: configured, polling, and how many cards
     # have actually reached the glass.
+    # `mesh_range` — a line that genuinely crossed the air, in either
+    # direction. Not the wheel, and not a node having opened: a radio with no
+    # peer in range connects perfectly and carries nothing, which is the normal
+    # state of a mesh and not a working link.
+    try:
+        _ml = getattr(brain, "_mesh_link", None)
+        if _ml is not None and _ml.driving():
+            env["DL_WIRED_MESH_RANGE"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
     # `fs_watch` — the folders reacting instead of being asked. The flag
     # follows a change event genuinely DELIVERED, never an observer having
     # started: starting one on a network mount that emits nothing looks
@@ -5037,6 +5048,15 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 "home": _home_status(brain),
             })
 
+        def _get_mesh(self, path, qs):
+            """Whether the radio is up, and whether it has carried anything.
+
+            Defined HERE rather than beside the send route: the GET table is
+            built before the POST handlers, so a handler declared down there is
+            an undefined name at table-build time."""
+            from .mesh_live import link
+            self._json(200, link(brain).status())
+
         def _get_meetings(self, path, qs):
             """Your meetings — attendees, notes, and the action items pulled from
             them. Local; your own words never leave the Brain."""
@@ -6004,6 +6024,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/config": _get_config,
             "/dreamlayer/brain/tiers": _get_brain_tiers,
             "/dreamlayer/status": _get_status,
+            "/dreamlayer/mesh": _get_mesh,
             "/dreamlayer/token": _get_token,
             "/dreamlayer/backup": _get_backup,
             "/dreamlayer/health": _get_health,
@@ -6647,6 +6668,25 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             out = brain.push_selftest(kind)
             self._json(200 if out.get("ok") else 400, out)
 
+        def _post_mesh_send(self, path, qs):
+            """Put one typed line on the LoRa mesh.
+
+            Deliberately the ONLY inbound path to the radio, so "outbound is
+            only ever a line the wearer typed" is a property of the wiring
+            rather than a convention: nothing else in the tree can reach
+            `MeshLink.send`. The Veil and the length cap live in `mesh_live`,
+            not here, so a second caller could not skip them.
+
+            Not local-only, unlike pairing: the phone IS the surface somebody
+            miles from their Mac would be typing on, and it already holds the
+            token. `push_event` sends the peer's replies back the same way every
+            other card reaches it.
+            """
+            from .mesh_live import link
+            text = str((self._body() or {}).get("text", "") or "")
+            out = link(brain).send(text)
+            self._json(200 if out.get("ok") else 400, out)
+
         def _post_replies(self, path, qs):
             """Suggest quick replies to a message."""
             b = self._body()
@@ -7244,6 +7284,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/live/selftest": _post_live_selftest,
             "/dreamlayer/live/intent": _post_live_intent,
             "/dreamlayer/replies": _post_replies,
+            "/dreamlayer/mesh/send": _post_mesh_send,
             "/dreamlayer/voice": _post_voice,
             "/dreamlayer/calendar": _post_calendar,
             "/dreamlayer/calendar/sync": _post_calendar_sync,
