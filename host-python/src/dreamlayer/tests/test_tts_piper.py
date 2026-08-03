@@ -33,6 +33,76 @@ class TestAdapterFallback:
         assert speak("anything") is None      # silent, never raises
 
 
+class TestItSpeaksOnEveryPiperGeneration:
+    """`_raw_pcm` claims to work "across piper API generations". It did not.
+
+    piper moved from rhasspy/piper to OHF-voice/piper1-gpl at 1.3, and
+    `synthesize`'s second positional argument stopped being a wave writer and
+    became a `SynthesisConfig`. Passing `wf` there does not raise — it builds a
+    generator nobody iterates, so the file closes with zero frames and the
+    caller reads back silence with NOTHING in the log. These fakes are shaped
+    like the real classes so the wrong branch produces the real symptom
+    (`b""`), not an exception a test would notice for free.
+    """
+
+    @staticmethod
+    def _wav(wf, frames=b"\x01\x02" * 800):
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(22050)
+        wf.writeframes(frames)
+
+    def _pcm_from(self, voice):
+        tts = T.PiperTTS()
+        tts._voice = voice
+        return tts._raw_pcm("hello")
+
+    def test_the_oldest_generation_streams_raw_chunks(self):
+        class V:                                    # piper <=1.1
+            def synthesize_stream_raw(self, text):
+                yield b"\x01\x02" * 400
+                yield b"\x03\x04" * 400
+        assert len(self._pcm_from(V())) == 1600
+
+    def test_the_middle_generation_writes_into_the_wave_file(self):
+        outer = self
+
+        class V:                                    # piper ==1.2
+            def synthesize(self, text, wf):
+                outer._wav(wf)
+        assert len(self._pcm_from(V())) == 1600
+
+    def test_the_gpl_generation_is_not_silently_empty(self, caplog):
+        """The regression this whole class exists for."""
+        outer = self
+        misused = []
+
+        class V:                                    # piper >=1.3
+            def synthesize(self, text, syn_config=None, include_alignments=False):
+                misused.append(syn_config)
+                return iter(())                     # a generator, not audio
+            def synthesize_wav(self, text, wf, syn_config=None,
+                               set_wav_format=True, include_alignments=False):
+                outer._wav(wf)
+
+        pcm = self._pcm_from(V())
+        assert pcm, "piper >=1.3 produced silence — synthesize_wav was not used"
+        assert len(pcm) == 1600
+        assert misused == [], (
+            "a wave writer was passed where a SynthesisConfig belongs")
+
+    def test_an_engine_that_returns_no_audio_answers_none_not_empty_bytes(self):
+        """`b""` and `None` mean different things to `synthesize`, which tests
+        `if not pcm` — but `play(b"")` is reached by other paths, so the
+        distinction is worth keeping at the source."""
+        outer = self
+
+        class V:
+            def synthesize_wav(self, text, wf, **kw):
+                outer._wav(wf, frames=b"")
+        assert self._pcm_from(V()) is None
+
+
 class TestVoiceModelFinder:
     def test_none_when_nothing_matches(self, tmp_path, monkeypatch):
         monkeypatch.delenv("DL_PIPER_VOICE", raising=False)
