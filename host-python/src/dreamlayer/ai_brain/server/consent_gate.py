@@ -113,13 +113,16 @@ SINKS = {
              what="nothing outbound — it only reads your entity states",
              where="your Home Assistant, on your own network",
              scope=LAN, switch="home_assistant_url"),
-        # `lexicon` (a rare overheard word sent to api.dictionaryapi.dev) lands
-        # with #602 and its `lexicon_enabled` field. Registering it before the
-        # field exists was caught immediately by
-        # `test_every_named_switch_is_a_real_config_field`, which is the test
-        # doing its job: a switch name that does not resolve fails OPEN in the
-        # worst way — `getattr` returns None, the sink reads as never-consented,
-        # and the feature silently stops with nothing to point at.
+        # Registered the moment #602 landed and `lexicon_enabled` existed. It
+        # was held back until then because a switch name that does not resolve
+        # fails OPEN in the worst way — `getattr` returns None, the sink reads
+        # as never-consented, and the feature stops with nothing to point at.
+        # `test_every_named_switch_is_a_real_config_field` caught that on the
+        # first attempt, which is the whole reason it exists.
+        Sink("lexicon",
+             what="one rare word, taken from a PII-redacted transcript",
+             where="api.dictionaryapi.dev, a keyless third-party dictionary",
+             scope=INTERNET, switch="lexicon_enabled"),
         # Nothing below leaves the machine, and every one of them is about a
         # person who is not the wearer. They are listed for exactly that
         # reason: "it stays local" answers a different question from "whose

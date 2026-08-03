@@ -120,6 +120,16 @@ profile-cloud = ["dreamlayer[structured,llm,intelligence,privacy]"]  # remote ru
 # ranges. They target different machines — the profiles above say "pick ONE
 # per machine" — so declare every cross-machine pair conflicting instead of
 # letting the incompatibility block the universal lock.
+#
+# birds/infra is a different shape of the same problem and worth being plain
+# about, because it costs something real. birdnetlib hard-pins watchdog==2.1.9;
+# the infra extra needs watchdog>=6 for the filesystem watcher. That is not a
+# per-machine split — both would run on the same Mac — so declaring it means
+# `bird_song` and `fs_watch`/`lan_discovery`/`dashboard` genuinely cannot
+# co-install in one environment until birdnetlib relaxes its pin. The
+# alternative is worse: without the declaration `uv lock` cannot resolve at
+# all, so the lock silently rots and NOTHING gets a reproducible install.
+# `birds` ships in no profile (it is opt-in); `infra` is in profile-mac only.
 conflicts = [
     [{ extra = "dream" },        { extra = "vision" }],
     [{ extra = "dream" },        { extra = "profile-mac" }],
@@ -127,6 +137,13 @@ conflicts = [
     [{ extra = "hardware" },     { extra = "profile-mac" }],
     [{ extra = "profile-halo" }, { extra = "vision" }],
     [{ extra = "profile-halo" }, { extra = "profile-mac" }],
+    [{ extra = "dream" },        { extra = "doc-ocr" }],
+    [{ extra = "hardware" },     { extra = "doc-ocr" }],
+    [{ extra = "profile-halo" }, { extra = "doc-ocr" }],
+    [{ extra = "birds" },        { extra = "infra" }],
+    [{ extra = "birds" },        { extra = "profile-mac" }],
+    [{ extra = "math-ocr" },     { extra = "vision" }],
+    [{ extra = "math-ocr" },     { extra = "profile-mac" }],
 ]
 
 [tool.setuptools.package-data]

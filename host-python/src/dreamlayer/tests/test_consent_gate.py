@@ -219,5 +219,38 @@ class TestTheRegistryStaysHonest:
         src = pathlib.Path(mesh_live.__file__).read_text(encoding="utf-8")
         assert 'consent(self.brain).check("mesh")' in src
 
+    def test_the_lexicon_lookup_asks_the_gate(self, brain, monkeypatch):
+        """Asserted by BEHAVIOUR — the connector must not be reached at all.
+
+        The gate reads `lexicon_enabled`, which is the feature's own switch, so
+        this is not a second opt-in. What it buys is that the one thing on the
+        ear's path that egresses is counted, carries the Veil, and appears on
+        `/dreamlayer/status` beside everything else that can reach off-device.
+        """
+        from dreamlayer.ai_brain.server.lexicon_live import LexiconRead
+        reached = []
+        lex = LexiconRead(brain)
+        lex._define = lambda w: reached.append(w) or {"sense": "a definition"}
+
+        brain.config.lexicon_enabled = False
+        assert lex._lookup("obstreperous") == {}
+        assert reached == [], "a word left the device without consent"
+
+        brain.config.lexicon_enabled = True
+        assert lex._lookup("obstreperous")
+        assert reached == ["obstreperous"]
+        assert {r["key"]: r for r in consent(brain).report()}["lexicon"]["sent"] == 1
+
+    def test_the_veil_stops_the_lexicon_even_when_enabled(self, brain,
+                                                          monkeypatch):
+        from dreamlayer.ai_brain.server.lexicon_live import LexiconRead
+        reached = []
+        brain.config.lexicon_enabled = True
+        lex = LexiconRead(brain)
+        lex._define = lambda w: reached.append(w) or {"sense": "x"}
+        monkeypatch.setattr(type(brain), "incognito_now", lambda self: True)
+        assert lex._lookup("obstreperous") == {}
+        assert reached == []
+
     def test_it_is_built_once_and_held(self, brain):
         assert consent(brain) is consent(brain)
