@@ -771,7 +771,7 @@ class TestTheCapabilityCheckerSeesTheWholeCatalogue:
         with the wearer-facing loss written out, and the report prints them as
         real work."""
         assert not caps._by_design("orchestrator/wakeword.py")
-        assert caps._not_yet("wake_word")
+        assert caps._not_yet("mesh_range")
         assert not caps._not_yet("memory/doc_schema.py")
 
     def test_the_not_yet_bucket_says_what_the_wearer_loses(self, caps):

@@ -888,6 +888,16 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 # it is asked for fresh here, every sync.
                 if getattr(_e, "interpreting", False):
                     active = active | {"live_interpret"}
+                # `wake_word` is asked fresh for the same reason and on a
+                # stricter test: not "a spotter was built" but "a spotter has
+                # FIRED on this run". `hear()` answers on the text regex too,
+                # and that has always worked — the capability being measured is
+                # the acoustic engine, so only its own hits may promote it.
+                try:
+                    if _e.wake_live():
+                        active = active | {"wake_word"}
+                except Exception:                # noqa: BLE001
+                    pass
         for key in EAR_CAPS:
             flag = "DL_WIRED_" + key.upper()
             if key in active:

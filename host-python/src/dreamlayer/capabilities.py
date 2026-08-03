@@ -130,7 +130,13 @@ CAPABILITIES: Tuple[Cap, ...] = (
         gain="baseline has no local transcription at all; this transcribes on-device, audio never uploads", impact=5, before=0, after=5),
     Cap("wake_word", "Acoustic wake-phrase spotting", "voice",
         ("openwakeword",), "voice", "orchestrator/wakeword.py",
-        gain="baseline wakes on a regex over the transcript (ASR runs first); this fires on the wake phrase alone, so ASR only runs once addressed", impact=4, before=2.5, after=4.5),
+        # The old gain text ended "…so ASR only runs once addressed", and that
+        # is not true HERE: the always-on ear transcribes every segment anyway
+        # for the conversation ledger, so nothing is saved. What the spotter
+        # buys in this architecture is RELIABILITY — ASR mangles the phrase
+        # constantly ("hey you know", "a j you know") and the regex loses those
+        # wakes; the spotter listens to the audio and catches them.
+        gain="baseline wakes on a regex over what ASR heard, so a misheard \"hey juno\" is a wake you lose; this listens to the audio itself", impact=4, before=2.5, after=4.5),
     Cap("mic_capture", "Live microphone → the capture pipeline", "voice",
         ("sounddevice",), "voice", "orchestrator/capture.py",
         gain="baseline has no audio input at all; this reads the mic and drives the VAD→ASR→hub loop", impact=5, before=0, after=5),
@@ -637,6 +643,11 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # ai_brain/server/ear.py EAR_CAPS — set while the microphone is open
     "voice_vad", "local_asr", "mic_capture", "asr_moonshine", "onnx_speech",
     "sound_events", "bird_song", "live_interpret",
+    # …and `wake_word`, once `CapturePipeline` stopped dropping the wake engine
+    # it accepts on the floor and `EarHost.hear` stopped being a `return`. The
+    # flag follows the ACOUSTIC spotter having fired, never the wheel and never
+    # an answered utterance — the text-level regex answers those and always did.
+    "wake_word",
     # …and these six, each from its own live path (DL_WIRED_<KEY>)
     "crdt_sync", "dashboard", "dream_style", "social_graph", "speaker_id",
     # `wasm_plugins` and `extism_plugins` joined them once a `.wasm` package
@@ -657,6 +668,14 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # just "spacy imported", and never on the pass having run, which it does on
     # every commitment row whether or not spaCy is installed.
     "nlp",
+    # …and three that had a working DL_WIRED_ setter and were never listed
+    # here. That is the usual honesty bug INVERTED, and it still made the panel
+    # print something false: `wires_on_install` reads this set, and the panel
+    # renders it as "installing the extra will land you on 'installed · not
+    # active yet'". For these three it lights up. Found by closing the loop in
+    # both directions (`test_capability_install_promise.py`) rather than by
+    # reading the file — the one-way check had been passing throughout.
+    "coreml_ondevice", "persona_tuning", "typed_models",
     # …and `lan_discovery`, once the Brain announced itself at all. Promoted on
     # a service REGISTERED, which is the strongest evidence mDNS offers a
     # publisher — there is no acknowledgement to wait for — and still far more
@@ -871,9 +890,15 @@ PACKS: Tuple[Pack, ...] = (
          "Local speech: neural voice detection, on-device transcription, and Juno speaking in her own cloned voice. Audio never leaves this Mac.",
          ("voice", "voice-clone"), "~2–4 GB", 4),
     Pack("eyes", "Clear Eyes",
-         "Perception: object recognition, real voice fingerprints, proper language "
-         "parsing, and a painterly dream-mode lens — working today. The "
-         "identity-stable tracker ships as a library; nothing feeds it frames yet.",
+         # The hedge that used to close this line — "the identity-stable tracker "
+         # ships as a library; nothing feeds it frames yet" — was about
+         # `object_tracking`, and the ambient look loop has fed it centroids
+         # since it was wired. Every capability this pack carries switches on
+         # when it installs, so hedging would now be the false statement in the
+         # other direction (`test_a_fully_live_pack_is_not_hedged`).
+         "Perception: object recognition, identity-stable tracking, real voice "
+         "fingerprints, proper language parsing, and a painterly dream-mode "
+         "lens — working today.",
          ("vision", "intelligence", "dream-style"), "~3–5 GB", 4),
     Pack("guardian", "Guardian",
          "Deeper privacy and provenance: in-context PII scrubbing and Ed25519 "

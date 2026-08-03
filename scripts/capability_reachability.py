@@ -128,7 +128,9 @@ _NOT_YET_HOSTED = {
     # `person` and `due` the tier-1 regex leaves empty, on the ingest path every
     # spoken line already takes.
     "onnx_speech": "one on-device engine for ASR + VAD + speaker + wake",
-    "wake_word": "\"Hey Juno\" only works because ASR transcribes everything first",
+    # `wake_word` left next — the ear builds an `OpenWakeWordEngine`, the
+    # pipeline consults it per endpointed segment, and `EarHost.hear` answers
+    # an addressed utterance instead of being a `return`.
     "home_hud": "the glass never taps you that the garage is open",
     # `lan_discovery` left next — `ai_brain/server/discovery_live.py` advertises
     # the Brain on start and the CLI browses for it when no `--brain` is given.
