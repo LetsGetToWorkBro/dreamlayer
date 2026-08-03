@@ -3531,6 +3531,19 @@ def _capability_payload(brain: Brain) -> dict:
             env["DL_WIRED_PERSONA_TUNING"] = "1"
     except Exception:                               # noqa: BLE001
         pass
+    # `lan_discovery` — the Brain's presence on the LAN. Weaker evidence than
+    # the rest of this block, and worth naming as such: mDNS gives a publisher
+    # no way to learn that anything listened, so there is no "it answered" to
+    # wait for. `registered` is the strongest proof available and is still much
+    # more than `import zeroconf` — an address was found, a service was
+    # accepted, and the beacon is live on this LAN right now. It goes back down
+    # when the Brain stops advertising, which is what makes it a state.
+    try:
+        _bcn = getattr(brain, "_beacon", None)
+        if _bcn is not None and _bcn.driving():
+            env["DL_WIRED_LAN_DISCOVERY"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
     # `nlp` — the parse behind commitments, and the flag follows a FIELD the
     # regex had left empty and the parser filled. Not `CommitmentNLP.available`,
     # which is only "spacy imported": the extractor honours the floor, so on a

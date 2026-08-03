@@ -130,7 +130,8 @@ _NOT_YET_HOSTED = {
     "onnx_speech": "one on-device engine for ASR + VAD + speaker + wake",
     "wake_word": "\"Hey Juno\" only works because ASR transcribes everything first",
     "home_hud": "the glass never taps you that the garage is open",
-    "lan_discovery": "the wearer types the Brain's IP address in by hand",
+    # `lan_discovery` left next — `ai_brain/server/discovery_live.py` advertises
+    # the Brain on start and the CLI browses for it when no `--brain` is given.
     "mesh_range": "the tincan bond stays Bluetooth-range instead of miles",
     "fs_watch": "sources rescan on a timer instead of reacting",
     "structured_concurrency": "Veil-stop is hand-rolled rather than structural",
@@ -453,7 +454,7 @@ def main() -> int:
     print(f"\nNOT YET HOSTED BRAIN-SIDE ({len(not_yet)}) — real work, not a "
           f"design decision")
     print("  Each is a complete seam whose only consumer is the Orchestrator "
-          "the shipped\n  Brain never builds. Eight capabilities left this "
+          "the shipped\n  Brain never builds. Nine capabilities left this "
           "shape on 2026-08-02 by being\n  re-hosted, not by being "
           "reclassified — these are the ones still waiting.")
     for key, tier, seam, why in sorted(not_yet):

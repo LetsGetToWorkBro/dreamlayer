@@ -657,6 +657,11 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # just "spacy imported", and never on the pass having run, which it does on
     # every commitment row whether or not spaCy is installed.
     "nlp",
+    # …and `lan_discovery`, once the Brain announced itself at all. Promoted on
+    # a service REGISTERED, which is the strongest evidence mDNS offers a
+    # publisher — there is no acknowledgement to wait for — and still far more
+    # than the wheel importing: a LAN address was found and the beacon is live.
+    "lan_discovery",
 })
 
 
