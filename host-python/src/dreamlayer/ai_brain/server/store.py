@@ -456,6 +456,15 @@ class BrainConfig:
     # environment variable, which the bundled .app has no way to set: the neural
     # painter could not be turned on from any surface the product ships.
     dream_model_path: str = ""
+    # -- one ONNX engine behind every voice seam (`onnx_speech`) -----------
+    # A directory holding a standard sherpa-onnx export. Nothing is bundled or
+    # fetched; whichever capabilities the directory completes light up (ASR,
+    # VAD, speaker, keyword spotting, audio tagging) and the rest stay on their
+    # existing engines. Same reason as `dream_model_path` for being a config
+    # field rather than $DL_SHERPA_DIR alone: the bundled .app has no
+    # environment of its own to edit, so an env-only switch is one no shipped
+    # surface can reach. See `ai_brain/server/sherpa_live.py` for the layout.
+    sherpa_model_dir: str = ""
     # -- live interpreter: someone's foreign speech, voiced back to you ---
     # Rides the ear (needs listen_enabled), so it is a SECOND opt-in on top of an
     # opt-in: the microphone is already the wearer's most consequential switch,

@@ -127,7 +127,8 @@ _NOT_YET_HOSTED = {
     # `nlp` was the first one out — `ai_brain/server/nlp_live.py` sharpens the
     # `person` and `due` the tier-1 regex leaves empty, on the ingest path every
     # spoken line already takes.
-    "onnx_speech": "one on-device engine for ASR + VAD + speaker + wake",
+    # `onnx_speech` left next — `ai_brain/server/sherpa_live.py` is the last
+    # rung under ASR, VAD, wake and tagging, from one configured model dir.
     # `wake_word` left next — the ear builds an `OpenWakeWordEngine`, the
     # pipeline consults it per endpointed segment, and `EarHost.hear` answers
     # an addressed utterance instead of being a `return`.

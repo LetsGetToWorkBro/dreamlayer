@@ -606,7 +606,21 @@ class EarHost:
                 log.info("[ear] wake spotter unavailable: %s",
                          type(exc).__name__)
                 self._wake = None
+            if self._wake is None:
+                # The sherpa keyword spotter, when a model directory supplies
+                # one. Second rung by the same rule as the others — but note
+                # this is the one place the ORDER is arguably wrong on licence
+                # grounds rather than technical ones: sherpa-onnx is Apache-2.0
+                # and openWakeWord is non-commercial. Whoever ships this may
+                # want them the other way round; that is not a decision to make
+                # silently here, so the note is the flag.
+                self._wake = self._sherpa().wake()
         return self._wake
+
+    def _sherpa(self):
+        """The Brain's unified ONNX engine — the last rung under every seam."""
+        from .sherpa_live import stack
+        return stack(self.brain)
 
     def _voice_seam(self):
         """(embedder, resolver, enrolled_names) for the CapturePipeline, or
@@ -782,6 +796,15 @@ class EarHost:
             from ...orchestrator.asr_select import make_asr, asr_engine_name
             asr = make_asr(None, None)
             if asr is None:
+                # Last rung: the unified ONNX engine, when the wearer pointed
+                # the Brain at a sherpa model directory. Deliberately AFTER
+                # Moonshine and faster-whisper — installing one wheel must not
+                # take a working purpose-built engine away from somebody who
+                # already had one. On a machine with neither, this is the whole
+                # voice stack from a single install, which is the capability's
+                # actual pitch.
+                asr = self._sherpa().asr()
+            if asr is None:
                 return {"ok": False, "reason": "no-asr",
                         "detail": "no on-device speech engine installed "
                                   "(install the Sharp Ears pack)"}
@@ -799,6 +822,12 @@ class EarHost:
                 tagger = default_sound_detector()
             except Exception:                    # noqa: BLE001
                 tagger = None
+            # `SoundEventDetector` has its own sherpa rung, but it reads
+            # $DL_AUDIO_TAG_DIR — a second directory to configure, and env-only,
+            # which the bundled .app cannot set. A wearer who pointed the Brain
+            # at ONE sherpa export should get tagging out of it too.
+            if tagger is None or not getattr(tagger, "ready", False):
+                tagger = self._sherpa().tagger() or tagger
             if not self._bird_built:
                 self._bird_built = True
                 try:
@@ -806,7 +835,17 @@ class EarHost:
                     self._bird = default_bird_lens()
                 except Exception:                # noqa: BLE001
                     self._bird = None
+            # `default_vad()` is never None — with silero absent it returns a
+            # gate running the cheap energy heuristic, which is a real decision
+            # and the reason the ambient path works at all. So the sherpa rung
+            # slots in on `_model is None` rather than on `vad is None`: a
+            # loaded Silero VAD keeps its place, and an energy threshold gives
+            # way to a real model. Writing this as `default_vad() or …` would
+            # have silently made the rung unreachable forever, which is the
+            # shape of defect this whole line of work is about.
             vad = default_vad()
+            if getattr(vad, "_model", None) is None:
+                vad = self._sherpa().vad() or vad
             # Who is speaking — the producer `said_by` never had. Only wired
             # when the wearer has consented AND a real speaker model loaded;
             # `voice_recall()` returns (None, None, None) otherwise and the

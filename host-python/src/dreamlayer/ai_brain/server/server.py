@@ -898,6 +898,18 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                         active = active | {"wake_word"}
                 except Exception:                # noqa: BLE001
                     pass
+        # `onnx_speech` is asked of the BRAIN, not of either ear: one engine
+        # backs up to four seams and both ears share it, so counting it per-ear
+        # would double it and tie it to whichever ear happened to be open. The
+        # proof is an adapter having produced a real ANSWER — every one of them
+        # has a null it can return forever with no model loaded, and
+        # `SherpaVAD`'s null is `True`, which would look like a working gate.
+        try:
+            _sh = getattr(self, "_sherpa_stack", None)
+            if _sh is not None and _sh.driving():
+                active = active | {"onnx_speech"}
+        except Exception:                        # noqa: BLE001
+            pass
         for key in EAR_CAPS:
             flag = "DL_WIRED_" + key.upper()
             if key in active:
