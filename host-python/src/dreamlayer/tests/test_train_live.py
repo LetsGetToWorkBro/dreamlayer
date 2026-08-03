@@ -333,6 +333,43 @@ class TestRetrainOnForget:
         assert nightly(brain).is_stale() is False
         assert nightly(brain).enforce_forget() is False
 
+    def test_a_run_retires_the_stale_adapter_BEFORE_training(self, brain,
+                                                             monkeypatch):
+        """The ordering is load-bearing and a mutation walked straight through
+        it. If the run trains first and FAILS — which is the common case for a
+        multi-hour job on a busy machine — the wearer is left on weights holding
+        something they deleted until the next night. Retiring first means a
+        failed run leaves them on the base model instead."""
+        d = self._adapter(brain, [1, 2, 3])
+        monkeypatch.setattr(NightlyTrain, "rows", lambda self: [{"id": 1}])
+        during = {}
+
+        class _Fails:
+            def train_nightly(self, *a, **k):
+                during["weights"] = list(d.glob("*.safetensors"))
+                return TrainSummary(trained=False, reason="out of memory")
+
+        n = NightlyTrain(brain, trainer=_Fails())
+        assert n.run_once()["trained"] is False
+        assert during["weights"] == [], (
+            "the stale adapter was still loadable while the run was going")
+        assert not list(d.glob("*.safetensors"))
+
+    def test_a_run_leaves_a_FRESH_adapter_alone(self, brain, monkeypatch):
+        """The other side: retiring must be conditional on staleness, or every
+        nightly run throws away the adapter it just built."""
+        d = self._adapter(brain, [1, 2, 3])
+        monkeypatch.setattr(NightlyTrain, "rows",
+                            lambda self: [{"id": i} for i in (1, 2, 3)])
+
+        class _Noop:
+            def train_nightly(self, *a, **k):
+                return TrainSummary(trained=False, reason="too few examples")
+
+        NightlyTrain(brain, trainer=_Noop()).run_once()
+        assert list(d.glob("*.safetensors")), (
+            "a good adapter was retired by a run that had nothing to replace it")
+
 
 class TestTheScheduler:
     def test_nothing_starts_for_a_brain_that_did_not_opt_in(self, brain):
