@@ -83,3 +83,4 @@ between this directory and a pile of free text.
 | [0005](0005-vector-store-ranking-unreachable.md) | refuted | `VectorStore` ranking is unreachable — but not for the reason first given |
 | [0006](0006-causal-fusion-was-a-fixed-heuristic.md) | accepted-risk | `causal_fusion` inferred nothing causally and returned None either way — dropped |
 | [0007](0007-the-twenty-one-dormant-capabilities.md) | confirmed-deferred | Each of the 21 dormant capabilities, and what is actually blocking it |
+| [0008](0008-mlx-train-is-unbuilt-not-unhosted.md) | confirmed-deferred | mlx_train's trainer was never written, so it needed building rather than wiring |

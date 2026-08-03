@@ -735,6 +735,27 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             log.warning("home HUD unavailable", exc_info=True)
             return False
 
+    def start_nightly_train(self) -> bool:
+        """Fine-tune the local model on the wearer's own words, overnight.
+
+        Off unless they switched it on: training a model on your memories is a
+        bigger commitment than remembering them, because the weights outlive
+        the rows and nothing un-trains a LoRA (`decisions/0008`).
+        """
+        try:
+            from .train_live import nightly
+            return nightly(self).start()
+        except Exception:                            # noqa: BLE001 — never fail boot
+            log.warning("nightly training unavailable", exc_info=True)
+            return False
+
+    def stop_nightly_train(self) -> None:
+        try:
+            from .train_live import nightly
+            nightly(self).stop()
+        except Exception:                            # noqa: BLE001
+            pass
+
     def stop_home_hud(self) -> None:
         try:
             from .home_live import home
@@ -1884,6 +1905,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "sources_sync", "immich_base_url", "immich_api_key",
                   "home_assistant_url", "home_assistant_token",
                   "mesh_tcp_host",
+                  "mlx_model", "mlx_max_tokens", "mlx_adapter_dir",
+                  "nightly_train_enabled",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
                   "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
                   "interpret_enabled", "interpret_target", "truth_lens_enabled",
@@ -1965,6 +1988,13 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             self.stop_home_hud()
             self._home_hud = None
             self.start_home_hud()
+        # Same write-only-setting trap: nothing starts a trainer for a Brain
+        # that booted with it off, and the model/adapter paths are read once
+        # when the trainer is built.
+        if {"nightly_train_enabled", "mlx_model", "mlx_adapter_dir"} & set(updates):
+            self.stop_nightly_train()
+            self._nightly_train = None
+            self.start_nightly_train()
         # Same trap, same fix: the room read lives on the EarHosts too, so a
         # config POST that only wrote the flag would persist a switch that did
         # nothing until the next ear restart.
@@ -2565,6 +2595,19 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         except Exception as exc:                     # noqa: BLE001
             log.error("[brain] forget failed: %s", exc)
             return {"ok": False, "reason": "error"}
+        # The row is gone from the store, the index and every vector. It may
+        # ALSO be in a trained LoRA's weights, and nothing un-trains one — so
+        # the honest completion of "forget that" is to retire any adapter whose
+        # manifest lists this row and rebuild without it on the next nightly
+        # run (`ai_brain/server/train_live.py`, `decisions/0008`). Runs on the
+        # erase path rather than only on the nightly tick, because a wearer who
+        # just deleted something must not keep being answered from weights
+        # built on it until 3am.
+        try:
+            from .train_live import nightly
+            nightly(self).enforce_forget()
+        except Exception:                            # noqa: BLE001
+            log.warning("[brain] adapter staleness check failed", exc_info=True)
         try:
             self.activity.add("privacy", "Forgot one memory")
         except Exception:                            # noqa: BLE001
@@ -3635,6 +3678,15 @@ def _capability_payload(brain: Brain) -> dict:
     # service is in neither set. Its liveness rides `HomeHUD.status()`, which
     # says something a flag could not: configured, polling, and how many cards
     # have actually reached the glass.
+    # `mlx_train` — an ADAPTER genuinely written. Not mlx being importable, and
+    # not a run having happened: a nightly that refused because the corpus was
+    # too small is the guard working, not the capability driving.
+    try:
+        _nt = getattr(brain, "_nightly_train", None)
+        if _nt is not None and _nt.driving():
+            env["DL_WIRED_MLX_TRAIN"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
     # `structured_concurrency` — the Veil-stop as a scope rather than a
     # top-of-function check. Both halves matter: the anyio WHEEL (the capability
     # is anyio; the asyncio path is the baseline it must never do worse than)

@@ -123,33 +123,16 @@ _BY_DESIGN = (
 # so the number is visible instead of hidden inside a bucket that reads as
 # settled. Removing a key from here means it got built, never that it got
 # reclassified.
-_NOT_YET_HOSTED = {
-    # `nlp` was the first one out — `ai_brain/server/nlp_live.py` sharpens the
-    # `person` and `due` the tier-1 regex leaves empty, on the ingest path every
-    # spoken line already takes.
-    # `onnx_speech` left next — `ai_brain/server/sherpa_live.py` is the last
-    # rung under ASR, VAD, wake and tagging, from one configured model dir.
-    # `wake_word` left next — the ear builds an `OpenWakeWordEngine`, the
-    # pipeline consults it per endpointed segment, and `EarHost.hear` answers
-    # an addressed utterance instead of being a `return`.
-    # `home_hud` left next — `ai_brain/server/home_live.py` polls Home
-    # Assistant and pushes the household alerts `home_alerts` already built.
-    # `lan_discovery` left next — `ai_brain/server/discovery_live.py` advertises
-    # the Brain on start and the CLI browses for it when no `--brain` is given.
-    # `mesh_range` left next — `ai_brain/server/mesh_live.py` opens a local
-    # Meshtastic node; POST /dreamlayer/mesh/send is the only way to it.
-    # `fs_watch` left next — `ai_brain/server/fs_watch_live.py` puts a
-    # watchdog observer on every watched folder and debounces it into one
-    # reindex; the timer stays as insurance, slowed to 5 minutes.
-    "structured_concurrency": "Veil-stop is hand-rolled rather than structural",
-    # NOT the same shape as the nine that left this bucket, and `decisions/0008`
-    # is the record. Its seam is INCOMPLETE, not unhosted: `train_nightly`
-    # imports `mlx_lm.lora` as an availability probe and returns
-    # "training not implemented" without calling it. Pointing a scheduler at it
-    # would produce a nightly no-op — the reclassification-instead-of-work this
-    # split exists to prevent — so it stays here, visible, with the accurate
-    # reason rather than being moved to `_BY_DESIGN`.
-    "mlx_train": "the trainer itself was never written (decisions/0008)",
+_NOT_YET_HOSTED: dict = {
+    # EMPTY, and it got here by every entry being BUILT. Nine capabilities left
+    # this bucket on 2026-08-02/03 by being re-hosted Brain-side; `mlx_train`
+    # was the tenth and the odd one out — its seam was incomplete rather than
+    # unhosted (`decisions/0008`), so it needed a trainer written, not wiring.
+    #
+    # Keep the mechanism. The bucket existing with nothing in it is the point:
+    # the next capability whose only consumer is the Orchestrator lands here
+    # with its user-facing loss spelled out, instead of in `_BY_DESIGN` where a
+    # path rule once filed eleven of them as settled decisions.
 }
 
 

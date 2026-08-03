@@ -1,7 +1,7 @@
 ---
 id: 0008
 title: mlx_train is the one capability that cannot be re-hosted, because its trainer was never written
-status: confirmed-deferred
+status: needs-recheck
 date: 2026-08-03
 area: rem/nightly_mlx.py
 ---
@@ -18,6 +18,10 @@ as the capability's own gain text promises — *"baseline model never adapts; th
 fine-tunes it overnight on your own memories"*, impact 4.
 
 ## Verdict
+
+**(Superseded in part on 2026-08-03 — the trainer was written. The diagnosis below
+stands and is why it needed BUILDING rather than wiring; see Consequences for
+what now exists and what is still unverified.)**
 
 It is not the same shape as the other nine: the seam is incomplete, not
 unhosted, so wiring a scheduler to it would produce a nightly job that reliably
@@ -76,33 +80,102 @@ stale — wire the scheduler at that point.
 
 ## Consequences
 
-**Do not wire a scheduler to it now.** A nightly job whose only possible outcome
-is `reason="training not implemented"` would move the capability out of the
-report's honest bucket without changing anything a wearer experiences, which is
-the exact reclassification-instead-of-work that splitting `_BY_DESIGN` was meant
-to make impossible (see `scripts/capability_reachability.py`).
+**The trainer was built on 2026-08-03**, at the owner's direction and with an
+Apple-silicon Mac available to verify on. The verdict above is why it was a
+build and not a wiring job, and it is left standing for that reason. Two gaps
+had to close, not one — the second was found only while doing the work:
 
-**Do not write the LoRA loop blind.** mlx and mlx-lm are macOS/Apple-silicon
-only and cannot be imported, let alone run, in this repo's CI or on the machine
-this audit was performed from. Writing a training loop that has never executed
-once, that reads the wearer's own memories, and reporting it as a shipped
-capability, is the overclaim the whole capability-honesty effort exists to
-remove. It needs a Mac, a real model, and a human watching the first run.
+1. `rem/nightly_mlx.py` now trains. It runs `python -m mlx_lm.lora` as a
+   SUBPROCESS rather than importing the trainer: it cannot take the Brain down,
+   it can be killed mid-run (which is what "one gesture, everything stops"
+   requires of a multi-hour job), and mlx-lm's CLI has been far more stable
+   across versions than its Python entry points.
+2. **`MLXBackend` could not load an adapter at all.** `mlx_lm.load()` was called
+   with no `adapter_path`, so even a perfect fine-tune would have written a file
+   nothing could read. This was not in the original record because it had not
+   been looked for — the capability was two gaps deep, not one.
 
-**What a future fix has to touch**, in order:
+`config.mlx_model` / `mlx_max_tokens` / `mlx_adapter_dir` are real fields now.
+`MLXBackend` had been reading the first two through `getattr(config, …, default)`
+against fields that were never declared, so the Apple-silicon answer tier ran on
+a hard-coded model with no way to change it from any surface the product ships.
 
-1. `train_nightly`'s try-block — the actual `mlx_lm.lora` invocation and an
-   adapter written to `adapter_dir`.
-2. `_collect` — it currently returns a flat list of raw `summary` strings.
-   A LoRA fine-tune wants formatted pairs, and the privacy question is sharper
-   here than anywhere else in the tree: everything else this audit wired is
-   transient (a card, a frame, a poll), whereas a fine-tuned adapter is the
-   wearer's memories baked into weights that outlive any retention sweep. The
-   Veil check in `_collect` gates the read; it says nothing about what deletion
-   means afterwards.
-3. Only then a scheduler, and a proof-based `DL_WIRED_MLX_TRAIN` that follows an
-   adapter genuinely written — never `_HAS_MLX`.
+### The privacy work, which was the actual reason to be careful
 
-The report keeps `mlx_train` visible with its own accurate reason rather than
-being moved to `_BY_DESIGN`. Filing it as a design decision would be false: the
-wearer really does lose something, and somebody really should build it.
+`_collect` used to be one `allow_capture()` check over raw summaries. The corpus
+is now built to a stricter rule than any other read path in the tree:
+
+* **Another person's words are never trained on.** A row carrying `said_by` is
+  somebody else speaking. Their sentences are in the wearer's memory because the
+  wearer was there; that is not consent to train a model on them, and there is
+  no mechanism by which they could withdraw it. Read from the row AND from its
+  `meta`, because the ring and the store keep the same field in two shapes.
+* **Index rows are not language.** `person`/`place`/`object` rows are catalogue
+  entries ("Person: Marcus"); a model trained on them learns to emit lists.
+* **A manifest, always.** `adapter.json` beside the weights records which row
+  ids produced them — ids only, never the text, or it would be a second copy of
+  the corpus sitting outside every retention sweep.
+
+### Deletion: retrain-on-forget, because nothing else is true
+
+Nothing un-trains a LoRA. The guarantee the product now makes, and the only one
+it can keep:
+
+    delete a row  ->  every adapter whose manifest lists it is STALE
+    stale adapter ->  taken out of use, and rebuilt on the next nightly run
+
+`Brain.forget_memory` enforces it on the ERASE path, not only on the nightly
+tick, so a wearer who just deleted something is not answered from weights built
+on it until 3am. Retiring RENAMES the weights (`.stale`) rather than deleting
+them, so an accidental forget does not also destroy a night of compute, and
+`MLXBackend.adapter_path` globs `*.safetensors` so the rename is what unloads
+it. An unreadable store is treated as stale: the wearer gets the base model,
+which is a worse answer rather than a broken promise.
+
+It is off by default — a second opt-in on top of memory itself, for the same
+reason the ear is.
+
+## Still unverified, and this is the part that needs a human
+
+**No line of the training path has ever executed.** mlx and mlx-lm are
+Apple-silicon only and absent from CI and from the machine this was written on,
+so the subprocess runner is faked in every test. What IS tested for real is
+everything that decides what may be baked into weights, plus the deletion story
+— the half whose mistakes cannot be undone.
+
+### Runbook for the first real run
+
+On the Mac mini Brain, with `pip install "dreamlayer[platform]"` (mlx, mlx-lm):
+
+```
+# 1. switch it on, and point the answer tier at MLX
+$ curl -s localhost:7777/dreamlayer/config -X POST \
+    -H 'X-DreamLayer-Token: <token>' \
+    -d '{"model":"mlx","nightly_train_enabled":true}'
+
+# 2. run it now rather than waiting for 3am
+$ python -c "
+from dreamlayer.ai_brain.server.server import Brain
+from dreamlayer.ai_brain.server.train_live import nightly
+b = Brain('~/.dreamlayer')
+print(nightly(b).run_once())"
+```
+
+What each outcome means:
+
+| output | meaning |
+|---|---|
+| `{'trained': False, 'reason': 'too few examples (N < 200)'}` | working correctly — the Brain has not heard enough yet |
+| `{'trained': False, 'reason': 'mlx-lm exited 2: …'}` | the CLI flags drifted; the exact argv is in the log line above it |
+| `{'trained': False, 'reason': 'mlx-lm exited 0 but wrote no adapter'}` | it ran and produced nothing — do not trust a `trained: True` from a patched version until this is understood |
+| `{'trained': True, 'adapter': '…/adapter'}` | check `adapter.json` lists row ids and no text, then ask the Brain something and confirm `MLXBackend.adapter_loaded` is True |
+
+The single most likely breakage is the mlx-lm argv. It is logged verbatim
+(`[nightly_mlx] <python> -m mlx_lm.lora --model …`) before the run precisely so
+the first failure is a two-minute fix rather than a mystery.
+
+**Flip this record to `confirmed` once a real adapter has been written and an
+answer has demonstrably come back through it.** Until then it is
+`needs-recheck`, and `DL_WIRED_MLX_TRAIN` — which follows an adapter genuinely
+written, never `_HAS_MLX` — will stay dark on every machine including the one
+that ships it.

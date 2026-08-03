@@ -546,6 +546,18 @@ class BrainConfig:
     immich_api_key: str = ""
     home_assistant_url: str = ""    # Home Assistant on the LAN (presence/context)
     home_assistant_token: str = ""
+    # -- the local model, and the wearer's own LoRA on top of it ----------
+    # `MLXBackend` read these with `getattr(config, …, default)` and they were
+    # never declared, so the Apple-silicon answer tier ran on a hard-coded model
+    # with no way to change it from any surface the product ships.
+    mlx_model: str = ""             # blank → mlx_backend.DEFAULT_MODEL
+    mlx_max_tokens: int = 512
+    # Where the overnight fine-tune writes, and where the backend looks. Blank
+    # → the Brain's own directory. OFF by default: training a model on your own
+    # memories is a bigger commitment than remembering them, because the weights
+    # outlive the rows (see rem/nightly_mlx.py and decisions/0008).
+    mlx_adapter_dir: str = ""
+    nightly_train_enabled: bool = False
     # A Meshtastic node reachable over TCP on the LAN. Blank means "look for a
     # radio on USB", which is the common case — this is for a node that lives
     # somewhere else on the network rather than plugged into this Mac.

@@ -134,29 +134,54 @@ def test_nightly_mlx_noop_and_veil():
     assert t._collect(_Ring(), privacy=_Veil(False)) == []
 
 
-def test_nightly_mlx_present_reports_not_implemented(monkeypatch):
-    """With mlx present and examples collected, train_nightly must not claim a
-    success for training that never ran (#582)."""
+def test_nightly_mlx_present_now_trains_rather_than_declining(monkeypatch):
+    """INVERTED on 2026-08-03. This used to pin "must not claim a success for
+    training that never ran (#582)" — the right assertion while the LoRA step
+    was a stub, and the finding that became `decisions/0008`.
+
+    The trainer exists now, so the assertion flips to the thing that still
+    matters and is easy to lose: a run reports `trained` only when weights are
+    genuinely on disk. A zero exit with nothing written is the same overclaim
+    wearing different clothes, and it has its own case in
+    `test_train_live.py`."""
     import sys
     import types
 
     import dreamlayer.rem.nightly_mlx as nightly_mlx
-    from dreamlayer.rem.nightly_mlx import MlxNightlyTrainer
+    from dreamlayer.rem.nightly_mlx import MIN_EXAMPLES, MlxNightlyTrainer
 
     class _Ring:
         def memories(self):
-            return [{"summary": "lease due friday"}, {"summary": "call maya"}]
+            return [{"id": i, "kind": "conversation", "summary": f"line {i}"}
+                    for i in range(MIN_EXAMPLES + 10)]
 
     fake_mlx_lm = types.ModuleType("mlx_lm")
     fake_mlx_lm.lora = types.ModuleType("mlx_lm.lora")
     monkeypatch.setattr(nightly_mlx, "_HAS_MLX", True)
     monkeypatch.setitem(sys.modules, "mlx_lm", fake_mlx_lm)
 
-    s = MlxNightlyTrainer().train_nightly(_Ring(), privacy=_Veil(True))
-    assert s.trained is False
-    assert s.adapter_path is None
-    assert s.examples == 2
-    assert "not implemented" in s.reason
+    import tempfile
+    from pathlib import Path
+    d = Path(tempfile.mkdtemp())
+
+    ran = []
+
+    def _runner(argv, timeout):
+        ran.append(argv)
+        return 0, ""
+
+    # Exit 0 and NO weights: still not a success.
+    t = MlxNightlyTrainer(adapter_dir=str(d), runner=_runner)
+    s = t.train_nightly(_Ring(), privacy=_Veil(True))
+    assert ran, "the trainer never invoked mlx-lm"
+    assert s.trained is False and "wrote no adapter" in s.reason
+
+    # Weights on disk: trained, with the adapter named.
+    (d / "adapters.safetensors").write_bytes(b"w")
+    s = MlxNightlyTrainer(adapter_dir=str(d), runner=_runner).train_nightly(
+        _Ring(), privacy=_Veil(True))
+    assert s.trained is True and s.adapter_path == str(d)
+    assert s.row_ids, "no manifest of which rows produced the weights"
 
 
 def test_there_is_no_frame_sdk_bridge_to_fall_back_from():

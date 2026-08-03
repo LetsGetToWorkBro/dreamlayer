@@ -690,6 +690,11 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # Veil at the top and then ran VLM calls on the wearer's camera frame
     # for as long as the backend took.
     "structured_concurrency",
+    # …and `mlx_train`, once the trainer was written and `MLXBackend` learned
+    # to load an adapter. Promoted on an ADAPTER genuinely written — never on
+    # mlx importing, and never on a run having happened, because a run that
+    # refused for too small a corpus is the guard working.
+    "mlx_train",
     # …and `lan_discovery`, once the Brain announced itself at all. Promoted on
     # a service REGISTERED, which is the strongest evidence mDNS offers a
     # publisher — there is no acknowledgement to wait for — and still far more

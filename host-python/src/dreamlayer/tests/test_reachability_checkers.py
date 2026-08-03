@@ -771,15 +771,37 @@ class TestTheCapabilityCheckerSeesTheWholeCatalogue:
         with the wearer-facing loss written out, and the report prints them as
         real work."""
         assert not caps._by_design("orchestrator/wakeword.py")
-        assert caps._not_yet("structured_concurrency")
         assert not caps._not_yet("memory/doc_schema.py")
 
     def test_the_not_yet_bucket_says_what_the_wearer_loses(self, caps):
-        """Same bar as `_BY_DESIGN`'s reasons: a blank or generic string turns
-        the bucket back into a place to hide gaps."""
-        assert caps._NOT_YET_HOSTED
+        """EMPTY as of 2026-08-03, and it got there by every entry being BUILT.
+
+        The assertion inverts rather than being deleted. What still has to hold
+        is the BAR: a key here must carry a real user-facing loss, because a
+        blank or generic string turns the bucket back into the place to hide
+        gaps that `_BY_DESIGN` had become. The next capability whose only
+        consumer is the Orchestrator lands here and has to say what it costs."""
         for key, why in caps._NOT_YET_HOSTED.items():
             assert key and len(why) > 20, (key, why)
+
+    def test_the_mechanism_survives_the_bucket_emptying(self, caps):
+        """A checker whose interesting bucket is empty is one nobody notices
+        has stopped working. `_not_yet` must still resolve a key it is given,
+        and the bucket must still be collected and printed."""
+        import sys
+        assert caps._not_yet("anything") == ""       # nothing is filed today
+        caps._NOT_YET_HOSTED["_probe"] = (
+            "a placeholder loss long enough to clear the bar")
+        try:
+            assert caps._not_yet("_probe")
+            monkey = sys.argv
+            sys.argv = ["capability_reachability.py"]
+            try:
+                assert caps.main() == 0
+            finally:
+                sys.argv = monkey
+        finally:
+            caps._NOT_YET_HOSTED.pop("_probe", None)
 
     def test_a_key_leaves_the_not_yet_bucket_only_by_being_built(self, caps):
         """`nlp` was the first out. It must not have been quietly moved to
