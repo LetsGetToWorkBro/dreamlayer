@@ -273,53 +273,188 @@ class TestTheModelDirectory:
         assert SherpaStack(brain).offers() == []
 
 
-class TestTheLaddersFallBackRatherThanDisplace:
-    """Installing one wheel must never take a working purpose-built engine
-    away from somebody who already had one."""
+class TestTheEarActuallyReachesEachRung:
+    """Asserted by RUNNING `EarHost.start()` and reading what the pipeline was
+    built WITH — not by checking the ladder's neighbours.
 
-    def test_a_working_asr_keeps_its_place(self, brain, monkeypatch):
+    Written this way because a mutation survived: deleting the VAD rung from
+    the ear outright changed nothing any test could see. The tests around it
+    asserted that `default_vad()` is non-None and that `_model` exists, which
+    are facts about the fallback, not about the wiring. Same shape as the
+    capabilities themselves — the thing that needs proving is the LINK.
+    """
+
+    def _pipe(self, brain, monkeypatch, *, has_asr=True, has_silero=True,
+              has_oww=True, has_tagger=True, **loaded):
+        """Start an ear with the named dedicated engines present/absent and a
+        sherpa stack holding `loaded`. Returns the CapturePipeline built.
+
+        The `has_*` flags are the DEDICATED engines; `**loaded` is what the
+        sherpa export contains. Two different namespaces on purpose — naming
+        both `asr` is how the first draft collided with itself."""
         import dreamlayer.orchestrator.asr_select as sel
-        sentinel = object()
-        monkeypatch.setattr(sel, "make_asr", lambda *a, **k: sentinel)
-        called = []
-        monkeypatch.setattr(SherpaStack, "asr",
-                            lambda self: called.append(1) or object())
+        import dreamlayer.orchestrator.sound_events as se
+        import dreamlayer.orchestrator.vad_gate as vg
+        import dreamlayer.orchestrator.wakeword as ww
+
+        monkeypatch.setattr(sel, "make_asr",
+                            lambda *a, **k: object() if has_asr else None)
+        monkeypatch.setattr(vg, "default_vad",
+                            lambda *a, **k: _Gate(loaded_model=has_silero))
+        monkeypatch.setattr(ww, "OpenWakeWordEngine",
+                            (lambda: _Spot(True)) if has_oww else (lambda: _Spot(False)))
+        monkeypatch.setattr(se, "default_sound_detector",
+                            lambda: _Tagger(has_tagger) if has_tagger else None)
+
         ear = EarHost(brain)
-        ear.start(mic=_DeadMic())
-        assert not called, "the sherpa rung displaced a live ASR engine"
+        brain._sherpa_stack = SherpaStack(brain, _stack=_speech(**loaded))
+        from dreamlayer.orchestrator.capture import SyntheticMicSource
+        assert ear.start(mic=SyntheticMicSource(windows=[]))["ok"]
+        return ear._pipe
 
-    def test_a_loaded_silero_keeps_its_place(self, brain, monkeypatch):
-        """And the sharp part: `default_vad()` is NEVER None — with silero
-        absent it returns a gate running the energy heuristic. Written as
-        `default_vad() or …` the rung would be unreachable forever, which is
-        exactly the shape of defect this work is about."""
-        from dreamlayer.orchestrator.vad_gate import default_vad
-        assert default_vad() is not None, (
-            "default_vad became None-able; the ear's rung condition needs "
-            "revisiting")
+    def test_the_asr_rung_is_reached_when_no_engine_is_installed(
+            self, brain, monkeypatch):
+        p = self._pipe(brain, monkeypatch, has_asr=False,
+                       **{"asr": _FakeASR()})
+        assert p.asr is not None
+        assert p.asr.transcribe([0.1] * 100) == "the deposit clears Friday"
 
-    def test_the_rung_condition_reads_the_model_not_the_object(self):
-        from dreamlayer.orchestrator.vad_gate import SileroVADGate
-        g = SileroVADGate()
-        # On a machine without silero this is the energy fallback, and that is
-        # the case the sherpa rung is FOR.
-        assert hasattr(g, "_model")
+    def test_the_asr_rung_does_not_displace_a_live_engine(self, brain,
+                                                          monkeypatch):
+        p = self._pipe(brain, monkeypatch, has_asr=True, **{"asr": _FakeASR()})
+        assert p.asr.__class__ is object, (
+            "the sherpa rung displaced a working ASR engine")
+
+    def test_the_vad_rung_is_reached_when_silero_did_not_load(self, brain,
+                                                              monkeypatch):
+        """The one the mutation walked through. `default_vad()` is NEVER None —
+        with silero absent it returns a gate running the energy heuristic — so
+        the condition has to read `_model`, and `default_vad() or …` would have
+        made this rung unreachable forever."""
+        v = _V(False)
+        p = self._pipe(brain, monkeypatch, has_silero=False, vad=v)
+        assert p.vad.is_speech([0.0] * 100) is False
+        assert getattr(p.vad, "_impl", None) is v, (
+            "the pipeline got the energy fallback, not the sherpa gate")
+
+    def test_the_vad_rung_does_not_displace_a_loaded_silero(self, brain,
+                                                            monkeypatch):
+        p = self._pipe(brain, monkeypatch, has_silero=True, vad=_V(False))
+        assert isinstance(p.vad, _Gate), "sherpa took a loaded Silero's place"
+
+    def test_the_wake_rung_is_reached_when_openwakeword_is_absent(
+            self, brain, monkeypatch):
+        p = self._pipe(brain, monkeypatch, has_oww=False, wake=_KWSHit())
+        assert p.wake is not None
+        assert p.wake.detect([0.1] * 100)[0] is True
+
+    def test_the_wake_rung_does_not_displace_openwakeword(self, brain,
+                                                          monkeypatch):
+        p = self._pipe(brain, monkeypatch, has_oww=True, wake=_KWSHit())
+        assert isinstance(p.wake, _Spot)
+
+    def test_the_tagger_rung_is_reached_when_no_tagger_is_ready(
+            self, brain, monkeypatch):
+        """`SoundEventDetector` has its own sherpa rung, but it reads a SECOND
+        directory ($DL_AUDIO_TAG_DIR) and env-only, which the bundled .app
+        cannot set. One configured export should cover tagging too."""
+        p = self._pipe(brain, monkeypatch, has_tagger=False,
+                       **{"tagger": _T()})
+        assert p.tagger is not None
+        assert p.tagger.tag([0.1] * 100) == [("doorbell", 0.9)]
+
+    def test_the_tagger_rung_is_reached_when_the_tagger_has_no_model(
+            self, brain, monkeypatch):
+        """`available` is the WHEEL and `ready` is a MODEL — the distinction
+        `ear.py` already draws for `sound_events`. A tagger that is not ready
+        returns [] forever."""
+        p = self._pipe(brain, monkeypatch, has_tagger="not-ready",
+                       **{"tagger": _T()})
+        assert p.tagger.tag([0.1] * 100) == [("doorbell", 0.9)]
+
+    def test_the_tagger_rung_does_not_displace_a_ready_one(self, brain,
+                                                           monkeypatch):
+        p = self._pipe(brain, monkeypatch, has_tagger=True, **{"tagger": _T()})
+        assert isinstance(p.tagger, _Tagger)
+
+    def test_nothing_configured_leaves_every_ladder_alone(self, brain,
+                                                          monkeypatch):
+        p = self._pipe(brain, monkeypatch)              # empty sherpa stack
+        assert isinstance(p.vad, _Gate)
+        assert isinstance(p.wake, _Spot)
+        assert isinstance(p.tagger, _Tagger)
 
 
-class _DeadMic:
-    """A mic source that refuses to open, so `start()` returns before building
-    a pipeline. Enough to prove which engines were consulted on the way."""
+class _Gate:
+    """Stands in for `SileroVADGate`. `_model` is the loaded-or-not bit the
+    ear's rung condition reads."""
 
-    available = True
+    def __init__(self, loaded_model=True):
+        self._model = object() if loaded_model else None
 
-    def open(self, rate, frames):
-        raise RuntimeError("no device")
+    def is_speech(self, samples):
+        return True
 
-    def read(self):
-        return None
 
-    def close(self):
+class _Spot:
+    def __init__(self, loaded=True):
+        self._model = object() if loaded else None
+
+    def detect(self, samples):
+        return (False, 0.0)
+
+
+class _Tagger:
+    def __init__(self, ready=True):
+        self.ready = ready is True
+        self.available = True
+
+    def tag(self, audio, sample_rate=16000):
+        return []
+
+
+class _V:
+    def __init__(self, verdict):
+        self.verdict = verdict
+
+    def accept_waveform(self, a):
         pass
+
+    def is_speech(self):
+        return self.verdict
+
+
+class _KWSHit:
+    def __init__(self):
+        self._n = 0
+
+    def create_stream(self):
+        return self
+
+    def accept_waveform(self, rate, audio):
+        self._n = 1
+
+    def is_ready(self, st):
+        got, self._n = self._n, 0
+        return bool(got)
+
+    def decode_stream(self, st):
+        pass
+
+    @property
+    def result(self):
+        return type("R", (), {"keyword": "hey juno"})()
+
+
+class _T:
+    def create_stream(self):
+        return self
+
+    def accept_waveform(self, rate, audio):
+        pass
+
+    def compute(self, stream, top_k=3):
+        return [type("E", (), {"name": "doorbell", "prob": 0.9})()]
 
 
 class TestThePromotionIsAskedOfTheBrain:
