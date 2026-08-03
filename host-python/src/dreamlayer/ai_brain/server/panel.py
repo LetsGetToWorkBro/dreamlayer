@@ -796,6 +796,9 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     <div class="conn"><div><div class="conn-t">Answer ahead &middot; the room asks, you already know</div>
       <div class="conn-s">Off by default. When someone asks a question out loud, the Brain looks it up in <b>your own memory</b> and puts the answer on the Live Lens before you have to think of it. <b>Strictly on-device</b> — an overheard question never reaches the cloud, whatever your cloud settings say, because it is answered with the network path switched off. Only fires when the answer is confident enough to be worth reading, and at most one every 20 seconds so a conversation is not answered continuously. Needs Listening on.</div></div>
       <label class="sw"><input type="checkbox" id="answerAhead" onchange="saveAnswerAhead()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Lexicon &middot; a rare word, explained</div>
+      <div class="conn-s">Off by default. Someone says "undulating" mid-conversation and a quiet one-line definition appears on the Live Lens. Which words count is decided <b>entirely on this machine</b> — a bundled word list, no model, no service — and a word is only ever explained <b>once per conversation</b>. This is the <b>one thing on the Listening path that leaves your machine</b>, and it is worth reading twice: to look a word up, the Brain sends <b>that single word, and nothing else</b>, to the free dictionary at api.dictionaryapi.dev. Never the sentence, never who said it, never the rest of what it heard — and the word is taken from the <b>scrubbed</b> text, after phone numbers, emails and cards have been removed. Capitalised words are skipped entirely, so names and places are not looked up. Nothing is sent while Incognito, in quiet hours, inside a private zone, or on a LAN-only network — the lookup simply does not happen. No definition, no card: a word it cannot explain is silent. Needs Listening on.</div></div>
+      <label class="sw"><input type="checkbox" id="lexicon" onchange="saveLexicon()"><span class="track red"></span></label></div>
     <div class="conn"><div><div class="conn-t">Live interpreter &middot; their meaning, in your language</div>
       <div class="conn-s">Off by default. Someone speaks a language you don't; the Brain carries the <b>meaning</b> of each utterance across and puts it on the Live Lens &mdash; and speaks it into your ear if Juno's voice is on. <b>Entirely on-device</b> (Meta's SeamlessM4T runs here); the audio never leaves this machine and no translation service is contacted, whatever your cloud settings say. It reads speech straight into your language in one pass, so there is <b>no transcript of the original</b> to store or show &mdash; only what it meant. The Veil still wins: nothing is interpreted while Incognito, in quiet hours, or inside a private zone. Needs Listening on and the <b>Interpreter</b> pack.
         <div class="row" style="margin-top:10px">
@@ -2024,6 +2027,7 @@ async function load(){
   if($("listen")){$("listen").checked=!!c.config.listen_enabled; refreshEarStatus();}
   if($("captions")){$("captions").checked=!!c.config.captions_enabled;}
   if($("answerAhead")){$("answerAhead").checked=!!c.config.answer_ahead_enabled;}
+  if($("lexicon")){$("lexicon").checked=!!c.config.lexicon_enabled;}
   if($("interpret")){
     $("interpret").checked=!!c.config.interpret_enabled;
     $("interpTarget").value=c.config.interpret_target||"en";
@@ -2514,6 +2518,14 @@ async function saveAnswerAhead(){
   const on=$("answerAhead").checked;
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({answer_ahead_enabled:on})});
   toast(on?"Answer ahead on — on-device only":"Answer ahead off");
+}
+/* Lexicon. The toast names the egress rather than the feature, because this is
+   the only switch on this page that turns one on — saying "Lexicon on" and
+   leaving the wearer to find out later is how a privacy surprise happens. */
+async function saveLexicon(){
+  const on=$("lexicon").checked;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({lexicon_enabled:on})});
+  toast(on?"Lexicon on — sends one word (never the sentence) to look it up":"Lexicon off");
 }
 /* The live interpreter. Posts to /dreamlayer/interpret rather than /config because
    the setting lives on the running EarHosts as well as on disk — a config write

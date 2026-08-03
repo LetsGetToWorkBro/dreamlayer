@@ -2149,6 +2149,31 @@ function glassAnswerAheadCard(c){                    /* ON THE TIP OF YOUR TONGU
   gend(c.dismiss_ms || 8000);
 }
 
+function glassLexiconCard(c){                        /* LEXICON */
+  /* `primary` is the word the wearer just heard and could not place; `detail`
+     is the entire answer. Through the generic renderer this card would draw
+     "undulating" and drop what it means — the question echoed back with the
+     answer removed — which is why it has a branch at all.
+
+     Quiet by construction, like glassAnswerAheadCard: memory teal, no flash, no
+     sound. Someone is still talking; this is a footnote, not an alert. `footer`
+     is the part of speech when the dictionary gave one. */
+  const ctx = glassCtx(); gback(ctx);
+  garc(ctx, 128, 128, 100, 0, 360, GP.border_subtle);
+  gtext(ctx, String(c.eyebrow || "LEXICON").toUpperCase().slice(0, 20),
+        128, 66, GP.memory_trace, "sm");
+  ctx.beginPath(); ctx.moveTo(48, 82); ctx.lineTo(208, 82);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+  gtext(ctx, String(c.primary || "").trim().slice(0, 22), 128, 112,
+        GP.text_primary, "lg");
+  const pos = String(c.footer || "").trim();
+  if (pos) gtext(ctx, pos.slice(0, 16), 128, 132, GP.text_ghost, "sm");
+  const sense = gwrap(String(c.detail || "").trim(), 26).slice(0, 3);
+  sense.forEach((ln, i) => gtext(ctx, ln, 128, (pos ? 158 : 148) + i * 15,
+                                 GP.text_secondary, "sm"));
+  gend(c.dismiss_ms || 7000);
+}
+
 function glassDeviationCard(c){                      /* SOUNDS DIFFERENT — THEY said */
   /* The outward twin of glassConsistencyCard, and it fails the same way through
      the generic renderer: `prior_summary` lives in `footer`, so what they said
@@ -4319,6 +4344,7 @@ function renderEvent(ev){
   else if (t === "CommitmentRecallCard") glassOwedCard(c);
   else if (t === "ProactiveMemoryCard") glassProactiveCard(c);
   else if (t === "AnswerAheadCard") glassAnswerAheadCard(c);
+  else if (t === "LexiconCard") glassLexiconCard(c);
   else if (t === "DeviationAlertCard") glassDeviationCard(c);
   else if (t === "PrivateZoneCard") glassPrivateZoneCard(c);
   else if (t === "SynesthesiaCard") glassSynesthesiaCard(c);

@@ -597,6 +597,16 @@ class BrainConfig:
     # called with `no_cloud=True`), so an overheard question never egresses,
     # whatever the cloud settings say.
     answer_ahead_enabled: bool = False
+    # Defining a rare word the room just used, on your own glass — "Lexicon".
+    # A fifth opt-in, off by default, and the only one on the ear's path that
+    # EGRESSES: it asks a keyless third-party dictionary (dictionaryapi.dev)
+    # what one word means. That is why it is its own switch rather than a rider
+    # on captions — remembering speech, drawing it, and asking the internet
+    # about a word from it are three different exposures, and only the third
+    # leaves the device. What leaves is ONE word, taken from the PII-redacted
+    # text, never the utterance; and `incognito_now()` (LAN-only, quiet hours,
+    # a private zone) suppresses the lookup entirely.
+    lexicon_enabled: bool = False
     # Places where the Brain captures NOTHING — the "Private zones" feature.
     # Each entry is {name, lat, lon, radius_m}. Inside one, `incognito_now()`
     # returns True, so every existing gate (the ear, captions, the lens ring,

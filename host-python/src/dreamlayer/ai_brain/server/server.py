@@ -1447,7 +1447,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
     #: difference between this and the Veil.
     FOCUS_HUSHED = PROACTIVE_KINDS | frozenset({
         "caption", "interpret", "truth", "answer_ahead", "fact_check", "intro",
-        "listening",
+        "listening", "lexicon",
     })
 
     def _may_interrupt(self, kind: str) -> bool:
@@ -1909,6 +1909,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "nightly_train_enabled",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
                   "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
+                  "lexicon_enabled",
                   "interpret_enabled", "interpret_target", "truth_lens_enabled",
                   "intro_capture_enabled", "intro_auto_keep",
                   "proactive_cards", "proactive_alerts", "focus_mode",
