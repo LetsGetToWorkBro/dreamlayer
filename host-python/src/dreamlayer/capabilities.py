@@ -685,6 +685,11 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # a typed line on it. Promoted on a line that CROSSED, either way — a
     # radio with no peer in range connects perfectly and carries nothing.
     "mesh_range",
+    # …and `structured_concurrency`, once the one scope in the Brain that
+    # genuinely needed a cancel-all got one: `live_dream.scene` checked the
+    # Veil at the top and then ran VLM calls on the wearer's camera frame
+    # for as long as the backend took.
+    "structured_concurrency",
     # …and `lan_discovery`, once the Brain announced itself at all. Promoted on
     # a service REGISTERED, which is the strongest evidence mDNS offers a
     # publisher — there is no acknowledgement to wait for — and still far more

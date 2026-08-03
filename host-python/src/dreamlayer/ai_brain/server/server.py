@@ -3635,6 +3635,17 @@ def _capability_payload(brain: Brain) -> dict:
     # service is in neither set. Its liveness rides `HomeHUD.status()`, which
     # says something a flag could not: configured, polling, and how many cards
     # have actually reached the glass.
+    # `structured_concurrency` — the Veil-stop as a scope rather than a
+    # top-of-function check. Both halves matter: the anyio WHEEL (the capability
+    # is anyio; the asyncio path is the baseline it must never do worse than)
+    # AND a scope having actually run, because a wheel with no beat through it
+    # is the importable-never-called state this whole audit is about.
+    try:
+        from .veil_scope import driving as _scope_driving
+        if _scope_driving():
+            env["DL_WIRED_STRUCTURED_CONCURRENCY"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
     # `mesh_range` — a line that genuinely crossed the air, in either
     # direction. Not the wheel, and not a node having opened: a radio with no
     # peer in range connects perfectly and carries nothing, which is the normal
