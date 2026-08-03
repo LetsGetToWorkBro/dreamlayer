@@ -3505,6 +3505,23 @@ def _brain_view_payload(brain: Brain) -> dict:
     }
 
 
+def _consent_report(brain: Brain) -> list:
+    """The consent registry, without building one to ask — same rule as every
+    other status read here: a poll must not be what constructs the thing it
+    reports on."""
+    try:
+        from .consent_gate import EgressConsent
+        got = getattr(brain, "_egress_consent", None)
+        # An unbuilt gate is answered from a THROWAWAY rather than by refusing
+        # or by caching one: reading the report is side-effect-free, and a
+        # wearer asking "what CAN this device do" deserves the full list before
+        # anything has run — while a status poll still must not be what makes
+        # the Brain hold a gate it was not otherwise using.
+        return (got or EgressConsent(brain)).report()
+    except Exception:                                # noqa: BLE001
+        return []
+
+
 def _home_status(brain: Brain) -> dict:
     """`HomeHUD.status()`, without building one to ask.
 
@@ -5110,6 +5127,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 # how many cards have actually reached the glass. A URL saved
                 # with nothing coming back is the failure this makes visible.
                 "home": _home_status(brain),
+                # Everything consequential this device can do, in one list:
+                # what it sends or reads, where that goes, whether it may, and
+                # whether it ever has. The question behind the whole product —
+                # "what is this doing, and to whom?" — had no single answer
+                # before; it was a dozen switches with a dozen names.
+                "consent": _consent_report(brain),
             })
 
         def _get_mesh(self, path, qs):

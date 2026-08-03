@@ -34,7 +34,16 @@ dream    = ["brilliant-msg>=7,<8", "Pillow>=10"]   # pip install dreamlayer[drea
 # --- Optional integration groups (adapters lazy-import these; every one has a
 #     working fallback, so the core system runs with none of them installed) ---
 memory   = ["sqlite-vec>=0.1,<1", "chromadb>=1,<2", "sentence-transformers>=5,<6", "model2vec>=0.8,<1", "lancedb>=0.34,<1", "usearch>=2,<3", "docarray>=0.41,<1", "networkx>=3,<4"]
-voice    = ["silero-vad>=6,<7", "faster-whisper>=1,<2", "openwakeword>=0.6,<1", "sounddevice>=0.5,<1", "sherpa-onnx>=1,<2", "piper-tts>=1.2,<2", "kokoro>=0.9,<1"]
+# piper-tts is capped BELOW 1.3 on a licence boundary, not a compatibility one.
+# The project moved from rhasspy/piper (MIT) to OHF-voice/piper1-gpl at 1.3.0
+# and is GPL-3.0-or-later from there on, because it links espeak-ng. DreamLayer
+# is Apache-2.0 and `voice` is not an opt-in extra — it is in profile-phone and
+# profile-mac, so it ships. `>=1.2,<2` spanned the relicense, and the stale lock
+# is why nothing said so: dependency-review and pip-audit both read uv.lock, and
+# piper-tts had never been in it. To go past 1.3 somebody has to decide the
+# licensing question on purpose; the API side is already handled (tts_piper.py
+# calls synthesize_wav when it is there).
+voice    = ["silero-vad>=6,<7", "faster-whisper>=1,<2", "openwakeword>=0.6,<1", "sounddevice>=0.5,<1", "sherpa-onnx>=1,<2", "piper-tts>=1.2,<1.3", "kokoro>=0.9,<1"]
 # zero-shot voice cloning (Juno speaks in her own voice, offline) — heavy (torch),
 # opt-in only, so it is NOT in any deployment profile: `pip install dreamlayer[voice-clone]`
 voice-clone = ["coqui-tts>=0.24,<1"]
@@ -120,6 +129,16 @@ profile-cloud = ["dreamlayer[structured,llm,intelligence,privacy]"]  # remote ru
 # ranges. They target different machines — the profiles above say "pick ONE
 # per machine" — so declare every cross-machine pair conflicting instead of
 # letting the incompatibility block the universal lock.
+#
+# birds/infra is a different shape of the same problem and worth being plain
+# about, because it costs something real. birdnetlib hard-pins watchdog==2.1.9;
+# the infra extra needs watchdog>=6 for the filesystem watcher. That is not a
+# per-machine split — both would run on the same Mac — so declaring it means
+# `bird_song` and `fs_watch`/`lan_discovery`/`dashboard` genuinely cannot
+# co-install in one environment until birdnetlib relaxes its pin. The
+# alternative is worse: without the declaration `uv lock` cannot resolve at
+# all, so the lock silently rots and NOTHING gets a reproducible install.
+# `birds` ships in no profile (it is opt-in); `infra` is in profile-mac only.
 conflicts = [
     [{ extra = "dream" },        { extra = "vision" }],
     [{ extra = "dream" },        { extra = "profile-mac" }],
@@ -127,6 +146,13 @@ conflicts = [
     [{ extra = "hardware" },     { extra = "profile-mac" }],
     [{ extra = "profile-halo" }, { extra = "vision" }],
     [{ extra = "profile-halo" }, { extra = "profile-mac" }],
+    [{ extra = "dream" },        { extra = "doc-ocr" }],
+    [{ extra = "hardware" },     { extra = "doc-ocr" }],
+    [{ extra = "profile-halo" }, { extra = "doc-ocr" }],
+    [{ extra = "birds" },        { extra = "infra" }],
+    [{ extra = "birds" },        { extra = "profile-mac" }],
+    [{ extra = "math-ocr" },     { extra = "vision" }],
+    [{ extra = "math-ocr" },     { extra = "profile-mac" }],
 ]
 
 [tool.setuptools.package-data]

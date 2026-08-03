@@ -1677,6 +1677,29 @@ local function draw_spoken_caption(card, sc, enter_t, exit_t)
   end
 end
 
+-- LexiconCard: a rare word heard in conversation, with what it means.
+-- The SENSE is the card. Drawn by draw_layout_card (where an unmapped card
+-- carrying a `layout` lands) it went out as one unwrapped `detail` row, so a
+-- 140-character dictionary sense ran off both edges of the disc — present in
+-- the payload, unreadable on the glass. Wrapped here against the device's own
+-- metrics rather than trusting the host's byte estimate: `cards.lua` clamps to
+-- 5 x 24 UTF-8 bytes, which is a guess about a font this module actually has.
+local function draw_lexicon(card, sc, enter_t, exit_t)
+  world_bed(card, sc, enter_t, exit_t, P.accent_memory,
+            card.eyebrow or "LEXICON", false)
+  local word = card.primary or ""
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    text(T.truncate(word, "hero", 200), CX, 100, P.text_primary,
+         T.fit_size(word, 200, {"hero","xl","lg"}))
+    if (card.footer or "") ~= "" then                  -- part of speech
+      text(T.truncate(card.footer, "sm", 200), CX, 126, P.accent_memory_dim, "sm")
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and (card.detail or "") ~= "" then
+    text_block(card.detail, CX, 166, P.text_secondary, "sm", 196, 3)
+  end
+end
+
 -- MorningBriefCard: "YOUR DAY" — the wake brief, with up to three bullets.
 local function draw_morning_brief(card, sc, enter_t, exit_t)
   world_bed(card, sc, enter_t, exit_t, P.accent_memory,
@@ -2028,6 +2051,7 @@ local DRAW = {
   HereCard              = function(c,sc,et,xt,it) draw_here(c,sc,et,xt)                  end,
   PersonDossierCard     = function(c,sc,et,xt,it) draw_person_dossier(c,sc,et,xt)        end,
   SpokenCaptionCard     = function(c,sc,et,xt,it) draw_spoken_caption(c,sc,et,xt)        end,
+  LexiconCard           = function(c,sc,et,xt,it) draw_lexicon(c,sc,et,xt)               end,
   MorningBriefCard      = function(c,sc,et,xt,it) draw_morning_brief(c,sc,et,xt)         end,
   -- Ember (docs/EMBER.md)
   EmberPromptCard       = function(c,sc,et,xt,it) draw_ember_prompt(c,sc,et,xt,it)       end,

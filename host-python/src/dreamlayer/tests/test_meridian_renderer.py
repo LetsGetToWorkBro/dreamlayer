@@ -51,6 +51,16 @@ CONSENT_CARD = """{
   } }"""
 
 
+LEXICON_SENSE = ("noisy and difficult to control, in the way a crowd is when "
+                 "it has stopped listening to anyone at all")
+LEXICON_CARD = """{
+  type = "LexiconCard", eyebrow = "LEXICON", primary = "Obstreperous",
+  detail = "%s", footer = "adjective", layout = {
+    eyebrow = { x = 128, y = 60 }, primary = { x = 128, y = 106 },
+    separator = { x1 = 44, x2 = 212, y = 76 },
+  } }""" % LEXICON_SENSE
+
+
 @pytest.fixture()
 def dev():
     if not LUPA_AVAILABLE:
@@ -237,6 +247,32 @@ def test_consent_card_actually_draws(dev):
     dev.execute("__now = 1400; _r.tick()")
     texts = _texts(dev)
     assert "Allow access?" in texts and "CONSENT REQUIRED" in texts
+
+
+# ---------------------------------------------------------------------------
+# LexiconCard: the sense IS the card, and it has to fit on a 240px disc
+# ---------------------------------------------------------------------------
+
+def test_lexicon_card_wraps_the_sense_instead_of_running_off_the_disc(dev):
+    """`LexiconCard` carries a `layout`, so before it had a drawing of its own
+    it landed in `draw_layout_card` — which puts `detail` out as ONE unwrapped
+    row. A dictionary sense is arbitrary third-party prose up to 140
+    characters, so the definition was in the payload and off the edge of the
+    glass. Asserted as "no single draw carries the whole sense, and it arrives
+    in pieces", because that is the difference between the two renderers.
+    """
+    dev.execute(f"__now = 1000; _r.show_card({LEXICON_CARD})")
+    dev.execute("__now = 1400; _r.tick()")
+    drawn = _texts(dev).split("|")
+    assert "Obstreperous" in drawn                       # the word
+    assert "adjective" in drawn                          # part of speech
+    assert LEXICON_SENSE not in drawn, (
+        "the sense went out as one unwrapped row — that is the layout "
+        "renderer's behaviour, not a lexicon drawing")
+    pieces = [s for s in drawn if s and s in LEXICON_SENSE
+              and s not in ("Obstreperous", "adjective")]
+    assert len(pieces) >= 2, f"the sense was not wrapped: {pieces}"
+    assert pieces[0] and LEXICON_SENSE.startswith(pieces[0])
 
 
 # ---------------------------------------------------------------------------

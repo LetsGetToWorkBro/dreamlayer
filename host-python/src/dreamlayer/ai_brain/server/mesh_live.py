@@ -120,11 +120,22 @@ class MeshLink:
             return {"ok": False, "reason": "empty"}
         if len(line) > MAX_CHARS:
             return {"ok": False, "reason": "too-long", "max": MAX_CHARS}
+        # The Veil first, and reported SEPARATELY from consent. Both refuse,
+        # and they are not the same thing to a wearer: "you are incognito right
+        # now" is a state they can undo in a second, "you have not consented to
+        # the radio" is a decision they have not made. Collapsing them into one
+        # reason would tell them the wrong thing to go and fix.
         try:
             if self.brain.incognito_now():
                 return {"ok": False, "reason": "veiled"}
         except Exception:                            # noqa: BLE001 — fail closed
             return {"ok": False, "reason": "veiled"}
+        # Then the one gate every consequential thing consults, so "what is
+        # this device doing, and to whom?" has a single answer instead of a
+        # dozen switches with different names.
+        from .consent_gate import consent
+        if not consent(self.brain).check("mesh"):
+            return {"ok": False, "reason": "not-consented"}
         b = self.bridge()
         if b is None or not getattr(b, "ready", False):
             return {"ok": False, "reason": "no-node"}
@@ -135,6 +146,7 @@ class MeshLink:
             return {"ok": False, "reason": "radio-error"}
         if got:
             self.sent += 1
+            consent(self.brain).note("mesh")         # a fact, not a setting
         return {"ok": got, "reason": "" if got else "radio-refused"}
 
     # --------------------------------------------------------------- receive
