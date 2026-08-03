@@ -96,13 +96,28 @@ class TestTheBeatStopsWhenTheVeilDrops:
     def test_a_quick_beat_does_not_wait_for_the_wearer_to_veil(self):
         """Setting the stop event on COMPLETION as well as on the Veil is what
         makes this a scope rather than a leak — without it a beat that finished
-        in 200ms would hold its worker until the wearer happened to veil."""
+        in 200ms would hold its worker until the wearer happened to veil.
+
+        Run on a thread with a bounded join, NOT as a straight call with an
+        elapsed-time assertion. Without the completion signal the watcher loops
+        forever, so the straight version does not fail — it HANGS, taking the
+        suite with it. A test that cannot tell "slow" from "never returns" is
+        not testing the thing this guards."""
+        import threading
+        out = {}
+
         async def _fast():
             return "done"
-        t0 = time.monotonic()
-        assert run_guarded(_fast, _Veil(), poll_s=5.0) == "done"
-        assert time.monotonic() - t0 < 2.0, (
-            "a finished beat sat waiting on the veil watcher")
+
+        def _run():
+            out["value"] = run_guarded(_fast, _Veil(), poll_s=5.0)
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(timeout=3.0)
+        assert not t.is_alive(), (
+            "a finished beat never released its worker — the scope is a leak")
+        assert out["value"] == "done"
 
     def test_a_failing_beat_yields_nothing_rather_than_raising(self):
         """Identical whichever path `run_until_veil` takes. anyio propagates an
