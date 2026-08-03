@@ -52,11 +52,11 @@ class TestTheDistinctionIsReal:
             assert cap.wires_on_install(c) is True, key
 
     def test_a_dormant_adapter_with_no_live_caller_does_not(self):
-        # `persona_tuning` and `wake_word` used to be here and were WIRED
-        # (2026-08-02 / -03). Replace an entry when it gets built; never keep
-        # one that is no longer dormant, or this stops measuring anything.
+        # `persona_tuning`, `wake_word` and `fs_watch` used to be here and were
+        # WIRED (2026-08-02 / -03). Replace an entry when it gets built; never
+        # keep one that is no longer dormant, or this stops measuring anything.
         for key in ("typed_pipeline", "structured_output", "asgi_server",
-                    "mesh_range", "fs_watch"):
+                    "mesh_range", "lsl_streams"):
             c = cap._BY_KEY.get(key)
             if c is None:
                 continue

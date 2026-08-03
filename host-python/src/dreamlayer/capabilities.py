@@ -676,6 +676,11 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # both directions (`test_capability_install_promise.py`) rather than by
     # reading the file — the one-way check had been passing throughout.
     "coreml_ondevice", "persona_tuning", "typed_models",
+    # …and `fs_watch`, once a watchdog observer per watched folder replaced a
+    # 3-second stat sweep. Promoted on a change event DELIVERED, never on an
+    # observer having started — a filesystem that emits nothing starts one
+    # just as happily.
+    "fs_watch",
     # …and `lan_discovery`, once the Brain announced itself at all. Promoted on
     # a service REGISTERED, which is the strongest evidence mDNS offers a
     # publisher — there is no acknowledgement to wait for — and still far more

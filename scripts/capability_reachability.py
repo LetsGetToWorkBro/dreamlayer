@@ -136,7 +136,9 @@ _NOT_YET_HOSTED = {
     # `lan_discovery` left next — `ai_brain/server/discovery_live.py` advertises
     # the Brain on start and the CLI browses for it when no `--brain` is given.
     "mesh_range": "the tincan bond stays Bluetooth-range instead of miles",
-    "fs_watch": "sources rescan on a timer instead of reacting",
+    # `fs_watch` left next — `ai_brain/server/fs_watch_live.py` puts a
+    # watchdog observer on every watched folder and debounces it into one
+    # reindex; the timer stays as insurance, slowed to 5 minutes.
     "structured_concurrency": "Veil-stop is hand-rolled rather than structural",
     "mlx_train": "the local model never adapts to the wearer overnight",
 }

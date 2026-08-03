@@ -688,6 +688,26 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
     def start_watching(self, interval: float = 3.0) -> None:
         if self._watch_stop is not None:
             return
+        # React instead of asking. A watchdog observer per folder turns "a note
+        # you saved becomes answerable within three seconds" into "…as you save
+        # it", and stops a full stat sweep of every watched file twenty times a
+        # minute forever. `fs_watch_live` debounces, because one save is many
+        # events and `poll()` reindexes.
+        started = 0
+        try:
+            from .fs_watch_live import IDLE_INTERVAL_S, watchers
+            started = watchers(self).start()
+        except Exception:                            # noqa: BLE001 — never fail boot
+            log.warning("folder watchers unavailable", exc_info=True)
+        if started:
+            # The timer STAYS, slowed to insurance. Not for the missing-wheel
+            # case — that one never reaches here — but because a watcher that
+            # is running can still miss things: network mounts, some FUSE
+            # filesystems and containerised bind-mounts deliver events
+            # unreliably or not at all, which is why watchdog ships a polling
+            # observer of its own. Dropping the sweep would go silent on
+            # exactly the setups that were already weakest.
+            interval = IDLE_INTERVAL_S
         self._watch_stop = threading.Event()
 
         def loop():
@@ -705,6 +725,13 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         if self._watch_stop is not None:
             self._watch_stop.set()
             self._watch_stop = None
+        # Observers run their own threads and a pending debounce holds a timer;
+        # leaving either behind would reindex after the wearer asked us to stop.
+        try:
+            from .fs_watch_live import watchers
+            watchers(self).stop()
+        except Exception:                            # noqa: BLE001
+            pass
 
     # -- the memory lifecycle (ai_brain/server/retention_live.py) -------------
 
@@ -3552,6 +3579,18 @@ def _capability_payload(brain: Brain) -> dict:
         if _attn_gate(brain).tuning_live():
             env["DL_WIRED_PERSONA_TUNING"] = "1"
     except Exception:                               # noqa: BLE001
+        pass
+    # `fs_watch` — the folders reacting instead of being asked. The flag
+    # follows a change event genuinely DELIVERED, never an observer having
+    # started: starting one on a network mount that emits nothing looks
+    # identical to starting one that works, right up until the wearer saves a
+    # file and waits — and what keeps working in that case is the timer, so
+    # reporting the watcher live would name the wrong mechanism.
+    try:
+        _fw = getattr(brain, "_fs_watchers", None)
+        if _fw is not None and _fw.driving():
+            env["DL_WIRED_FS_WATCH"] = "1"
+    except Exception:                           # noqa: BLE001
         pass
     # `lan_discovery` — the Brain's presence on the LAN. Weaker evidence than
     # the rest of this block, and worth naming as such: mDNS gives a publisher
