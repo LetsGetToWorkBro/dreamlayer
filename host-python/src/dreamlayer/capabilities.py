@@ -321,10 +321,6 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("asgi_server", "ASGI adapter for your own dispatch", "platform",
         ("fastapi",), "platform", "ai_brain/server_fastapi.py",
         gain="the Brain's own server is the stdlib one and stays that way; this wires a dispatch function YOU write to FastAPI, with the auth and error envelope handled", impact=1, before=3.5, after=4),
-    Cap("frame_glasses", "Brilliant Frame as a second display", "platform",
-        ("frame_sdk",), "platform", "bridge/frame_sdk.py",
-        gain="baseline targets Halo only; this lights up a Brilliant Frame too", impact=2, before=0, after=3.5,
-        optional=True),   # frame-sdk has no universal wheel — needs a compiler
     Cap("lsl_streams", "Lab Streaming Layer sensor export", "platform",
         ("pylsl",), "platform", "pipelines/lsl_transport.py",
         gain="baseline has no research export; this syncs sensors with lab tooling", impact=1, before=0, after=3),
@@ -521,7 +517,17 @@ _NOT_WIRED = frozenset({
     # wearer runs. `attention_live.AttentionGate` re-hosts the plain half
     # Brain-side, the way `retention_live.py` did, and `push_event` consults it.
     # It reports dormant until the wearer's own swats support a bar.
-    "speaker_id", "persona_tuning", "object_tracking",
+    # nlp is listed here as a CORRECTION, not a downgrade. It reported "active"
+    # on nothing but an installed wheel, because it was never in this set — and
+    # neither of its two seams had a live caller. `CommitmentNLP` was built only
+    # by the Orchestrator (decisions/0001), and `pipelines.ingest`'s spaCy pass
+    # is tier 2, reached only through `IngestPipeline.ingest`, which is also
+    # Orchestrator-only; the Brain calls the pure tier-1 `extract_events`. So
+    # the highest-impact entry in the catalogue lit green on `import spacy`
+    # while the wearer's commitments were parsed by regex. `nlp_live.py` hosts
+    # it Brain-side now, on `BrainLenses.ingest_utterance`, and the flag follows
+    # a FIELD the regex left empty and the parser filled.
+    "speaker_id", "persona_tuning", "object_tracking", "nlp",
     "structured_output", "typed_models", "typed_pipeline",
     # platform / infra: no live loader / surface reaches these
     "plugin_entrypoints", "event_bus", "asgi_server",
@@ -532,7 +538,7 @@ _NOT_WIRED = frozenset({
     # a file the wearer carries between their own devices: the CRDT makes the
     # channel irrelevant (merge is commutative, associative, idempotent), which is
     # exactly why no server has to hold their figments.
-    "frame_glasses", "lsl_streams", "mlx_train", "wasm_plugins", "crdt_sync",
+    "lsl_streams", "mlx_train", "wasm_plugins", "crdt_sync",
     "mesh_range", "extism_plugins", "dashboard", "fs_watch",
     "lan_discovery", "spatial_viz",
     # privacy: the structural anyio veil-stop is never used (the flag-gate is).
@@ -646,6 +652,11 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # diarizer at all. Promoted only on a segment genuinely split into more
     # than one voice — the fallback answers one for everything.
     "diarization",
+    # …and `nlp`, once the parse reached the ingest path. Promoted only on a
+    # field the regex left empty — never on `CommitmentNLP.available`, which is
+    # just "spacy imported", and never on the pass having run, which it does on
+    # every commitment row whether or not spaCy is installed.
+    "nlp",
 })
 
 
@@ -890,7 +901,7 @@ _PACK_BY_KEY = {p.key: p for p in PACKS}
 # pack whose only gap is a build-only extra reads installed, and "Retry the rest"
 # doesn't loop forever re-attempting a dep that deterministically can't build.
 # These are the pip distribution names for the caps marked optional=True
-# (frame_glasses→frame-sdk, bird_song→birdnetlib, sound_pairing→ggwave);
+# (bird_song→birdnetlib, sound_pairing→ggwave);
 # test_pack_optional_reqs keeps these in lockstep so a newly-optional cap can't
 # silently fall through.
 PACK_OPTIONAL_REQS = frozenset({"frame-sdk", "birdnetlib", "ggwave"})

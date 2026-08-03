@@ -724,19 +724,19 @@ def buckets(caps, closure):
 class TestTheCapabilityCheckerSeesTheWholeCatalogue:
 
     def test_it_reads_every_declared_capability(self, caps):
-        """69 today. The count matters because the handoff said ~39 for months
+        """68 today. The count matters because the handoff said ~39 for months
         — a checker reading half the catalogue would have agreed with it.
 
-        This is a PARSER floor, not a catalogue-size freeze. It fell 74 -> 69 as
-        five entries were deliberately retired (`asr_alignment`, `facial_aus`,
-        `skia_render`, `memory_dedup`, and earlier `causal_fusion`), each
-        recorded in decisions/0007 with an inverted test. Lower it when an entry
-        is retired on purpose; never lower it to make a red run go green,
+        This is a PARSER floor, not a catalogue-size freeze. It fell 74 -> 68 as
+        six entries were deliberately retired (`asr_alignment`, `facial_aus`,
+        `skia_render`, `memory_dedup`, `frame_glasses`, and earlier
+        `causal_fusion`), each recorded with an inverted test. Lower it when an
+        entry is retired on purpose; never lower it to make a red run go green,
         because the failure this guards is the checker silently reading half the
         file.
         """
         decl = caps._declared_caps()
-        assert len(decl) >= 69, f"only {len(decl)} capabilities parsed"
+        assert len(decl) >= 68, f"only {len(decl)} capabilities parsed"
 
     def test_every_capability_names_a_seam_or_is_a_documented_concept(self, caps):
         """`seam` is the only field that makes this checkable at all. One entry
@@ -762,9 +762,34 @@ class TestTheCapabilityCheckerSeesTheWholeCatalogue:
         for prefix, why in caps._BY_DESIGN:
             assert prefix and len(why) > 20, (prefix, why)
 
-    def test_orchestrator_seams_land_in_by_design_not_in_the_open_list(self, caps):
-        assert caps._by_design("orchestrator/wakeword.py")
-        assert not caps._by_design("memory/doc_schema.py")
+    def test_an_orchestrator_seam_is_not_by_design_any_more(self, caps):
+        """The inversion. `_BY_DESIGN` used to carry an `orchestrator/` prefix,
+        so eleven capabilities were filed as settled decisions on a PATH RULE —
+        including `nlp`, the only impact-5 entry there is. "Its consumer is the
+        Orchestrator" is the reason eight capabilities were re-hosted Brain-side,
+        not a reason to stop looking. They live in `_NOT_YET_HOSTED` now, each
+        with the wearer-facing loss written out, and the report prints them as
+        real work."""
+        assert not caps._by_design("orchestrator/wakeword.py")
+        assert caps._not_yet("wake_word")
+        assert not caps._not_yet("memory/doc_schema.py")
+
+    def test_the_not_yet_bucket_says_what_the_wearer_loses(self, caps):
+        """Same bar as `_BY_DESIGN`'s reasons: a blank or generic string turns
+        the bucket back into a place to hide gaps."""
+        assert caps._NOT_YET_HOSTED
+        for key, why in caps._NOT_YET_HOSTED.items():
+            assert key and len(why) > 20, (key, why)
+
+    def test_a_key_leaves_the_not_yet_bucket_only_by_being_built(self, caps):
+        """`nlp` was the first out. It must not have been quietly moved to
+        `_BY_DESIGN` — that would be the reclassification this split exists to
+        make impossible — and it must now be genuinely driven."""
+        assert "nlp" not in caps._NOT_YET_HOSTED
+        assert not caps._by_design(
+            "orchestrator/commitment_nlp.py, social_lens/ner_spacy.py")
+        from dreamlayer.capabilities import _PROMOTED_AT_RUNTIME
+        assert "nlp" in _PROMOTED_AT_RUNTIME
 
     def test_the_dormant_set_is_read_from_capabilities_not_hardcoded(self, caps):
         """`_NOT_WIRED` is the product's own honest-status list. Reading it is
@@ -987,7 +1012,7 @@ class TestLoadableIsNotOneState:
         partition the catalogue. A key in two buckets double-counts; a key in
         none disappears from the audit entirely."""
         names = ("ok", "unconstructed", "conditional", "driven", "open_gaps",
-                 "dormant", "expected", "concepts")
+                 "dormant", "expected", "not_yet", "concepts")
         seen: dict = {}
         for name in names:
             for row in buckets[name]:
@@ -1481,7 +1506,7 @@ class TestTheDependencyCheckerSeesTheWholeCatalogue:
 
     def test_it_reads_every_declared_capability(self, dep):
         decl = dep._declared_caps()
-        assert len(decl) >= 69, f"only {len(decl)} capabilities parsed"
+        assert len(decl) >= 68, f"only {len(decl)} capabilities parsed"
         # `kind="service"` capabilities legitimately declare () — nothing is
         # pip-installed, so there is no probe to audit. Everything else must
         # carry at least one module, or it would silently leave the audit.

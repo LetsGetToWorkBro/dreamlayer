@@ -88,12 +88,46 @@ SRC = ROOT / "host-python" / "src" / PKG
 # Seams that are unreachable ON PURPOSE, with the reason. Anything not matched
 # here and not in the closure is an open question, which is the list worth
 # reading.
+# Seams that are unreachable ON PURPOSE — and the bar for being here is now
+# EVIDENCE ABOUT THE FEATURE, not the directory the file happens to sit in.
+#
+# This used to be a blanket path rule, and `orchestrator/` swept eight entries
+# into it. That was wrong in the way `decisions/0007` warns about from the other
+# direction: *"do not shrink this list by moving entries to `_BY_DESIGN` without
+# evidence … filing them there would turn a measurement into a claim."* Nobody
+# moved them; the prefix did. And "Orchestrator-only" is precisely the reason
+# SEVEN capabilities were re-hosted Brain-side during 2026-08-02 — it describes
+# where a seam is wired today, never whether it could be reached.
+#
+# `simulator/` survives because a debug visualiser for developers is genuinely
+# not a wearer feature. `bridge/` is gone: the Brain reaches the bridge now
+# (`halo_link.py`), and the one entry that used it — `frame_glasses`, for a
+# different manufacturer's device — was deleted rather than excused. `rem/` is
+# gone too: the nightly job is a SCHEDULER question, and the Brain already runs
+# schedulers (`start_retention_scheduler`), so calling it unreachable was the
+# same mislabel.
 _BY_DESIGN = (
-    ("orchestrator/", "Orchestrator-only — the Brain never builds one (decisions/0001)"),
     ("simulator/", "the desktop simulator, not the product"),
-    ("bridge/", "a different device's SDK"),
-    ("rem/", "the nightly REM job; the Brain runs no REM"),
 )
+
+# …and the entries that are simply NOT BUILT YET, which the report must not
+# call "by design". Each is real work with a real user-facing loss, listed here
+# so the number is visible instead of hidden inside a bucket that reads as
+# settled. Removing a key from here means it got built, never that it got
+# reclassified.
+_NOT_YET_HOSTED = {
+    # `nlp` was the first one out — `ai_brain/server/nlp_live.py` sharpens the
+    # `person` and `due` the tier-1 regex leaves empty, on the ingest path every
+    # spoken line already takes.
+    "onnx_speech": "one on-device engine for ASR + VAD + speaker + wake",
+    "wake_word": "\"Hey Juno\" only works because ASR transcribes everything first",
+    "home_hud": "the glass never taps you that the garage is open",
+    "lan_discovery": "the wearer types the Brain's IP address in by hand",
+    "mesh_range": "the tincan bond stays Bluetooth-range instead of miles",
+    "fs_watch": "sources rescan on a timer instead of reacting",
+    "structured_concurrency": "Veil-stop is hand-rolled rather than structural",
+    "mlx_train": "the local model never adapts to the wearer overnight",
+}
 
 
 def _lens_module():
@@ -146,6 +180,16 @@ def _by_design(seam: str) -> str:
         if prefix in (seam or ""):
             return why
     return ""
+
+
+def _not_yet(key: str) -> str:
+    """Why this one is unreached, when the reason is "nobody has built it".
+
+    Kept apart from `_by_design` on purpose. A reader who sees "unreachable by
+    design" stops looking; a reader who sees "not yet hosted" has a to-do list.
+    Merging the two is how eight real features spent months looking settled.
+    """
+    return _NOT_YET_HOSTED.get(key, "")
 
 
 def _declared_dormant() -> set[str]:
@@ -285,6 +329,7 @@ def classify(lens=None, reachable=None) -> dict:
     dormant_keys = _declared_dormant()
     promoted_keys = _runtime_promoted()
     open_gaps, dormant, expected, concepts, ok = [], [], [], [], []
+    not_yet: list = []
     conditional, unconstructed, driven = [], [], []
     for key, _title, tier, seam in caps:
         mods = _seam_modules(seam)
@@ -315,6 +360,8 @@ def classify(lens=None, reachable=None) -> dict:
                 unconstructed.append((key, tier, seam))
             else:
                 ok.append((key, tier, seam))
+        elif _not_yet(key):
+            not_yet.append((key, tier, seam, _not_yet(key)))
         elif _by_design(seam):
             expected.append((key, tier, seam, _by_design(seam)))
         elif key in dormant_keys:
@@ -324,7 +371,8 @@ def classify(lens=None, reachable=None) -> dict:
 
     return {"caps": caps, "ok": ok, "unconstructed": unconstructed,
             "conditional": conditional, "open_gaps": open_gaps,
-            "dormant": dormant, "expected": expected, "concepts": concepts,
+            "dormant": dormant, "expected": expected, "not_yet": not_yet,
+            "concepts": concepts,
             "driven": driven, "promoted_keys": promoted_keys}
 
 
@@ -338,6 +386,7 @@ def main() -> int:
     caps, ok, unconstructed = b["caps"], b["ok"], b["unconstructed"]
     conditional, open_gaps = b["conditional"], b["open_gaps"]
     dormant, expected, concepts = b["dormant"], b["expected"], b["concepts"]
+    not_yet = b["not_yet"]
     driven = b["driven"]
 
     print(f"{len(caps)} declared capabilities · {len(ok)} with a seam the Brain "
@@ -392,6 +441,16 @@ def main() -> int:
           "to wire.")
     for key, tier, seam in sorted(dormant):
         print(f"  {key:24} {tier:12} {seam}")
+
+    print(f"\nNOT YET HOSTED BRAIN-SIDE ({len(not_yet)}) — real work, not a "
+          f"design decision")
+    print("  Each is a complete seam whose only consumer is the Orchestrator "
+          "the shipped\n  Brain never builds. Eight capabilities left this "
+          "shape on 2026-08-02 by being\n  re-hosted, not by being "
+          "reclassified — these are the ones still waiting.")
+    for key, tier, seam, why in sorted(not_yet):
+        print(f"  {key:24} {tier:12} {seam}")
+        print(f"  {'':24} {'':12} → {why}")
 
     print(f"\nunreachable BY DESIGN ({len(expected)}) — reaching these would be "
           f"the regression")

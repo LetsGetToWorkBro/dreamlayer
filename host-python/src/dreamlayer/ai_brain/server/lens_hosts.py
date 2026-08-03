@@ -318,11 +318,24 @@ class BrainLenses:
             out["observed"] += 1
         try:
             from ...pipelines.ingest import extract_events
+            from .nlp_live import nlp_live as _nlp_live
             for ev in extract_events(text):
                 if ev.kind not in SPOKEN_KINDS:
                     continue                     # objects and places are not
                                                  # statements — see SPOKEN_KINDS
                 meta = dict(ev.meta or {})
+                # The parser pass, before the row is kept. `extract_events` is
+                # tier-1 regex: on a promise it leaves `person` and `due` as
+                # EMPTY STRINGS when its patterns miss, and on a task it emits
+                # neither field at all — so Commitment Drift gets a deadline-less
+                # promise and Saga gets a promise with nobody in it. `sharpen`
+                # only ever fills a field the regex left empty, and with spaCy
+                # absent it is byte-identical to not calling it (see
+                # `nlp_live.NLPLive.sharpen`). Sharpening HERE rather than after
+                # `observe` is what makes it count: the ring row is what Drift
+                # and Saga read, and a field added to a copy afterwards would
+                # improve nothing.
+                meta = _nlp_live(self.brain).sharpen(text, ev.kind, meta)
                 if self.observe(ev.kind, ev.summary, meta=meta, via=via,
                                 person=meta.get("person") or person,
                                 confidence=float(ev.confidence),

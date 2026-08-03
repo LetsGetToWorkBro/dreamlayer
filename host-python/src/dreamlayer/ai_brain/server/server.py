@@ -3531,6 +3531,19 @@ def _capability_payload(brain: Brain) -> dict:
             env["DL_WIRED_PERSONA_TUNING"] = "1"
     except Exception:                               # noqa: BLE001
         pass
+    # `nlp` — the parse behind commitments, and the flag follows a FIELD the
+    # regex had left empty and the parser filled. Not `CommitmentNLP.available`,
+    # which is only "spacy imported": the extractor honours the floor, so on a
+    # sentence the regex already handles the parser correctly adds nothing, and
+    # that is the fallback working rather than the capability driving. It also
+    # does not follow "the pass ran" — `sharpen` runs on every commitment row
+    # whether or not spaCy is installed.
+    try:
+        from .nlp_live import nlp_live as _nlp
+        if getattr(brain, "_nlp_live", None) is not None and _nlp(brain).live():
+            env["DL_WIRED_NLP"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
     # `event_bus` — a `MeshEventBus` exists only around a MeshManager that has
     # joined a circle, and until GhostMode was reachable nothing ever joined
     # one. The flag follows a circle live on this Brain right now, so it goes

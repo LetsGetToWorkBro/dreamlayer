@@ -159,20 +159,40 @@ def test_nightly_mlx_present_reports_not_implemented(monkeypatch):
     assert "not implemented" in s.reason
 
 
-# --- bridge/frame_sdk + noa_patterns: records payloads without the SDK --------
-def test_frame_display_and_noa_patterns():
-    from dreamlayer.bridge.frame_sdk import FrameDisplay
+def test_there_is_no_frame_sdk_bridge_to_fall_back_from():
+    """RETIRED, inverted — `bridge/frame_sdk.py` and the `frame_glasses`
+    capability were removed on 2026-08-02.
+
+    They were a display adapter for Brilliant Labs **Frame**, a different device
+    from the **Halo** this product is built for. Nothing in the tree constructed
+    `FrameDisplay` outside its own tests, and nothing ever would: the Brain
+    speaks to the glasses through `bridge/real_bridge.py` over the Halo
+    protocol in `halo-lua/ble/message_types.lua`.
+
+    Deleting it rather than filing it as "unreachable by design" is the point.
+    A capability the product will never build for is not a design decision the
+    report should carry — it is an entry that makes the catalogue longer and the
+    honesty numbers worse, and every audit had to re-decide it.
+
+    FAILS ON REVERT: re-adding the module or the catalogue entry lights this up.
+    """
+    import importlib
+
+    import pytest
+    with pytest.raises(ImportError):
+        importlib.import_module("dreamlayer.bridge.frame_sdk")
+    from dreamlayer.capabilities import CAPABILITIES
+    assert not [c for c in CAPABILITIES if c.key == "frame_glasses"]
+
+
+# --- noa_patterns: a card flattened to display lines, no SDK involved ---------
+# The `FrameDisplay` half of this case went with `bridge/frame_sdk.py`.
+# `card_to_frame_lines` is pure text layout and stays.
+def test_noa_patterns():
     from dreamlayer.bridge.noa_patterns import card_to_frame_lines
 
     lines = card_to_frame_lines({"title": "Maya", "answer": "owes you $20 from lunch"})
     assert lines[0] == "Maya" and any("owes" in ln for ln in lines)
-
-    d = FrameDisplay()
-    res = d.connect()
-    if not d.available:
-        assert res["ok"] is False
-    d.show_card({"title": "Maya", "answer": "hi"})
-    assert d.sent and d.sent[-1]["kind"] == "card"
 
 
 # --- pairing_ratelimit: lockout after N fails, cleared by success -------------
