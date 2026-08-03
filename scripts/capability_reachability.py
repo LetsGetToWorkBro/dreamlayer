@@ -142,7 +142,14 @@ _NOT_YET_HOSTED = {
     # watchdog observer on every watched folder and debounces it into one
     # reindex; the timer stays as insurance, slowed to 5 minutes.
     "structured_concurrency": "Veil-stop is hand-rolled rather than structural",
-    "mlx_train": "the local model never adapts to the wearer overnight",
+    # NOT the same shape as the nine that left this bucket, and `decisions/0008`
+    # is the record. Its seam is INCOMPLETE, not unhosted: `train_nightly`
+    # imports `mlx_lm.lora` as an availability probe and returns
+    # "training not implemented" without calling it. Pointing a scheduler at it
+    # would produce a nightly no-op — the reclassification-instead-of-work this
+    # split exists to prevent — so it stays here, visible, with the accurate
+    # reason rather than being moved to `_BY_DESIGN`.
+    "mlx_train": "the trainer itself was never written (decisions/0008)",
 }
 
 
@@ -460,10 +467,11 @@ def main() -> int:
 
     print(f"\nNOT YET HOSTED BRAIN-SIDE ({len(not_yet)}) — real work, not a "
           f"design decision")
-    print("  Each is a complete seam whose only consumer is the Orchestrator "
-          "the shipped\n  Brain never builds. Nine capabilities left this "
-          "shape on 2026-08-02 by being\n  re-hosted, not by being "
-          "reclassified — these are the ones still waiting.")
+    print("  Nine capabilities left this bucket on 2026-08-02/03 by being "
+          "RE-HOSTED\n  Brain-side, never by being reclassified. Read each "
+          "reason: a seam whose only\n  consumer is the Orchestrator is a "
+          "wiring job, and one whose implementation\n  was never written is "
+          "not — the two look identical from the import graph.")
     for key, tier, seam, why in sorted(not_yet):
         print(f"  {key:24} {tier:12} {seam}")
         print(f"  {'':24} {'':12} → {why}")
