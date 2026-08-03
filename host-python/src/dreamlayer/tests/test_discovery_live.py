@@ -120,6 +120,22 @@ class TestTheTokenNeverGoesOnTheWire:
         assert key not in out
         assert out == {"path": "/dreamlayer"}
 
+    def test_the_filter_is_wired_into_the_publish_itself(self, zc):
+        """The one that matters, and it was missing until a mutation survived.
+
+        `_public_only` being correct proves nothing about `advertise` calling
+        it — that is the same importable-but-unwired shape this whole line of
+        work is about, one function deep. The guarantee has to hold at the
+        PUBLISHING BOUNDARY, against a caller who got it wrong, or it is a
+        convention rather than a filter."""
+        assert dz.Discovery().advertise(
+            7777, addresses=["10.0.0.7"],
+            properties={"pairing_token": "rune-birch", "path": "/dreamlayer"})
+        published = _FakeZC.last.registered[0].properties
+        assert published == {"path": "/dreamlayer"}, (
+            "a caller's secret reached the TXT record — every device on the "
+            "LAN reads that in the clear")
+
     def test_the_positional_token_argument_is_still_never_published(self, zc,
                                                                     lan):
         """`Discovery.advertise` keeps `token` for call-compatibility. It must
