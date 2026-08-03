@@ -153,10 +153,17 @@ class TestThePosture:
         assert HomeHUD(brain).bridge() is not None
 
     def test_the_token_never_reaches_a_card(self, brain):
+        # A recognisable marker, NOT a realistic-looking Home Assistant token.
+        # The first version of this used a real JWT header (`eyJhbGciOi…`) for
+        # verisimilitude and gitleaks flagged the file — correctly: a scanner
+        # cannot tell a fixture from a leak, and a repo that trains its
+        # contributors to wave that finding through is worse off than one with
+        # a slightly less realistic test.
+        brain.config.home_assistant_token = "ha-token-MUST-NOT-APPEAR"
         seen = _pushes(brain)
-        brain.config.home_assistant_token = "eyJhbGciOiJIUzI1NiJ9.SECRET"
         HomeHUD(brain, bridge=_Bridge(SMOKE), now_fn=_Clock()).poll()
-        assert "SECRET" not in str(seen)
+        assert seen, "nothing was pushed, so this asserts nothing"
+        assert "MUST-NOT-APPEAR" not in str(seen)
 
 
 class TestItNeverBreaksTheBrain:

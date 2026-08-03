@@ -420,16 +420,24 @@ class CoreMLClassifier:
         if not self.usable():
             return None
         self._ensure()
-        if self._predict is None and self._model is None:
-            return None
         try:
             img = _to_rgb_image(frame)
             if img is None:
                 return None
+            # The "have we got anything to predict WITH" test lives here, in the
+            # branch that uses them, rather than as a separate early return
+            # above. Two copies of one condition is how they drift — and they
+            # had: the early return said `_predict is None AND _model is None`
+            # while this `else` assumed `_model` was not None, which mypy caught
+            # as `"None" has no attribute "predict"`. Correct at runtime by
+            # coincidence of the two staying in step, which is not a property to
+            # rely on.
             if self._predict is not None:
                 out = self._predict(img)
-            else:                         # pragma: no cover - Apple-only path
+            elif self._model is not None:  # pragma: no cover - Apple-only path
                 out = self._model.predict({"image": img})
+            else:
+                return None
             got = self._read(out)
             if got is None or got[1] < self.min_confidence:
                 return None
