@@ -78,8 +78,26 @@ def _load_package(path_str: str):
 # --- HTTP to a Brain (stdlib urllib) ----------------------------------------
 
 def _brain(args):
+    """(base URL, token) for the Brain this command should talk to.
+
+    `--brain` and `DREAMLAYER_BRAIN` still win, in that order, and always will:
+    an explicit address is a decision, and discovery must never override one.
+    Only when neither is given does this ask the LAN — which is the case that
+    used to end in "no Brain — pass --brain URL or set DREAMLAYER_BRAIN" on a
+    machine sitting on the same network as a running Brain the whole time.
+
+    `find_brain` answers only when the LAN holds exactly one Brain; with two it
+    returns "" and the wearer is asked, because silently picking whichever
+    answered the multicast first would install a plugin on the wrong machine.
+    """
     url = args.brain or os.environ.get("DREAMLAYER_BRAIN", "")
     tok = args.token or os.environ.get("DREAMLAYER_TOKEN", "")
+    if not url:
+        try:
+            from .ai_brain.server.discovery_live import find_brain
+            url = find_brain()
+        except Exception:                            # noqa: BLE001
+            url = ""                                 # discovery is a courtesy
     return url.rstrip("/"), tok
 
 

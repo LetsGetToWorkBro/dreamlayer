@@ -456,6 +456,15 @@ class BrainConfig:
     # environment variable, which the bundled .app has no way to set: the neural
     # painter could not be turned on from any surface the product ships.
     dream_model_path: str = ""
+    # -- one ONNX engine behind every voice seam (`onnx_speech`) -----------
+    # A directory holding a standard sherpa-onnx export. Nothing is bundled or
+    # fetched; whichever capabilities the directory completes light up (ASR,
+    # VAD, speaker, keyword spotting, audio tagging) and the rest stay on their
+    # existing engines. Same reason as `dream_model_path` for being a config
+    # field rather than $DL_SHERPA_DIR alone: the bundled .app has no
+    # environment of its own to edit, so an env-only switch is one no shipped
+    # surface can reach. See `ai_brain/server/sherpa_live.py` for the layout.
+    sherpa_model_dir: str = ""
     # -- live interpreter: someone's foreign speech, voiced back to you ---
     # Rides the ear (needs listen_enabled), so it is a SECOND opt-in on top of an
     # opt-in: the microphone is already the wearer's most consequential switch,
@@ -537,6 +546,22 @@ class BrainConfig:
     immich_api_key: str = ""
     home_assistant_url: str = ""    # Home Assistant on the LAN (presence/context)
     home_assistant_token: str = ""
+    # -- the local model, and the wearer's own LoRA on top of it ----------
+    # `MLXBackend` read these with `getattr(config, …, default)` and they were
+    # never declared, so the Apple-silicon answer tier ran on a hard-coded model
+    # with no way to change it from any surface the product ships.
+    mlx_model: str = ""             # blank → mlx_backend.DEFAULT_MODEL
+    mlx_max_tokens: int = 512
+    # Where the overnight fine-tune writes, and where the backend looks. Blank
+    # → the Brain's own directory. OFF by default: training a model on your own
+    # memories is a bigger commitment than remembering them, because the weights
+    # outlive the rows (see rem/nightly_mlx.py and decisions/0008).
+    mlx_adapter_dir: str = ""
+    nightly_train_enabled: bool = False
+    # A Meshtastic node reachable over TCP on the LAN. Blank means "look for a
+    # radio on USB", which is the common case — this is for a node that lives
+    # somewhere else on the network rather than plugged into this Mac.
+    mesh_tcp_host: str = ""
     dawarich_url: str = ""          # self-hosted Dawarich on the LAN (location)
     dawarich_api_key: str = ""
     # -- the always-on ear (voice capture) ---------------------------------

@@ -245,17 +245,59 @@ def _inline_card_types(reachable: set) -> dict[str, set]:
 #     is correct rather than a shortfall: the type genuinely is not decided at
 #     that line. Its sibling `IntroKeptCard` resolves on the `confirm()` path,
 #     where the card is a dict literal.
+#   * FactCheckCard    — lens_hosts.py:1078 `self._push("fact_check", res.card)`.
+#     `res` is `self.veritas.check(...)`, and `.card` is a FIELD on a dataclass
+#     defined in another module (orchestrator/veritas.py:121). Resolving it
+#     means knowing the return type of a cross-module call and then the type of
+#     one of its attributes — inference, not reading, and the line where this
+#     script stops on purpose.
+#   * (any type)       — server.py:1620, inside `push_selftest`. One line pushes
+#     a BORROWED sample card of whichever kind the caller named, so the type is
+#     genuinely undecided there. Like IntroOfferCard this is a correct refusal
+#     rather than a shortfall: no resolver should name a type that the code does
+#     not fix until runtime.
+#
+# `truth_live` used to be a sixth entry and is resolved now — `to_gauge_card`
+# assigns a builder call to a local, mutates it and returns the name, which
+# `_fn_card_types_found` reads as of 2026-08-02.
 _BRAIN_ONLY_PUSHED = frozenset({"ConsistencyCard", "QuestRewardCard",
                                 "IntroOfferCard"})
 
 
 def _fn_card_types_found(fn, builder_types: dict) -> set:
-    """The card types ONE function builds, by the two shapes that occur in the
-    tree: a literal ``"type": "XCard"`` dict in its body, or a returned
-    `hud.cards` builder call. A set, because a function may do both — and the
-    maps built from this void any name that does.
+    """The card types ONE function builds, by the three shapes in the tree: a
+    literal ``"type": "XCard"`` dict in its body, a returned `hud.cards` builder
+    call, or a builder call assigned to a local that is later returned. A set,
+    because a function may do more than one — and the maps built from this void
+    any name that does.
+
+    The third shape is not a nicety. `TruthLensResult.to_gauge_card` does
+
+        card = truth_gauge_card(...)
+        card["deception_prob"] = ...        # two fields the plain builder lacks
+        return card
+
+    which is the ordinary way to add to a built card, and reading only
+    `return <call>` missed every function written that way. `to_gauge_card` was
+    consequently absent from the name map, so `truth_live`'s push of a
+    TruthLensCard reported as an unresolvable expression — a blind spot created
+    by the shape of the code rather than by any real ambiguity.
+
+    Still one hop and still reading rather than inferring: the returned name
+    must be assigned from a builder call IN THE SAME FUNCTION. A name assigned
+    from anything else contributes nothing, exactly as before.
     """
     found: set[str] = set()
+    local_builds: dict[str, str] = {}
+    for node in ast.walk(fn):
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and isinstance(node.value, ast.Call)):
+            nm = (getattr(node.value.func, "id", None)
+                  or getattr(node.value.func, "attr", None))
+            ctype = builder_types.get(nm or "", "")
+            if ctype:
+                local_builds.setdefault(node.targets[0].id, ctype)
     for node in ast.walk(fn):
         ctype = ""
         if isinstance(node, ast.Dict):
@@ -268,6 +310,8 @@ def _fn_card_types_found(fn, builder_types: dict) -> set:
             nm = (getattr(node.value.func, "id", None)
                   or getattr(node.value.func, "attr", None))
             ctype = builder_types.get(nm or "", "")
+        elif isinstance(node, ast.Return) and isinstance(node.value, ast.Name):
+            ctype = local_builds.get(node.value.id, "")
         if ctype:
             found.add(ctype)
     return found
@@ -434,6 +478,23 @@ def _pushed_types(reachable: set) -> dict[str, set]:
                     and node.name in ("_push", "push_event")):
                 params = [a.arg for a in node.args.args if a.arg != "self"]
                 local_pusher_arity[node.name] = len(params)
+        # …and which of them BUILD their card rather than forwarding one. A
+        # forwarder passes a parameter straight through; a builder does not.
+        builder_pushers: set = set()
+        for node in ast.walk(tree):
+            if not (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name == "_push"):
+                continue
+            params = {a.arg for a in node.args.args if a.arg != "self"}
+            forwards = any(
+                isinstance(n, ast.Call)
+                and (getattr(n.func, "attr", None)
+                     or getattr(n.func, "id", None)) in ("_push", "push_event")
+                and any(isinstance(a, ast.Name) and a.id in params
+                        for a in n.args)
+                for n in ast.walk(node))
+            if not forwards:
+                builder_pushers.add(node.name)
         # Functions defined in THIS FILE whose return is a constructor call of
         # a class with an exact `to_hud_card`. `reward = _make_reward()` then
         # pins the receiver's class without ever leaving the file — the
@@ -538,14 +599,41 @@ def _pushed_types(reachable: set) -> dict[str, set]:
                     return set(), False
                 return set(), False
 
-            if fn.name in ("_push", "push_event"):
-                continue          # the fan-out inside the pusher, not a push site
+            # Which functions are push SITES, and which are the pusher.
+            #
+            # `Brain.push_event` is never a site — it is the thing pushed TO.
+            # A module's own `_push` wrapper is one of two shapes, and they need
+            # opposite treatment:
+            #
+            #   FORWARDER  — `_push(card)` hands on the card it was given
+            #                (`IntroHost`, `BrainLenses`). The type is decided by
+            #                whoever called it, so the wrapper is skipped and the
+            #                outer call site is the one that counts.
+            #   BUILDER    — `_push(result)` turns a RESULT into a card itself
+            #                (`TruthLiveHost`: `card = result.to_gauge_card()`).
+            #                Here the inner `push_event(kind, card)` is the only
+            #                place the type is decidable, and the outer
+            #                `self._push(result)` is not passing a card at all.
+            #
+            # Skipping every `_push` by name hid the builder case: the type sat
+            # one line inside a function the scan refused to enter, and the outer
+            # site was reported unresolvable for passing a result object it was
+            # never meant to name a card with.
+            if fn.name == "push_event":
+                continue
+            if fn.name == "_push" and fn.name in builder_pushers:
+                pass                      # builder: its inner push IS the site
+            elif fn.name == "_push":
+                continue                  # forwarder: the caller is the site
             for node in ast.walk(fn):
                 if not isinstance(node, ast.Call):
                     continue
                 nm = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
                 if nm not in ("_push", "push_event"):
                     continue
+                if nm == "_push" and nm in builder_pushers and fn.name != "_push":
+                    continue      # a builder's caller hands over a RESULT; the
+                                  # card is named inside the builder, not here
                 if len(node.args) >= 2:
                     arg = node.args[1]                # push_event(kind, card)
                 elif len(node.args) == 1 and local_pusher_arity.get(nm) == 1:
@@ -616,15 +704,24 @@ _JS_DISPATCH = re.compile(r't\s*===\s*["\']([A-Za-z]+Card)["\']')
 
 
 def _drawn_on_live_lens() -> set:
-    """Card types the LIVE LENS has a bespoke drawing for — the surface the
-    Brain actually reaches.
+    """Card types the LIVE LENS has a bespoke drawing for.
 
     An earlier draft of this script checked only `halo-lua` and reported all 24
-    declared cards as having a renderer. That was measuring the wrong glass.
-    `Brain.push_event` "fans a card out to every connected Live Lens" — an SSE
-    stream to the browser page in `ai_brain/server/live.py`. Nothing under
-    `ai_brain/` calls `bridge.send_card`, so no Brain push has any path to the
-    glasses firmware at all; halo-lua is the ORCHESTRATOR's renderer.
+    declared cards as having a renderer. That was measuring the wrong glass:
+    `Brain.push_event` fans out to connected Live Lens SSE streams
+    (`ai_brain/server/live.py`), and for a long time nothing under `ai_brain/`
+    called `bridge.send_card`, so no Brain push had any path to the glasses
+    firmware at all. halo-lua was the ORCHESTRATOR's renderer, and the
+    Orchestrator is not shipped (decisions/0001).
+
+    **That changed on 2026-08-02.** `ai_brain/server/halo_link.py` subscribes to
+    the SAME fan-out the Live Lens uses and forwards each card over
+    `bridge.send_card`, so a Brain push now reaches BOTH surfaces once the
+    wearer links their Halo. Both sets are therefore live, and both still have
+    to be measured, because they are independently maintained: a type drawn on
+    one is not drawn on the other, and each has its own generic fallback
+    (`glassEventCard` here, `draw_fallback` in `renderer.lua`) that will happily
+    make a missing renderer look like a present one.
 
     The two disagree sharply, which is the point: `renderEvent` has bespoke
     branches for a handful of types and sends everything else to
@@ -662,8 +759,8 @@ def main() -> int:
 
     print(f"{len(features)} declared HUD features · {len(samples)} sample cards")
     print(f"renderers: {len(device)} types drawn by halo-lua (the DEVICE, reached "
-          f"by the Orchestrator) · {len(live)} by the Live Lens (the only surface "
-          f"a Brain push reaches)")
+          f"by a Brain push through halo_link.py) · {len(live)} by the Live Lens "
+          f"(the phone). Both surfaces are live; a card needs a drawing on each.")
 
     no_producer, no_device, gutted, ok = [], [], [], []
     for fid, title, key in features:

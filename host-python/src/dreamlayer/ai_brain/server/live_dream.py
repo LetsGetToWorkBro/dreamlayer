@@ -167,7 +167,16 @@ class LiveDream:
             ctx = RecallContext(camera_frame=jpeg or b"",
                                 world_anchors=self._anchors())
             try:
-                scene = asyncio.run(self._describer.tick(ctx))
+                # Under a Veil-cancelled scope, not a bare `asyncio.run`. The
+                # check at the top of this method happens ONCE; a beat runs up
+                # to two VLM calls with the wearer's camera frame in them, and
+                # dropping the Veil mid-beat is the exact gesture the guarantee
+                # is named for. `run_guarded` re-asks the posture while the call
+                # is in flight and cancels the scope the moment it changes, so
+                # the Brain stops waiting on it and no result is ever drawn.
+                from .veil_scope import run_guarded
+                scene = run_guarded(lambda: self._describer.tick(ctx),
+                                    self._wl.veiled)
             except Exception:
                 scene = None
             if scene is not None:

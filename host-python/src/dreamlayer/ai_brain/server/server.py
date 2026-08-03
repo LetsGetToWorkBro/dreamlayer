@@ -688,6 +688,26 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
     def start_watching(self, interval: float = 3.0) -> None:
         if self._watch_stop is not None:
             return
+        # React instead of asking. A watchdog observer per folder turns "a note
+        # you saved becomes answerable within three seconds" into "…as you save
+        # it", and stops a full stat sweep of every watched file twenty times a
+        # minute forever. `fs_watch_live` debounces, because one save is many
+        # events and `poll()` reindexes.
+        started = 0
+        try:
+            from .fs_watch_live import IDLE_INTERVAL_S, watchers
+            started = watchers(self).start()
+        except Exception:                            # noqa: BLE001 — never fail boot
+            log.warning("folder watchers unavailable", exc_info=True)
+        if started:
+            # The timer STAYS, slowed to insurance. Not for the missing-wheel
+            # case — that one never reaches here — but because a watcher that
+            # is running can still miss things: network mounts, some FUSE
+            # filesystems and containerised bind-mounts deliver events
+            # unreliably or not at all, which is why watchdog ships a polling
+            # observer of its own. Dropping the sweep would go silent on
+            # exactly the setups that were already weakest.
+            interval = IDLE_INTERVAL_S
         self._watch_stop = threading.Event()
 
         def loop():
@@ -701,10 +721,59 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                     log.warning("folder watch poll failed", exc_info=True)
         threading.Thread(target=loop, daemon=True).start()
 
+    def start_home_hud(self) -> bool:
+        """Poll Home Assistant so the glass can tap you about the house.
+
+        Returns whether a poller started. Nothing is started for a Brain with no
+        Home Assistant URL — which is almost all of them, and a daemon thread
+        waking every minute to rediscover that is a cost with no payoff.
+        """
+        try:
+            from .home_live import home
+            return home(self).start()
+        except Exception:                            # noqa: BLE001 — never fail boot
+            log.warning("home HUD unavailable", exc_info=True)
+            return False
+
+    def start_nightly_train(self) -> bool:
+        """Fine-tune the local model on the wearer's own words, overnight.
+
+        Off unless they switched it on: training a model on your memories is a
+        bigger commitment than remembering them, because the weights outlive
+        the rows and nothing un-trains a LoRA (`decisions/0008`).
+        """
+        try:
+            from .train_live import nightly
+            return nightly(self).start()
+        except Exception:                            # noqa: BLE001 — never fail boot
+            log.warning("nightly training unavailable", exc_info=True)
+            return False
+
+    def stop_nightly_train(self) -> None:
+        try:
+            from .train_live import nightly
+            nightly(self).stop()
+        except Exception:                            # noqa: BLE001
+            pass
+
+    def stop_home_hud(self) -> None:
+        try:
+            from .home_live import home
+            home(self).stop()
+        except Exception:                            # noqa: BLE001
+            pass
+
     def stop_watching(self) -> None:
         if self._watch_stop is not None:
             self._watch_stop.set()
             self._watch_stop = None
+        # Observers run their own threads and a pending debounce holds a timer;
+        # leaving either behind would reindex after the wearer asked us to stop.
+        try:
+            from .fs_watch_live import watchers
+            watchers(self).stop()
+        except Exception:                            # noqa: BLE001
+            pass
 
     # -- the memory lifecycle (ai_brain/server/retention_live.py) -------------
 
@@ -888,6 +957,28 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 # it is asked for fresh here, every sync.
                 if getattr(_e, "interpreting", False):
                     active = active | {"live_interpret"}
+                # `wake_word` is asked fresh for the same reason and on a
+                # stricter test: not "a spotter was built" but "a spotter has
+                # FIRED on this run". `hear()` answers on the text regex too,
+                # and that has always worked — the capability being measured is
+                # the acoustic engine, so only its own hits may promote it.
+                try:
+                    if _e.wake_live():
+                        active = active | {"wake_word"}
+                except Exception:                # noqa: BLE001
+                    pass
+        # `onnx_speech` is asked of the BRAIN, not of either ear: one engine
+        # backs up to four seams and both ears share it, so counting it per-ear
+        # would double it and tie it to whichever ear happened to be open. The
+        # proof is an adapter having produced a real ANSWER — every one of them
+        # has a null it can return forever with no model loaded, and
+        # `SherpaVAD`'s null is `True`, which would look like a working gate.
+        try:
+            _sh = getattr(self, "_sherpa_stack", None)
+            if _sh is not None and _sh.driving():
+                active = active | {"onnx_speech"}
+        except Exception:                        # noqa: BLE001
+            pass
         for key in EAR_CAPS:
             flag = "DL_WIRED_" + key.upper()
             if key in active:
@@ -1384,6 +1475,185 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         except Exception:                            # noqa: BLE001 — see above
             return True
 
+    @staticmethod
+    def _lua_root() -> str:
+        """The `halo-lua/` bundle in a source checkout, or "" from a wheel.
+
+        Empty is not a failure: a Halo already running the app is driven fine
+        without a fresh bundle push, and refusing to connect over a missing
+        source tree would strand a working pair of glasses on every packaged
+        install.
+        """
+        try:
+            root = Path(__file__).resolve().parents[5] / "halo-lua"
+            return str(root) if root.is_dir() else ""
+        except Exception:                            # noqa: BLE001
+            return ""
+
+    def halo_connect(self, kind: str = "emulator", lua_root: str = "") -> dict:
+        """Bring up the link to the glasses and start forwarding cards.
+
+        The link joins `_event_subs` — the same fan-out the Live Lens SSE
+        stream joins — so every producer in the Brain reaches the glass without
+        knowing the glass exists.
+        """
+        try:
+            from .halo_link import build_bridge, link
+            ln = link(self)
+            if ln.bridge is None:
+                ln.bridge = build_bridge(kind)
+            if ln.bridge is None:
+                return {"ok": False, "reason": f"bridge {kind!r} unavailable"}
+            if not lua_root:
+                lua_root = self._lua_root()
+            return ln.connect(lua_root)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("halo connect failed: %s", type(exc).__name__)
+            return {"ok": False, "reason": "unavailable"}
+
+    def halo_disconnect(self) -> dict:
+        try:
+            from .halo_link import link
+            return link(self).disconnect()
+        except Exception:                            # noqa: BLE001
+            return {"ok": False, "reason": "unavailable"}
+
+    def halo_status(self) -> dict:
+        try:
+            from .halo_link import link
+            return link(self).status()
+        except Exception:                            # noqa: BLE001
+            return {"connected": False, "sent": 0, "driving": False}
+
+    def observe_card(self, kind: str, confidence, dismissed: bool) -> bool:
+        """Record the wearer's reaction to one card. True if it became a label.
+
+        This is the input side of the only learned control in the Brain, and it
+        is the half that did not exist: `dismiss_ms` is a client-side expiry
+        timer, so nothing ever told the Brain that a card was swatted.
+        """
+        try:
+            from .attention_live import gate
+            return gate(self).observe(kind, confidence, dismissed)
+        except Exception as exc:                     # noqa: BLE001
+            log.debug("[attention] could not record: %s", type(exc).__name__)
+            return False
+
+    def attention_summary(self) -> dict:
+        """What the gate has learned, for the panel and the capability probe."""
+        try:
+            from .attention_live import gate
+            return gate(self).summary()
+        except Exception:                            # noqa: BLE001
+            return {"labelled": 0, "swatted": 0, "bar": 0.0, "fitted": False}
+
+    def lucid_query(self, text: str = "", frame=None) -> dict:
+        """One question, routed to the face or the memory (`lucid_live`)."""
+        try:
+            from .lucid_live import lucid
+            return lucid(self).query(text, frame)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("lucid query failed: %s", type(exc).__name__)
+            return {"ok": False, "answer": "", "kind": "unknown",
+                    "confidence": 0.0}
+
+    def dream_pose(self, pose: dict, colors=None, amplitude: float = 0.0,
+                   fft=None) -> dict:
+        """One Dream Mode beat from the phone: head pose, and the light here.
+
+        Two lenses ride this. The pose drives **Yesterlight** — a held upward
+        look dials the Horizon back through the day. The colours, when the phone
+        sends them, are recorded into the weather ledger so there IS a past to
+        walk back into; a place with nothing recorded correctly refuses to arm
+        rather than inventing an ambience it never saw.
+
+        The place signature comes from the Brain rather than the phone: a client
+        that could name its own place could replay somebody else's.
+        """
+        try:
+            from .dream_reactors import reactors
+            r = reactors(self)
+            place = ""
+            try:
+                place = str(self.private_zone_now() or "") or str(
+                    getattr(self, "_zone_was", "") or "")
+            except Exception:                        # noqa: BLE001
+                place = ""
+            # The phone sends the raw SPECTRUM and the Brain decides the
+            # weather, so the palette logic lives in `MicReactor` once rather
+            # than being re-derived in JavaScript. `colors` is still accepted
+            # for a caller that has already computed them (the ledger takes
+            # either), but `fft` is the path that lights both surfaces.
+            if fft:
+                r.note_mic(fft, amplitude, place)
+            elif colors:
+                r.note_weather(place, colors, amplitude)
+            sent = r.note_pose(pose if isinstance(pose, dict) else {}, place)
+            return {"ok": True, "frames": sent, **r.status()}
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("dream pose failed: %s", type(exc).__name__)
+            return {"ok": False, "frames": 0}
+
+    def dream_status(self) -> dict:
+        try:
+            from .dream_reactors import reactors
+            return reactors(self).status()
+        except Exception:                            # noqa: BLE001
+            return {"timbre_frames": 0, "yesterlight_frames": 0,
+                    "yesterlight_active": False}
+
+    def push_raw(self, frame: dict) -> int:
+        """Fan a RAW dream frame out to every connected surface.
+
+        Dream Mode's reactors paint the rim and the Horizon directly rather than
+        raising a card — `{"t": "timbre", …}`, `{"t": "yesterlight", …}` — so
+        they cannot ride `push_event`, whose payload slot is a card the Live
+        Lens renders.
+
+        The Veil is applied here and NOT skippable: every raw frame this method
+        carries derives from live signal (who is speaking, where you are, what
+        the light was), so `veil_ok` has no meaning for it. The bridge applies
+        its own `pause_allows_raw` gate on top, which is the device's rule
+        rather than the wearer's posture — both hold.
+        """
+        if not isinstance(frame, dict) or not frame.get("t"):
+            return 0
+        try:
+            if self.incognito_now():
+                return 0
+        except Exception:                            # noqa: BLE001 — unreadable → drop
+            return 0
+        ev = {"kind": "raw", "safety": False, "raw": dict(frame)}
+        with self._event_lock:
+            subs = list(self._event_subs)
+        sent = 0
+        for q in subs:
+            try:
+                q.put_nowait(ev)
+                sent += 1
+            except Exception:                        # noqa: BLE001 — full, drop
+                continue
+        return sent
+
+    def _attention_allows(self, kind: str, card) -> bool:
+        """The learned interruption bar (`attention_live`). Fails OPEN, like
+        `_may_interrupt` and for the same reason.
+
+        The confidence is read off the CARD rather than threaded through every
+        `push_event` call site: the builders in `hud/cards.py` already put it
+        there for rendering (`conf_color`), so the number the wearer sees on the
+        card is the same number the gate judges. A second, hand-passed value
+        could drift from the drawn one, and then the gate would be reasoning
+        about a confidence nobody was ever shown.
+        """
+        try:
+            if not isinstance(card, dict):
+                return True
+            from .attention_live import gate
+            return gate(self).allows(kind, card.get("confidence"))
+        except Exception:                            # noqa: BLE001 — see above
+            return True
+
     def push_event(self, kind: str, card=None, veil_ok: bool = False) -> int:
         """Fan a card out to every connected Live Lens. Veil-gated by default:
         an ambient push (the morning brief, a memory nudge) is SUPPRESSED while
@@ -1404,6 +1674,14 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             # other. `veil_ok` skips both — a categorical safety alert is not a
             # notification the wearer opted out of.
             if not self._may_interrupt(kind):
+                return 0
+            # …and last, the bar the wearer's own swats set. AFTER the two
+            # above and never instead of either: this is the softest of the
+            # three — a preference the wearer never stated in words, inferred
+            # from what they swatted away — so it gets the least authority and
+            # the most conservative failure. Only proactive kinds, only cards
+            # that state a confidence, and open on anything unreadable.
+            if kind in self.PROACTIVE_KINDS and not self._attention_allows(kind, card):
                 return 0
         ev: dict = {"kind": kind, "safety": bool(veil_ok)}
         if isinstance(card, dict):
@@ -1626,6 +1904,9 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "contacts_sync", "reminders_sync", "reminder_lists",
                   "sources_sync", "immich_base_url", "immich_api_key",
                   "home_assistant_url", "home_assistant_token",
+                  "mesh_tcp_host",
+                  "mlx_model", "mlx_max_tokens", "mlx_adapter_dir",
+                  "nightly_train_enabled",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
                   "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
                   "interpret_enabled", "interpret_target", "truth_lens_enabled",
@@ -1697,6 +1978,23 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         if {"interpret_enabled", "interpret_target"} & set(updates):
             self._apply_interpret()
             self._sync_ear_wired()
+        # The same trap once more. `start_home_hud` starts nothing for a Brain
+        # with no Home Assistant URL — which is the state every Brain boots in —
+        # and `HomeHUD` caches the bridge it built from that config. So a wearer
+        # who types their URL into the panel would save a setting that did
+        # nothing until the next restart, with the panel reading it back
+        # perfectly. Rebuilt and restarted here instead.
+        if {"home_assistant_url", "home_assistant_token"} & set(updates):
+            self.stop_home_hud()
+            self._home_hud = None
+            self.start_home_hud()
+        # Same write-only-setting trap: nothing starts a trainer for a Brain
+        # that booted with it off, and the model/adapter paths are read once
+        # when the trainer is built.
+        if {"nightly_train_enabled", "mlx_model", "mlx_adapter_dir"} & set(updates):
+            self.stop_nightly_train()
+            self._nightly_train = None
+            self.start_nightly_train()
         # Same trap, same fix: the room read lives on the EarHosts too, so a
         # config POST that only wrote the flag would persist a switch that did
         # nothing until the next ear restart.
@@ -2297,6 +2595,19 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         except Exception as exc:                     # noqa: BLE001
             log.error("[brain] forget failed: %s", exc)
             return {"ok": False, "reason": "error"}
+        # The row is gone from the store, the index and every vector. It may
+        # ALSO be in a trained LoRA's weights, and nothing un-trains one — so
+        # the honest completion of "forget that" is to retire any adapter whose
+        # manifest lists this row and rebuild without it on the next nightly
+        # run (`ai_brain/server/train_live.py`, `decisions/0008`). Runs on the
+        # erase path rather than only on the nightly tick, because a wearer who
+        # just deleted something must not keep being answered from weights
+        # built on it until 3am.
+        try:
+            from .train_live import nightly
+            nightly(self).enforce_forget()
+        except Exception:                            # noqa: BLE001
+            log.warning("[brain] adapter staleness check failed", exc_info=True)
         try:
             self.activity.add("privacy", "Forgot one memory")
         except Exception:                            # noqa: BLE001
@@ -3193,6 +3504,21 @@ def _brain_view_payload(brain: Brain) -> dict:
     }
 
 
+def _home_status(brain: Brain) -> dict:
+    """`HomeHUD.status()`, without building one to ask.
+
+    Same rule every promotion in this tree follows: a status poll must not be
+    what constructs the thing it is reporting on, or every poll looks like use.
+    """
+    got = getattr(brain, "_home_hud", None)
+    if got is None:
+        return {"configured": False, "polls": 0, "pushed": 0, "live": False}
+    try:
+        return got.status()
+    except Exception:                                # noqa: BLE001
+        return {"configured": False, "polls": 0, "pushed": 0, "live": False}
+
+
 def _capability_payload(brain: Brain) -> dict:
     """Live optional-capability report for the panel (dreamlayer/capabilities.py)
     with the panel's own persisted off-switches applied. Env DL_DISABLE_* still
@@ -3291,6 +3617,133 @@ def _capability_payload(brain: Brain) -> dict:
             pipe = getattr(_e, "_pipe", None)
             if pipe is not None and getattr(pipe, "last_voices", 0) > 1:
                 env["DL_WIRED_DIARIZATION"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `memory_dedup` — near-duplicate collapsing over what the wearer is shown.
+    # The flag follows a scrub list that ACTUALLY merged something: collapsing
+    # is on the read path unconditionally, so "the code ran" is not evidence,
+    # and a wearer who never repeats themselves has nothing to dedup and should
+    # not be told the capability is doing work.
+    try:
+        _ls = getattr(brain, "_lenses", None)
+        _r = getattr(_ls, "_ring", None) if _ls is not None else None
+        if _r is not None:
+            from ...memory.dedup import collapse as _collapse
+            _rows = _r.latest(limit=200)
+            if len(_collapse(_rows, lambda b: (b.event.summary or ""))) < len(_rows):
+                env["DL_WIRED_MEMORY_DEDUP"] = "1"
+    except Exception:                               # noqa: BLE001
+        pass
+    # `coreml_ondevice` — the Apple Neural Engine rung of the vision ladder. The
+    # flag follows a real prediction, never `available`: the adapter used to
+    # return None on both branches of its only statement, so a wheel being
+    # importable was never evidence of anything. A compiled model on disk is not
+    # either — only a label that came back.
+    try:
+        from ...object_lens.classify_backends import CoreMLClassifier
+        from .live import _classifier as _vision_ladder
+        _rung = _vision_ladder()
+        if isinstance(_rung, CoreMLClassifier) and _rung.predictions > 0:
+            env["DL_WIRED_COREML_ONDEVICE"] = "1"
+    except Exception:                               # noqa: BLE001
+        pass
+    # `typed_models` — the Veil as a type invariant on the ring's keep path.
+    # The flag follows an invariant that has actually VETTED an append, not a
+    # gate having been handed over: a ring nothing has been kept into is a
+    # tripwire nobody has crossed, and reporting that as a live guarantee is
+    # the same overclaim as calling an importable adapter wired.
+    try:
+        for _r in (getattr(getattr(brain, "_lenses", None), "_ring", None),
+                   getattr(getattr(brain, "_world_lens", None), "ring", None)):
+            if getattr(_r, "veil_checks", 0) > 0:
+                env["DL_WIRED_TYPED_MODELS"] = "1"
+    except Exception:                               # noqa: BLE001
+        pass
+    # `persona_tuning` — the wearer's interruption bar, and the flag follows a
+    # bar that `tune()` genuinely RETURNED from their own swats. Not hulearn
+    # being importable, and not the gate existing: a gate whose history is too
+    # short, or whose wearer reacted the same way to everything, refuses and
+    # reports 0.0 — which is the honest answer, and not a wired capability.
+    try:
+        from .attention_live import gate as _attn_gate
+        if _attn_gate(brain).tuning_live():
+            env["DL_WIRED_PERSONA_TUNING"] = "1"
+    except Exception:                               # noqa: BLE001
+        pass
+    # `home_hud` gets NO DL_WIRED_ flag, and that is the correct answer rather
+    # than an omission. It is `kind="service"`, so `state()` short-circuits to
+    # "external" — a service to reach, not a library to install — and it has no
+    # dormant/active axis for a flag to move. `_PROMOTED_AT_RUNTIME` is defined
+    # as capabilities in `_NOT_WIRED` that a running subsystem promotes, and a
+    # service is in neither set. Its liveness rides `HomeHUD.status()`, which
+    # says something a flag could not: configured, polling, and how many cards
+    # have actually reached the glass.
+    # `mlx_train` — an ADAPTER genuinely written. Not mlx being importable, and
+    # not a run having happened: a nightly that refused because the corpus was
+    # too small is the guard working, not the capability driving.
+    try:
+        _nt = getattr(brain, "_nightly_train", None)
+        if _nt is not None and _nt.driving():
+            env["DL_WIRED_MLX_TRAIN"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `structured_concurrency` — the Veil-stop as a scope rather than a
+    # top-of-function check. Both halves matter: the anyio WHEEL (the capability
+    # is anyio; the asyncio path is the baseline it must never do worse than)
+    # AND a scope having actually run, because a wheel with no beat through it
+    # is the importable-never-called state this whole audit is about.
+    try:
+        from .veil_scope import driving as _scope_driving
+        if _scope_driving():
+            env["DL_WIRED_STRUCTURED_CONCURRENCY"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `mesh_range` — a line that genuinely crossed the air, in either
+    # direction. Not the wheel, and not a node having opened: a radio with no
+    # peer in range connects perfectly and carries nothing, which is the normal
+    # state of a mesh and not a working link.
+    try:
+        _ml = getattr(brain, "_mesh_link", None)
+        if _ml is not None and _ml.driving():
+            env["DL_WIRED_MESH_RANGE"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `fs_watch` — the folders reacting instead of being asked. The flag
+    # follows a change event genuinely DELIVERED, never an observer having
+    # started: starting one on a network mount that emits nothing looks
+    # identical to starting one that works, right up until the wearer saves a
+    # file and waits — and what keeps working in that case is the timer, so
+    # reporting the watcher live would name the wrong mechanism.
+    try:
+        _fw = getattr(brain, "_fs_watchers", None)
+        if _fw is not None and _fw.driving():
+            env["DL_WIRED_FS_WATCH"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `lan_discovery` — the Brain's presence on the LAN. Weaker evidence than
+    # the rest of this block, and worth naming as such: mDNS gives a publisher
+    # no way to learn that anything listened, so there is no "it answered" to
+    # wait for. `registered` is the strongest proof available and is still much
+    # more than `import zeroconf` — an address was found, a service was
+    # accepted, and the beacon is live on this LAN right now. It goes back down
+    # when the Brain stops advertising, which is what makes it a state.
+    try:
+        _bcn = getattr(brain, "_beacon", None)
+        if _bcn is not None and _bcn.driving():
+            env["DL_WIRED_LAN_DISCOVERY"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `nlp` — the parse behind commitments, and the flag follows a FIELD the
+    # regex had left empty and the parser filled. Not `CommitmentNLP.available`,
+    # which is only "spacy imported": the extractor honours the floor, so on a
+    # sentence the regex already handles the parser correctly adds nothing, and
+    # that is the fallback working rather than the capability driving. It also
+    # does not follow "the pass ran" — `sharpen` runs on every commitment row
+    # whether or not spaCy is installed.
+    try:
+        from .nlp_live import nlp_live as _nlp
+        if getattr(brain, "_nlp_live", None) is not None and _nlp(brain).live():
+            env["DL_WIRED_NLP"] = "1"
     except Exception:                           # noqa: BLE001
         pass
     # `event_bus` — a `MeshEventBus` exists only around a MeshManager that has
@@ -4650,7 +5103,22 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 "email_docs": brain.email_docs,
                 "stats": brain.index.stats(),
                 "source_status": sources,
+                # The house, if the wearer wired one. `home_hud` is a SERVICE,
+                # so the capability meter can only ever say "external" about it
+                # — this is where its real state lives: configured, polling, and
+                # how many cards have actually reached the glass. A URL saved
+                # with nothing coming back is the failure this makes visible.
+                "home": _home_status(brain),
             })
+
+        def _get_mesh(self, path, qs):
+            """Whether the radio is up, and whether it has carried anything.
+
+            Defined HERE rather than beside the send route: the GET table is
+            built before the POST handlers, so a handler declared down there is
+            an undefined name at table-build time."""
+            from .mesh_live import link
+            self._json(200, link(brain).status())
 
         def _get_meetings(self, path, qs):
             """Your meetings — attendees, notes, and the action items pulled from
@@ -4770,6 +5238,72 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             b = self._body()
             self._json(200, brain.set_interpret(bool(b.get("on", True)),
                                                 str(b.get("target", "") or "")))
+
+        def _post_halo(self, path, qs):
+            """Bring the glasses link up or down: `{"action": "connect"|
+            "disconnect", "bridge": "emulator"|"real"}`.
+
+            The one control the wearer needs, because everything else is
+            automatic: once connected, the link is a subscriber on the same
+            fan-out the Live Lens uses, so every card the phone shows the glass
+            shows too — including cards added long after this route was written.
+            """
+            b = self._body()
+            if str(b.get("action", "connect")) == "disconnect":
+                self._json(200, brain.halo_disconnect())
+                return
+            self._json(200, brain.halo_connect(
+                str(b.get("bridge", "emulator") or "emulator")))
+
+        def _get_halo(self, path, qs):
+            self._json(200, brain.halo_status())
+
+        def _post_lucid(self, path, qs):
+            """`{"q": "what did we say about the lease"}` → one answer.
+
+            The router decides for itself whether the question wants the camera
+            or the memory; the caller does not have to know, which is the whole
+            point of the lens.
+            """
+            b = self._body()
+            self._json(200, brain.lucid_query(str(b.get("q", "") or "")))
+
+        def _post_dream_pose(self, path, qs):
+            """A Dream Mode beat: `{"pose": {"pitch": -0.6}, "colors": [...],
+            "amplitude": 0.3}`.
+
+            The phone already samples `devicemotion` for the dream weather; this
+            is the same stream, put to a second use. Deliberately cheap — it
+            carries no captured content, only a head angle and the colours the
+            wearer's own glasses are already showing.
+            """
+            b = self._body()
+            self._json(200, brain.dream_pose(
+                b.get("pose") if isinstance(b.get("pose"), dict) else {},
+                b.get("colors"), float(b.get("amplitude") or 0.0),
+                b.get("fft")))
+
+        def _post_attention(self, path, qs):
+            """What the wearer did with a card: `{"kind", "confidence",
+            "dismissed"}`.
+
+            The one signal that never used to cross back from the glass. Every
+            card auto-expired on a `dismiss_ms` timer, so the Brain could not
+            tell a card the wearer read from one they swatted away — and with
+            no such record, any tuner has nothing to tune on.
+
+            Deliberately cheap and unauthenticated beyond the usual do_POST
+            guards: it carries no captured content, only a card kind and the
+            confidence the card already displayed. A hostile caller can skew
+            their OWN interruption bar, which is a setting they can also just
+            change.
+            """
+            b = self._body()
+            ok = brain.observe_card(str(b.get("kind", "") or ""),
+                                    b.get("confidence"),
+                                    bool(b.get("dismissed", False)))
+            self._json(200, {"ok": True, "labelled": bool(ok),
+                             **brain.attention_summary()})
 
         def _post_intro(self, path, qs):
             """Decide a staged introduction: `{"action": "confirm"|"dismiss"}`.
@@ -5553,6 +6087,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/config": _get_config,
             "/dreamlayer/brain/tiers": _get_brain_tiers,
             "/dreamlayer/status": _get_status,
+            "/dreamlayer/mesh": _get_mesh,
             "/dreamlayer/token": _get_token,
             "/dreamlayer/backup": _get_backup,
             "/dreamlayer/health": _get_health,
@@ -5583,6 +6118,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/calendar": _get_calendar,
             "/dreamlayer/people": _get_people,
             "/dreamlayer/intro": _get_intro,
+            "/dreamlayer/halo": _get_halo,
             "/dreamlayer/calendars": _get_calendars,
             "/dreamlayer/mail/accounts": _get_mail_accounts,
             "/dreamlayer/contacts": _get_contacts,
@@ -6195,6 +6731,25 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             out = brain.push_selftest(kind)
             self._json(200 if out.get("ok") else 400, out)
 
+        def _post_mesh_send(self, path, qs):
+            """Put one typed line on the LoRa mesh.
+
+            Deliberately the ONLY inbound path to the radio, so "outbound is
+            only ever a line the wearer typed" is a property of the wiring
+            rather than a convention: nothing else in the tree can reach
+            `MeshLink.send`. The Veil and the length cap live in `mesh_live`,
+            not here, so a second caller could not skip them.
+
+            Not local-only, unlike pairing: the phone IS the surface somebody
+            miles from their Mac would be typing on, and it already holds the
+            token. `push_event` sends the peer's replies back the same way every
+            other card reaches it.
+            """
+            from .mesh_live import link
+            text = str((self._body() or {}).get("text", "") or "")
+            out = link(brain).send(text)
+            self._json(200 if out.get("ok") else 400, out)
+
         def _post_replies(self, path, qs):
             """Suggest quick replies to a message."""
             b = self._body()
@@ -6781,6 +7336,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/interpret": _post_interpret,
             "/dreamlayer/truth": _post_truth,
             "/dreamlayer/intro": _post_intro,
+            "/dreamlayer/attention": _post_attention,
+            "/dreamlayer/dream/pose": _post_dream_pose,
+            "/dreamlayer/lucid": _post_lucid,
+            "/dreamlayer/halo": _post_halo,
             "/dreamlayer/vault/sync": _post_vault_sync,
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,
@@ -6788,6 +7347,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/live/selftest": _post_live_selftest,
             "/dreamlayer/live/intent": _post_live_intent,
             "/dreamlayer/replies": _post_replies,
+            "/dreamlayer/mesh/send": _post_mesh_send,
             "/dreamlayer/voice": _post_voice,
             "/dreamlayer/calendar": _post_calendar,
             "/dreamlayer/calendar/sync": _post_calendar_sync,

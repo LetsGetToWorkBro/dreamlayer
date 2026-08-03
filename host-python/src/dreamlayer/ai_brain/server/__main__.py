@@ -104,6 +104,8 @@ def main(argv=None) -> int:
     brain.start_brief_scheduler()     # deliver the morning brief at brief_hour
     brain.start_calendar_sync()       # pull macOS Calendar.app into the agenda
     brain.start_source_sync()         # fold local memory sources in on a poll
+    brain.start_home_hud()            # tap the glass when the house needs you
+    brain.start_nightly_train()       # learn the wearer's words in the dream window
     brain.start_retention_scheduler()  # age memory out (hot/warm) while we run
     brain.start_ear()                 # resume the always-on ear if opted in (no-op otherwise)
 
@@ -144,6 +146,26 @@ def main(argv=None) -> int:
               "  (panel → Connections → Live Lens for the QR)")
     print(f"  watching {len(brain.config.folders)} folder(s), "
           f"{brain.index.stats()['files']} files indexed")
+    # Say where we are, so nothing on the LAN has to be told an IP address by
+    # hand. Only on a network-reachable bind: a loopback Brain has nothing to
+    # announce, and advertising one would publish a 127.0.0.1 that resolves back
+    # to whoever READ it — a phone would "find" a Brain and dial itself.
+    #
+    # The TXT record carries presence, path and the https port. Never the token:
+    # a zeroconf record is unauthenticated multicast that every device on the
+    # LAN reads in the clear, so the secret keeps riding the pairing channel
+    # (audit 2026-07-15) and `discovery_zeroconf._public_only` enforces it at
+    # the boundary rather than trusting this call site.
+    if not _is_loopback_host(args.host):
+        from ...orchestrator.discovery_zeroconf import Discovery
+        from .discovery_live import beacon
+        if beacon(brain).advertise(args.port, tls_port=tls_port or None):
+            print("  announcing on this network (mDNS) — "
+                  "no IP address to type in")
+        elif not Discovery.available:
+            print("  ⓘ automatic discovery wants the `zeroconf` package "
+                  "(pip install 'dreamlayer[infra]') — the pairing QR still "
+                  "works.")
     if minted_token:
         print("  ⚠ network-reachable bind with no token — generated one:")
         print(f"    token: {brain.config.token}")
@@ -177,6 +199,15 @@ def main(argv=None) -> int:
     except KeyboardInterrupt:
         print("\nstopping.")
     finally:
+        # Withdraw the service BEFORE the socket closes. A beacon left
+        # registered after the port is gone advertises a Brain that refuses
+        # connections, which is worse than never having advertised — the phone
+        # finds it, dials it, and fails.
+        try:
+            from .discovery_live import beacon
+            beacon(brain).stop()
+        except Exception:                          # noqa: BLE001
+            pass
         server.server_close()
         if tls_server is not None:
             tls_server.shutdown()

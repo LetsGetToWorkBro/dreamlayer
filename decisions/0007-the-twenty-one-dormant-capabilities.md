@@ -326,3 +326,206 @@ install — it re-ran the import.
   and filing them there would turn a measurement into a claim — the exact
   failure `HANDOFF.md` warns about two lines after the sentence this entry
   answers.
+
+## Update — 2026-08-02, `persona_tuning` and `typed_models`: both were wired to
+## consumers the product never runs
+
+Two entries moved out of dormancy, and both had the same defect underneath —
+worth recording together because the *shape* is what generalises, not either
+fix.
+
+### `persona_tuning` — a consumer the Brain never builds
+
+Wired in #598 to `MaturityGate.tuned_confidence`. `MaturityGate` is constructed
+at exactly one site, `orchestrator/orchestrator.py`, and `decisions/0001`
+records that the shipped Brain never instantiates an `Orchestrator` — with
+`test_the_orchestrator_is_still_not_resurrected` keeping it that way. So the
+tuner ran in tests and in the simulator and nowhere the wearer could reach.
+
+The verification error is worth naming exactly: I checked that `tune()` had a
+caller and stopped one link short of asking who builds the caller.
+`importable → constructed → called → reachable-from-a-surface` is four links,
+and three of them held.
+
+Fixed the way `decisions/0001` prescribes rather than by repeating its mistake:
+`retention_live.py` did not resurrect the Orchestrator to get `RetentionSweep`
+running, it re-hosted the plain part Brain-side.
+`ai_brain/server/attention_live.py` does the same for the tuning. What was
+genuinely Orchestrator-shaped — the NOVICE/APPRENTICE/RESIDENT ladder, keyed on
+a pairing date the Brain does not track — stayed where it is.
+
+It also closed a real product gap that had nothing to do with the capability:
+`Brain.push_event` had no rate limit, no daily cap and no confidence bar, and
+the wearer's only recourse was switching a whole cue kind off. The label it
+learns from did not exist either — `dismiss_ms` is a client-side expiry timer,
+so nothing ever told the Brain a card had been swatted.
+
+### `typed_models` — the obvious home was the wrong one
+
+`MemoryDB` has accepted a `privacy=` gate that constructs a
+`models_pydantic.MemoryEvent(allowed=...)` before every write since the day it
+was written, and nothing ever passed one. The obvious fix is to pass a gate at
+the Brain's `MemoryDB` sites. **That would have gated nothing**, and the reason
+is the useful part of this entry:
+
+> The shipped Brain calls no `db.add_*` method at all.
+
+Every `add_memory` caller in the tree is Orchestrator-only, the simulator, or
+`ember/ceremony.burn`'s tombstone. The Brain's `MemoryDB` uses are all read
+paths — the retriever, the retention sweep, the ring seed. Wiring the gate
+there would have promoted the capability green while enforcing an invariant on
+a path that never executes: a measurement turned into a claim, which is what
+the Consequences section above warns against.
+
+Blocking the one remaining caller would have been worse than useless. By the
+time `ceremony.burn` writes its tombstone the engram is already blanked and the
+source already purged; the tombstone is the wearer's *deletion receipt*, which
+is precisely why that code swallows its own failures rather than leaving a
+half-burn. A veiled refusal there destroys a record of an erasure.
+
+Where the Brain actually keeps things is the **ring**. `lens_hosts.observe` and
+`world_lens._remember_sighting` append to a `SemanticRingBuffer`, each site
+checking `allow_capture()` first — the latter re-checking for the TOCTOU case —
+and the ring itself checking nothing. That is exactly the shape
+`person_guard`/`voice_guard` had before they were centralised, and exactly what
+a type invariant is for. The ring now takes the same `privacy=` opt-in.
+
+One thing that had to be got right and would have been invisible in testing:
+**seeding is recall, not capture.** `_seed` re-hydrates the ring from rows
+already on disk, and gating it on `allow_capture` would leave the ring empty for
+a whole veiled session, so every ring lens would answer "nothing to report"
+about a timeline that exists — a silence indistinguishable from an absence. It
+goes through a new `restore()`. This only misbehaves on a device that happens to
+be veiled at boot, which no unit test naturally reaches, so it is pinned by
+reading the source of `_seed` rather than its behaviour.
+
+### What would overturn these
+
+For `persona_tuning`: `grep -rn "attention_live" ai_brain/server/server.py`
+returning nothing, or `AttentionGate.tuning_live()` never returning True on a
+Brain with a labelled history.
+
+For `typed_models`: `SemanticRingBuffer.veil_checks` staying 0 on a live Brain
+after a lens `observe()` — which would mean the tripwire is armed and nothing
+crosses it, the same "dormant with extra steps" the bucket above describes.
+
+### The lesson, stated once
+
+Both entries were dormant for a reason no dependency could fix, and in both
+cases the seam named in the catalogue was real, complete and tested. **Ask who
+constructs the consumer, not whether the consumer exists** — and when the
+obvious integration point turns out to be inert, that is a finding to write
+down, not an obstacle to route around by wiring it anyway.
+
+## Update — 2026-08-02, `asr_alignment` and `facial_aus`: RETIRED, not deferred
+
+Both are removed from the catalogue and both adapters are deleted. Neither was
+broken; the reworked Truth Lens made one redundant and the other unwanted.
+
+**`facial_aus` was the one that mattered.** Four AU backends (LibreFace,
+py-feat, FaceTorch, OpenFace3) sat behind a capability the wearer could install.
+Installing any of them would have switched on the micro-expression channel — and
+the reworked lens turns that channel off *on purpose*:
+`fusion.AU_CHANNEL_REAL` is False, its weight is 0.0, it is excluded from the
+confidence count, and it draws as an honest empty slot on the Testimony Thread.
+`ai_brain/server/truth_live.py` states why: it "is the difference between a
+delivery read and a lie detector: this surface never claims to have seen a face
+twitch, because it has not."
+
+So the entry was not a dormant capability. It was a documented, one-click way
+for a wearer to turn a delivery read into a lie detector, sitting in the
+catalogue with an `impact=4` next to it. That is worse than a false green: a
+false green overstates what the product does, and this understated what
+installing it would change.
+
+`truth_lens/au_detector.py` is untouched and stays — it is what produces the
+empty slot.
+
+**`asr_alignment` was simply redundant.** `prosody_whisperx.word_timings()`
+worked: [] without whisperx, real word timings with it. But the live channel it
+was meant to sharpen — pitch, jitter, shimmer, hesitation rate, pause ratio,
+speech rate, energy — is computed by `truth_lens/prosody.py` from the FFT frames
+the interpreter already produces, with no dependency at all, and `truth_live.py`
+feeds it directly from the endpointed segment. whisperx refined something that
+already works, at ~70 packages including torch and the CUDA 12 stack.
+
+The `asr-extra` extras group went with it, along with its references in
+`PROFILES["profile-mac"]` and the "Sharp Ears" pack. Two tests in
+`test_capabilities.py` caught that drift before the suite did, which is the
+behaviour they exist for.
+
+Both assertions in `test_integration_seams_pr2.py` are inverted rather than
+deleted, matching how `causal_fusion` was handled in `decisions/0006`: the tests
+now pin that the modules are ABSENT and that the AU channel stays off, so a
+re-add is a deliberate act that trips a test rather than a quiet return.
+
+### The general rule this establishes
+
+Retiring a capability is a legitimate outcome and belongs beside wiring one.
+The count going 73 → 71 is not a loss; two entries that could never honestly go
+green stopped being on the list. **Before wiring a dormant capability, ask what
+installing it would DO** — an entry whose only effect is to enable behaviour the
+design deliberately refuses should be deleted, not deferred.
+
+## Update — 2026-08-02: the fourth instance, and the one that mattered most
+
+`persona_tuning`, `typed_models`, `memory_dedup` — and then the transport to the
+glasses itself. Four times the same shape, and the fourth was the reason the
+product had no on-glass surface at all.
+
+**The whole `bridge/` package** — including `real_bridge.py`, which speaks BLE to
+a Halo over `brilliant-ble`/`brilliant-msg` and exposes `send_card(payload,
+event)` — is constructed in exactly two places: `main.py`'s emulator helper and
+`simulator/`. Both hang off the `Orchestrator` that `decisions/0001` records the
+shipped Brain never instantiates. Complete, tested, and reachable only from code
+the wearer does not run.
+
+`truth_live.py` had already written the symptom down while fixing its own case:
+*"the phone talks to the Brain and nothing else, so 'Read the room' … reached
+the glass only on a surface that does not exist yet."* Nobody followed the
+sentence to its conclusion, which is that the sentence was true of **every**
+card, not that one.
+
+`ai_brain/server/halo_link.py` is that surface.
+
+### Why a subscriber and not a call site
+
+The obvious build is to teach each producer to also send to the glasses: twenty
+edits, twenty chances to forget, and a permanent second list to keep in step —
+the `person_guard`/`voice_guard` shape this repo keeps centralising away from.
+
+The link instead registers a queue in `Brain._event_subs`, the list the Live
+Lens's SSE stream already joins. `push_event` fans out to every subscriber, so
+**every card that reaches the phone reaches the glass, and any future card does
+too, with no further wiring.** A producer cannot forget to support the glasses
+because it never learns they exist.
+
+It also means the gating is already right and must not be repeated. A card in
+that queue has passed the Veil, the wearer's interruption preferences, and the
+learned attention bar. Re-checking would double-gate; ignoring the `safety` flag
+would let a smoke alarm be dropped by a policy written for ambient cards.
+
+### What this changes about the earlier entries
+
+Every capability the report calls DRIVEN was, until now, driven *to the phone*.
+The bucket's meaning has quietly widened: the same twenty now reach the device
+too, without any of them being touched. That is the argument for fixing
+transports at the funnel rather than per feature, and it is worth remembering
+the next time a capability looks like it needs its own wire.
+
+### What would overturn this
+
+`grep -rn send_card host-python/src/dreamlayer/ai_brain` returning anything
+other than `halo_link.py`. The inverted test
+(`TestTheGlassIsTheONETheBrainCanReach`) asserts exactly that: the path must
+stay ONE seam. Scattered `send_card` calls would restore the old problem in a
+form no checker can measure — some cards reaching the device and some not, with
+nothing to tell them apart.
+
+### The pattern, now that there are four
+
+Each of the four had a complete, tested seam and a consumer nothing constructs.
+None of them needed a dependency, a redesign, or new domain logic. **Ask who
+constructs the consumer** — and when the answer is `Orchestrator`, the fix is
+always to re-host the plain half Brain-side, following `retention_live.py`,
+never to resurrect the Orchestrator.

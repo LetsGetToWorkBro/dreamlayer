@@ -16,21 +16,27 @@ once already — `ear.py` used to promote a batch of voice capabilities to
 "active" on start, describing engines that were not running, and now promotes
 only the ones a run genuinely drives.
 
-READ THE OUTPUT AS TRIAGE, NOT A SCORE. Unlike lenses, a great many of these
-SHOULD be unreachable from the Brain and making them reachable would be a
-regression:
+READ THE OUTPUT AS TRIAGE, NOT A SCORE — but read the reasons harder than the
+counts, because the reasons are where this drifted.
 
-  * `orchestrator/*` seams — the shipped Brain never builds an `Orchestrator`
-    (`decisions/0001`). Wiring them is the resurrection three PRs exist to
-    prevent.
-  * other targets — `simulator/*`, `bridge/frame_sdk.py`, `rem/nightly_mlx.py`
-    are the desktop stand-in, a different pair of glasses, and a Mac-only
-    nightly job.
+"Unreachable BY DESIGN" used to hold eleven capabilities and it was a PATH RULE:
+anything under `orchestrator/` matched, on the argument that the shipped Brain
+never builds an `Orchestrator` (`decisions/0001`) so wiring it would be the
+resurrection three PRs exist to prevent. That confuses two different claims.
+The Orchestrator must not come back — but "its only consumer is the
+Orchestrator" describes where a seam is wired TODAY, and it is precisely the
+diagnosis under eight capabilities re-hosted Brain-side during 2026-08-02. The
+prefix was filing open work as a settled decision.
 
-So this prints the list and the reason bucket, and — unlike its two siblings —
+So the bucket is split. `_BY_DESIGN` now holds only what is genuinely not a
+wearer feature (the desktop simulator), and `_NOT_YET_HOSTED` carries the rest
+with the user-facing loss spelled out per key. A key leaves that dict by being
+BUILT, never by being reclassified.
+
+This prints the list and the reason bucket, and — unlike its two siblings —
 exits 0. A number to argue with beats a gate that fails for a good reason.
 
-Six buckets, and two of them are defects:
+Seven buckets, and two of them are defects:
 
   * UNCONSTRUCTED — the seam IS loadable and nothing outside it names anything
     it defines. The capability-level version of the mistake this whole family of
@@ -53,6 +59,8 @@ Six buckets, and two of them are defects:
     load-bearing, not describe it.
   * declared DORMANT — unreachable and `_NOT_WIRED` says so, so the wearer is
     told "dormant" rather than shown a false green. Honest; still real work.
+  * NOT YET HOSTED BRAIN-SIDE — a complete seam whose only consumer is the
+    Orchestrator. Real work with a real loss, named in `_NOT_YET_HOSTED`.
   * unreachable BY DESIGN — reaching it would be the regression.
 
 The bucket order matters and it used to be wrong. Loadability was tested FIRST,
@@ -88,12 +96,44 @@ SRC = ROOT / "host-python" / "src" / PKG
 # Seams that are unreachable ON PURPOSE, with the reason. Anything not matched
 # here and not in the closure is an open question, which is the list worth
 # reading.
+# Seams that are unreachable ON PURPOSE — and the bar for being here is now
+# EVIDENCE ABOUT THE FEATURE, not the directory the file happens to sit in.
+#
+# This used to be a blanket path rule, and `orchestrator/` swept eight entries
+# into it. That was wrong in the way `decisions/0007` warns about from the other
+# direction: *"do not shrink this list by moving entries to `_BY_DESIGN` without
+# evidence … filing them there would turn a measurement into a claim."* Nobody
+# moved them; the prefix did. And "Orchestrator-only" is precisely the reason
+# SEVEN capabilities were re-hosted Brain-side during 2026-08-02 — it describes
+# where a seam is wired today, never whether it could be reached.
+#
+# `simulator/` survives because a debug visualiser for developers is genuinely
+# not a wearer feature. `bridge/` is gone: the Brain reaches the bridge now
+# (`halo_link.py`), and the one entry that used it — `frame_glasses`, for a
+# different manufacturer's device — was deleted rather than excused. `rem/` is
+# gone too: the nightly job is a SCHEDULER question, and the Brain already runs
+# schedulers (`start_retention_scheduler`), so calling it unreachable was the
+# same mislabel.
 _BY_DESIGN = (
-    ("orchestrator/", "Orchestrator-only — the Brain never builds one (decisions/0001)"),
     ("simulator/", "the desktop simulator, not the product"),
-    ("bridge/", "a different device's SDK"),
-    ("rem/", "the nightly REM job; the Brain runs no REM"),
 )
+
+# …and the entries that are simply NOT BUILT YET, which the report must not
+# call "by design". Each is real work with a real user-facing loss, listed here
+# so the number is visible instead of hidden inside a bucket that reads as
+# settled. Removing a key from here means it got built, never that it got
+# reclassified.
+_NOT_YET_HOSTED: dict = {
+    # EMPTY, and it got here by every entry being BUILT. Nine capabilities left
+    # this bucket on 2026-08-02/03 by being re-hosted Brain-side; `mlx_train`
+    # was the tenth and the odd one out — its seam was incomplete rather than
+    # unhosted (`decisions/0008`), so it needed a trainer written, not wiring.
+    #
+    # Keep the mechanism. The bucket existing with nothing in it is the point:
+    # the next capability whose only consumer is the Orchestrator lands here
+    # with its user-facing loss spelled out, instead of in `_BY_DESIGN` where a
+    # path rule once filed eleven of them as settled decisions.
+}
 
 
 def _lens_module():
@@ -146,6 +186,16 @@ def _by_design(seam: str) -> str:
         if prefix in (seam or ""):
             return why
     return ""
+
+
+def _not_yet(key: str) -> str:
+    """Why this one is unreached, when the reason is "nobody has built it".
+
+    Kept apart from `_by_design` on purpose. A reader who sees "unreachable by
+    design" stops looking; a reader who sees "not yet hosted" has a to-do list.
+    Merging the two is how eight real features spent months looking settled.
+    """
+    return _NOT_YET_HOSTED.get(key, "")
 
 
 def _declared_dormant() -> set[str]:
@@ -285,6 +335,7 @@ def classify(lens=None, reachable=None) -> dict:
     dormant_keys = _declared_dormant()
     promoted_keys = _runtime_promoted()
     open_gaps, dormant, expected, concepts, ok = [], [], [], [], []
+    not_yet: list = []
     conditional, unconstructed, driven = [], [], []
     for key, _title, tier, seam in caps:
         mods = _seam_modules(seam)
@@ -315,6 +366,8 @@ def classify(lens=None, reachable=None) -> dict:
                 unconstructed.append((key, tier, seam))
             else:
                 ok.append((key, tier, seam))
+        elif _not_yet(key):
+            not_yet.append((key, tier, seam, _not_yet(key)))
         elif _by_design(seam):
             expected.append((key, tier, seam, _by_design(seam)))
         elif key in dormant_keys:
@@ -324,7 +377,8 @@ def classify(lens=None, reachable=None) -> dict:
 
     return {"caps": caps, "ok": ok, "unconstructed": unconstructed,
             "conditional": conditional, "open_gaps": open_gaps,
-            "dormant": dormant, "expected": expected, "concepts": concepts,
+            "dormant": dormant, "expected": expected, "not_yet": not_yet,
+            "concepts": concepts,
             "driven": driven, "promoted_keys": promoted_keys}
 
 
@@ -338,6 +392,7 @@ def main() -> int:
     caps, ok, unconstructed = b["caps"], b["ok"], b["unconstructed"]
     conditional, open_gaps = b["conditional"], b["open_gaps"]
     dormant, expected, concepts = b["dormant"], b["expected"], b["concepts"]
+    not_yet = b["not_yet"]
     driven = b["driven"]
 
     print(f"{len(caps)} declared capabilities · {len(ok)} with a seam the Brain "
@@ -392,6 +447,17 @@ def main() -> int:
           "to wire.")
     for key, tier, seam in sorted(dormant):
         print(f"  {key:24} {tier:12} {seam}")
+
+    print(f"\nNOT YET HOSTED BRAIN-SIDE ({len(not_yet)}) — real work, not a "
+          f"design decision")
+    print("  Nine capabilities left this bucket on 2026-08-02/03 by being "
+          "RE-HOSTED\n  Brain-side, never by being reclassified. Read each "
+          "reason: a seam whose only\n  consumer is the Orchestrator is a "
+          "wiring job, and one whose implementation\n  was never written is "
+          "not — the two look identical from the import graph.")
+    for key, tier, seam, why in sorted(not_yet):
+        print(f"  {key:24} {tier:12} {seam}")
+        print(f"  {'':24} {'':12} → {why}")
 
     print(f"\nunreachable BY DESIGN ({len(expected)}) — reaching these would be "
           f"the regression")

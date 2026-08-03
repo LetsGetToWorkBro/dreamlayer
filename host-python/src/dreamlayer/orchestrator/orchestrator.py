@@ -607,14 +607,12 @@ class Orchestrator(
         from ..lucid_recall import LucidRecall, RetrieverRecallIndex
         from ..lucid_recall.usearch_router import DenseRouter
         from ..lucid_recall.schema import QueryType
+        # `Mem0Layer` was removed on 2026-08-02. mem0's `Memory()` routes
+        # extraction through a cloud LLM by default, and near-duplicate
+        # collapsing is done on-device by `memory/dedup.py` on the read path —
+        # so there is nothing to consult here and nothing leaves the machine to
+        # decide that two memories are similar (decisions/0007).
         _mem0 = None
-        try:
-            from ..lucid_recall.mem0_layer import Mem0Layer
-            _m = Mem0Layer(privacy=self.privacy)
-            if getattr(_m, "_mem", None) is not None:   # only when mem0 truly loaded
-                _mem0 = _m
-        except Exception:
-            _mem0 = None
         _classify_fn = None
         if DenseRouter.available:
             _dr = DenseRouter(self.embedder)

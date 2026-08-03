@@ -879,7 +879,7 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   <section>
     <div class="eyebrow">Memory sources</div><h2>Bring in your other memories</h2>
     <p class="lead">Fold your own <b>local, self-hosted</b> services into the Brain's memory — a
-      self-hosted <b>Immich</b> photo library and a <b>Dawarich</b> location log. Each must be on your
+      self-hosted <b>Immich</b> photo library, a <b>Dawarich</b> location log, and <b>Home Assistant</b>. Each must be on your
       own network (a non-local address is refused), the pull is one-way and read-only, and it only runs
       while the master switch below is on. Screenpipe and ActivityWatch, if you run them, are picked up
       automatically with no address to set.</p>
@@ -894,6 +894,13 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
       <input id="dawUrl" type="text" autocomplete="off" placeholder="Dawarich URL (e.g. http://192.168.1.10:3000)" style="flex:1;min-width:240px">
       <input id="dawKey" type="password" autocomplete="off" placeholder="Dawarich API key" style="flex:1;min-width:180px">
     </div>
+    <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">
+      <input id="haUrl" type="text" autocomplete="off" placeholder="Home Assistant URL (e.g. http://192.168.1.10:8123)" style="flex:1;min-width:240px">
+      <input id="haKey" type="password" autocomplete="off" placeholder="Home Assistant token" style="flex:1;min-width:180px">
+    </div>
+    <p class="lead" style="margin-top:6px">Home Assistant is the one that taps you rather than remembering:
+      open doors and safety alarms only, never a light toggle. A smoke, CO, gas or water alarm reaches the
+      glass even while the Veil is up — everything else stays quiet under it.</p>
     <div class="row" style="margin-top:10px"><button id="srcSave" onclick="saveSources()">Save sources</button>
       <span id="srcStat" class="conn-s" style="margin-left:10px;color:var(--muted)"></span></div>
   </section>
@@ -2056,6 +2063,8 @@ async function load(){
     $("dawUrl").value=c.config.dawarich_url||"";
     $("immichKey").placeholder=c.config.immich_api_key==="set"?"key saved — blank to keep":"Immich API key";
     $("dawKey").placeholder=c.config.dawarich_api_key==="set"?"key saved — blank to keep":"Dawarich API key";
+    $("haUrl").value=c.config.home_assistant_url||"";
+    $("haKey").placeholder=c.config.home_assistant_token==="set"?"token saved — blank to keep":"Home Assistant token";
   }
   // cloud provider
   $("cprov").value=c.config.cloud_provider||"openai";
@@ -2677,13 +2686,15 @@ async function saveSources(){
   // saved key. Non-local URLs are refused server-side (is_local_endpoint).
   const body={sources_sync:$("srcSync").checked,
     immich_base_url:$("immichUrl").value.trim(),
-    dawarich_url:$("dawUrl").value.trim()};
+    dawarich_url:$("dawUrl").value.trim(),
+    home_assistant_url:$("haUrl").value.trim()};
   const ik=$("immichKey").value.trim(); if(ik) body.immich_api_key=ik;
   const dk=$("dawKey").value.trim(); if(dk) body.dawarich_api_key=dk;
+  const hk=$("haKey").value.trim(); if(hk) body.home_assistant_token=hk;
   const s=$("srcStat"); s.textContent="Saving…";
   try{await api("/dreamlayer/config",{method:"POST",body:JSON.stringify(body)});}
   catch(e){s.textContent="Couldn't save"; return;}
-  $("immichKey").value=""; $("dawKey").value="";
+  $("immichKey").value=""; $("dawKey").value=""; $("haKey").value="";
   s.textContent=body.sources_sync?"On — pulling from your local sources":"Saved (off)";
   toast(body.sources_sync?"Memory sources on":"Memory sources saved"); load();
 }

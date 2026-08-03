@@ -52,8 +52,12 @@ class TestTheDistinctionIsReal:
             assert cap.wires_on_install(c) is True, key
 
     def test_a_dormant_adapter_with_no_live_caller_does_not(self):
-        for key in ("typed_pipeline", "memory_dedup", "asr_alignment",
-                    "persona_tuning", "wake_word"):
+        # `persona_tuning`, `wake_word`, `fs_watch` and `mesh_range` used to be
+        # here and were WIRED (2026-08-02 / -03). Replace an entry when it gets
+        # built; never keep one that is no longer dormant, or this stops
+        # measuring anything.
+        for key in ("typed_pipeline", "structured_output", "asgi_server",
+                    "lsl_streams", "plugin_entrypoints"):
             c = cap._BY_KEY.get(key)
             if c is None:
                 continue
@@ -80,6 +84,30 @@ class TestThePromotedSetIsNotAGuess:
             assert f"DL_WIRED_{key.upper()}" in src, (
                 f"{key} is declared promoted-at-runtime and nothing sets "
                 f"DL_WIRED_{key.upper()}")
+
+    def test_every_real_DL_WIRED_SETTER_IS_DECLARED_PROMOTED(self):
+        """The other direction, and it had never been checked.
+
+        The test above catches a promise with no code behind it. This catches
+        CODE WITH NO PROMISE — a capability the Brain genuinely promotes at
+        runtime that is missing from the set. That is the usual honesty bug
+        inverted, and it still makes the panel print something false: it renders
+        `wires_on_install` as "installing this extra lands you on 'installed ·
+        not active yet'", and for these it lights up.
+
+        Three were in that state (`coreml_ondevice`, `persona_tuning`,
+        `typed_models`) while the one-way check passed throughout.
+        """
+        root = pathlib.Path(cap.__file__).parent
+        src = "\n".join(
+            p.read_text(encoding="utf-8", errors="ignore")
+            for p in root.rglob("*.py") if "tests" not in p.parts)
+        stale = [c.key for c in cap.CAPABILITIES
+                 if f"DL_WIRED_{c.key.upper()}" in src
+                 and c.key not in cap._PROMOTED_AT_RUNTIME]
+        assert not stale, (
+            "these are promoted by real code and not declared, so the panel "
+            f"tells the wearer installing them does nothing: {stale}")
 
     def test_no_promoted_key_is_outside_not_wired(self):
         """Promotion only means anything for a cap that would otherwise read
@@ -226,7 +254,6 @@ class TestAPackDoesNotSellAnInertCapability:
 
     @pytest.mark.parametrize("key,phrase", [
         ("recall", "deduped"),
-        ("eyes", "identity-stable tracking,"),
         ("guardian", "structured cancellation."),
     ])
     def test_the_bare_promise_is_gone(self, key, phrase):
@@ -236,7 +263,31 @@ class TestAPackDoesNotSellAnInertCapability:
             f"{key} sells {phrase!r} again — that capability cannot be switched "
             "on by installing this pack")
 
-    @pytest.mark.parametrize("key", ["recall", "eyes", "guardian", "operator"])
+    def test_the_eyes_promise_came_BACK_because_the_capability_did(self):
+        """INVERTED on 2026-08-03, and the inversion is the point.
+
+        "identity-stable tracking" was forbidden here because `object_tracking`
+        was inert — a tracker nothing fed frames to. The ambient look loop feeds
+        it now, so the honest tagline NAMES it, and the old hedge ("ships as a
+        library; nothing feeds it frames yet") became the false statement.
+
+        The rule this file enforces is not "never promise"; it is "promise
+        exactly what installing does". When a capability gets built, the pitch
+        has to move with it — in both directions."""
+        p = next(x for x in cap.PACKS if x.key == "eyes")
+        assert not self._inert(p), (
+            "an eyes capability went inert again — restore the hedge before "
+            "restoring the promise")
+        assert "identity-stable tracking" in p.tagline
+        assert "nothing feeds it frames" not in p.tagline
+
+    # `eyes` came off this list on 2026-08-03: its last inert capability was
+    # `coreml_ondevice`/`persona_tuning`, both of which have live promotion
+    # paths and were simply missing from `_PROMOTED_AT_RUNTIME`. Every
+    # capability the pack carries now genuinely switches on, so hedging it
+    # would be the false statement in the other direction — which is what
+    # `test_a_fully_live_pack_is_not_hedged` below asserts instead.
+    @pytest.mark.parametrize("key", ["recall", "guardian", "operator"])
     def test_a_pack_carrying_inert_caps_says_so(self, key):
         """Not a blanket rule — only packs that actually carry one. A pack whose
         every capability wires on install should NOT be hedged, or the hedge
@@ -364,7 +415,8 @@ class TestTheCLISaysItToo:
             assert "nothing calls it" not in hint, key
 
     def test_an_inert_one_says_the_install_will_not_call_it(self):
-        for key in ("typed_docs", "typed_pipeline", "persona_tuning"):
+        # `persona_tuning` was here and is promoted at runtime now.
+        for key in ("typed_docs", "typed_pipeline", "asgi_server"):
             c = cap._BY_KEY.get(key)
             if c is None:
                 continue
