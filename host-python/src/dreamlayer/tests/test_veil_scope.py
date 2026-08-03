@@ -51,13 +51,37 @@ class _Veil:
         return self.veiled
 
 
+def _bounded(factory, veil, poll_s=0.01, timeout=5.0):
+    """`run_guarded` on a thread with a bounded join.
+
+    Every test that expects a beat to COMPLETE goes through this. Without the
+    completion signal inside the scope the watcher loops forever, so a straight
+    call does not fail — it hangs, and takes the whole suite with it. A mutation
+    that turns a test file into a timeout is a mutation nobody can read the
+    result of.
+    """
+    import threading
+    out = {}
+
+    def _run():
+        out["value"] = run_guarded(factory, veil, poll_s=poll_s)
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout=timeout)
+    assert not t.is_alive(), (
+        "the scope never returned — a beat that finished never released its "
+        "worker")
+    return out["value"]
+
+
 class TestTheBeatStopsWhenTheVeilDrops:
     def test_a_finished_beat_returns_its_value(self):
         async def _work():
             await asyncio.sleep(0)
             return {"description": "a warm room"}
         before = scopes_run()
-        assert run_guarded(_work, _Veil()) == {"description": "a warm room"}
+        assert _bounded(_work, _Veil()) == {"description": "a warm room"}
         assert scopes_run() == before + 1
 
     def test_veiling_mid_beat_cancels_it(self):
@@ -74,7 +98,7 @@ class TestTheBeatStopsWhenTheVeilDrops:
         veil = _Veil(flip_after=2)
         t0 = time.monotonic()
         before = veil_cancels()
-        assert run_guarded(_slow, veil, poll_s=0.01) is None
+        assert _bounded(_slow, veil) is None
         assert started == [1], "the work never even began"
         assert time.monotonic() - t0 < 5.0, "it waited for the backend anyway"
         assert veil_cancels() == before + 1
@@ -83,7 +107,7 @@ class TestTheBeatStopsWhenTheVeilDrops:
         async def _work():
             await asyncio.sleep(5)
             return "drawn"
-        assert run_guarded(_work, _Veil(veiled=True), poll_s=0.01) is None
+        assert _bounded(_work, _Veil(veiled=True)) is None
 
     def test_an_unreadable_posture_cancels_rather_than_continues(self):
         """Fails CLOSED in the one direction that matters: an unreadable trust
@@ -91,7 +115,7 @@ class TestTheBeatStopsWhenTheVeilDrops:
         async def _work():
             await asyncio.sleep(5)
             return "drawn"
-        assert run_guarded(_work, _Veil(boom=True), poll_s=0.01) is None
+        assert _bounded(_work, _Veil(boom=True)) is None
 
     def test_a_quick_beat_does_not_wait_for_the_wearer_to_veil(self):
         """Setting the stop event on COMPLETION as well as on the Veil is what
@@ -126,7 +150,7 @@ class TestTheBeatStopsWhenTheVeilDrops:
         keeps the guarantee the same with and without the optional wheel."""
         async def _boom():
             raise RuntimeError("the model returned nonsense")
-        assert run_guarded(_boom, _Veil(), poll_s=0.01) is None
+        assert _bounded(_boom, _Veil()) is None
 
     def test_a_failing_beat_runs_EXACTLY_ONCE(self):
         """A real bug in the seam, found by wiring it. `run_until_veil` caught
@@ -140,7 +164,7 @@ class TestTheBeatStopsWhenTheVeilDrops:
         async def _boom():
             runs.append(1)
             raise RuntimeError("the model returned nonsense")
-        run_guarded(_boom, _Veil(), poll_s=0.01)
+        _bounded(_boom, _Veil())
         assert runs == [1], f"the failing beat ran {len(runs)} times"
 
     def test_it_runs_exactly_once_on_the_asyncio_path_too(self, monkeypatch):
@@ -151,7 +175,7 @@ class TestTheBeatStopsWhenTheVeilDrops:
         async def _boom():
             runs.append(1)
             raise RuntimeError("nope")
-        run_guarded(_boom, _Veil(), poll_s=0.01)
+        _bounded(_boom, _Veil())
         assert runs == [1]
 
 
@@ -168,7 +192,7 @@ class TestTheFloorHolds:
             await asyncio.sleep(30)
             return "should never be seen"
         t0 = time.monotonic()
-        assert run_guarded(_slow, _Veil(flip_after=2), poll_s=0.01) is None
+        assert _bounded(_slow, _Veil(flip_after=2)) is None
         assert time.monotonic() - t0 < 5.0
 
     def test_it_returns_the_same_way_with_anyio_absent(self, monkeypatch):
@@ -177,7 +201,7 @@ class TestTheFloorHolds:
 
         async def _work():
             return "done"
-        assert run_guarded(_work, _Veil()) == "done"
+        assert _bounded(_work, _Veil()) == "done"
 
 
 class TestTheDreamBeatUsesIt:
@@ -209,13 +233,24 @@ class TestTheDreamBeatUsesIt:
             "the beat ran to the backend's own timeout with the frame in it")
 
     def test_an_unveiled_beat_still_draws(self, brain):
+        import threading
+
         async def _quick(ctx):
             return {"description": "a warm room", "dominant_color": 0x2CC79A}
 
         d = self._dream(brain, _quick)
         d._wl = type("_W", (), {"veiled": staticmethod(_Veil())})()
-        out = d.scene(b"\xff\xd8jpegbytes")
-        assert out["scene"] is not None
+        got = {}
+        # Bounded like `_bounded`, and for the same reason: a scope that never
+        # releases hangs the RUN rather than failing a test, and this is the one
+        # case that goes through `scene()` instead of `run_guarded` directly.
+        t = threading.Thread(
+            target=lambda: got.setdefault("out", d.scene(b"\xff\xd8jpeg")),
+            daemon=True)
+        t.start()
+        t.join(timeout=5.0)
+        assert not t.is_alive(), "the dream beat never returned"
+        assert got["out"]["scene"] is not None
 
     def test_the_top_of_beat_check_is_still_there(self, brain):
         """Belt and braces, deliberately: the scope handles the mid-beat case,
