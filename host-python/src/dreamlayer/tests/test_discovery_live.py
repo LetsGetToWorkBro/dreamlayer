@@ -47,15 +47,29 @@ class _FakeInfo:
 
 class _FakeZC:
     """Stands in for a `Zeroconf` instance. Records the register/unregister
-    pair, because a beacon that never withdraws is the failure that matters."""
+    pair, because a beacon that never withdraws is the failure that matters.
+
+    `all` accumulates every instance ever built, and that is not bookkeeping
+    for its own sake: `Discovery.advertise` constructs a FRESH `Zeroconf` on
+    each call and overwrites `self._zc`, so a second call leaks the first one —
+    still open, still advertising, and now with no handle to withdraw it. A test
+    that only inspects `last` sees one clean registration and calls that fine,
+    which is exactly what it did until a mutation survived.
+    """
 
     last = None
+    all: list = []
 
     def __init__(self):
         self.registered = []
         self.unregistered = []
         self.closed = False
         _FakeZC.last = self
+        _FakeZC.all.append(self)
+
+    @classmethod
+    def registrations(cls) -> int:
+        return sum(len(z.registered) for z in cls.all)
 
     def register_service(self, info):
         self.registered.append(info)
@@ -74,6 +88,7 @@ def zc(monkeypatch):
     monkeypatch.setattr(dz, "Zeroconf", _FakeZC, raising=False)
     monkeypatch.setattr(dz, "ServiceInfo", _FakeInfo, raising=False)
     _FakeZC.last = None
+    _FakeZC.all = []
     return _FakeZC
 
 
@@ -227,7 +242,11 @@ class TestItWithdrawsWhenTheBrainStops:
         b = BrainBeacon(_brain(tmp_path))
         assert b.advertise(7777)
         assert b.advertise(7777)
-        assert len(_FakeZC.last.registered) == 1
+        # Across EVERY Zeroconf ever built, not just the newest — see _FakeZC.
+        assert _FakeZC.registrations() == 1
+        assert len(_FakeZC.all) == 1, (
+            "a second Zeroconf was opened; the first is leaked, still "
+            "advertising, and no longer reachable to withdraw")
 
 
 class TestTheFloor:
