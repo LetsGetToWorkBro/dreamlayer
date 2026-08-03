@@ -260,8 +260,7 @@ class TestThePromotionFollowsProof:
         use, which is the failure the whole promotion scheme exists to avoid."""
         monkeypatch.delenv("DL_WIRED_NLP", raising=False)
         brain = _brain(tmp_path)
-        row = self._row(brain)
-        assert row["state"] != "active", row
+        assert "DL_WIRED_NLP" not in self._env(brain, monkeypatch)
         assert getattr(brain, "_nlp_live", None) is None
 
     def test_a_real_ingest_promotes_it(self, tmp_path, monkeypatch):
@@ -270,13 +269,31 @@ class TestThePromotionFollowsProof:
         brain.lenses().ingest_utterance("I'll call the landlord tonight", via="said")
         if not nlp_live(brain).live():
             pytest.skip("neither extractor added a field on this machine")
-        assert self._row(brain)["state"] == "active", self._row(brain)
+        assert self._env(brain, monkeypatch)["DL_WIRED_NLP"] == "1"
 
     @staticmethod
-    def _row(brain) -> dict:
+    def _env(brain, monkeypatch) -> dict:
+        """The env `_capability_payload` computed, not the state it reported.
+
+        The reported state cannot see this on a machine WITHOUT spaCy: a
+        missing wheel rightly outranks any flag, so `nlp` reads "missing"
+        whether the parser sharpened anything or not, and a mutation that
+        promoted unconditionally would sail past. The flag is what this code
+        decides.
+        """
+        import dreamlayer.capabilities as caps
+        seen = {}
+        real = caps.report
+
+        def _spy(env=None, **kw):
+            seen.update(env or {})
+            return real(env=env, **kw)
+
+        monkeypatch.setattr(caps, "report", _spy)
         from dreamlayer.ai_brain.server.server import _capability_payload
-        return next(i for i in _capability_payload(brain)["items"]
-                    if i["key"] == "nlp")
+        _capability_payload(brain)
+        assert seen, "report() was never called — the spy caught nothing"
+        return seen
 
     def test_status_reports_the_same_thing_it_promotes_on(self):
         live = NLPLive(brain=None)

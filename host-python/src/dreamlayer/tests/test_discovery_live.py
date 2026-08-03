@@ -423,17 +423,38 @@ class TestTheShippedBrainActuallyAdvertises:
         assert _FakeZC.last is None
 
 
+def _wired_env(brain, monkeypatch) -> dict:
+    """The env `_capability_payload` computed, caught on its way into `report`.
+
+    Asserting on the reported STATE cannot see this promotion at all: zeroconf
+    is absent in CI, a missing wheel rightly outranks any flag, so
+    `state == "missing"` whether the Brain advertised or not. A mutation that
+    promoted unconditionally survived a state-based test for exactly that
+    reason. The flag is the thing this code decides; the state is a different
+    function's job.
+    """
+    import dreamlayer.capabilities as caps
+    seen = {}
+    real = caps.report
+
+    def _spy(env=None, **kw):
+        seen.update(env or {})
+        return real(env=env, **kw)
+
+    monkeypatch.setattr(caps, "report", _spy)
+    from dreamlayer.ai_brain.server.server import _capability_payload
+    _capability_payload(brain)
+    assert seen, "report() was never called — the spy caught nothing"
+    return seen
+
+
 class TestThePromotionFollowsAServiceOnTheAir:
-    def _row(self, brain) -> dict:
-        from dreamlayer.ai_brain.server.server import _capability_payload
-        return next(i for i in _capability_payload(brain)["items"]
-                    if i["key"] == "lan_discovery")
 
     def test_a_brain_that_never_advertised_is_not_promoted(self, tmp_path,
                                                            monkeypatch):
         monkeypatch.delenv("DL_WIRED_LAN_DISCOVERY", raising=False)
         brain = _brain(tmp_path)
-        assert self._row(brain)["state"] != "active"
+        assert "DL_WIRED_LAN_DISCOVERY" not in _wired_env(brain, monkeypatch)
         assert getattr(brain, "_beacon", None) is None, (
             "the report BUILT a beacon to ask about one — a capability poll "
             "would then look like use")
@@ -442,13 +463,17 @@ class TestThePromotionFollowsAServiceOnTheAir:
         monkeypatch.delenv("DL_WIRED_LAN_DISCOVERY", raising=False)
         brain = _brain(tmp_path)
         assert beacon(brain).advertise(7777)
-        row = self._row(brain)
-        # zeroconf itself is absent in CI, and a missing wheel outranks any
-        # flag — that is the honest word for that machine. What must hold is
-        # that the flag is set; the state follows installedness.
-        import os
-        assert os.environ.get("DL_WIRED_LAN_DISCOVERY") or row["state"] in (
-            "active", "missing"), row
+        assert _wired_env(brain, monkeypatch)["DL_WIRED_LAN_DISCOVERY"] == "1"
+
+    def test_a_stopped_beacon_stops_being_promoted(self, tmp_path, monkeypatch,
+                                                   zc, lan):
+        """The property that makes this a state rather than a claim."""
+        monkeypatch.delenv("DL_WIRED_LAN_DISCOVERY", raising=False)
+        brain = _brain(tmp_path)
+        b = beacon(brain)
+        b.advertise(7777)
+        b.stop()
+        assert "DL_WIRED_LAN_DISCOVERY" not in _wired_env(brain, monkeypatch)
 
     def test_it_goes_back_down_when_the_beacon_stops(self, tmp_path, zc, lan):
         brain = _brain(tmp_path)
