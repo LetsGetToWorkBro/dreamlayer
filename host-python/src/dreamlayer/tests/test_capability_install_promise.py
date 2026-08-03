@@ -56,7 +56,7 @@ class TestTheDistinctionIsReal:
         # here and were WIRED (2026-08-02 / -03). Replace an entry when it gets
         # built; never keep one that is no longer dormant, or this stops
         # measuring anything.
-        for key in ("typed_pipeline", "structured_output", "asgi_server",
+        for key in ("typed_docs", "structured_output", "asgi_server",
                     "lsl_streams", "plugin_entrypoints"):
             c = cap._BY_KEY.get(key)
             if c is None:
@@ -416,7 +416,7 @@ class TestTheCLISaysItToo:
 
     def test_an_inert_one_says_the_install_will_not_call_it(self):
         # `persona_tuning` was here and is promoted at runtime now.
-        for key in ("typed_docs", "typed_pipeline", "asgi_server"):
+        for key in ("typed_docs", "asgi_server"):
             c = cap._BY_KEY.get(key)
             if c is None:
                 continue

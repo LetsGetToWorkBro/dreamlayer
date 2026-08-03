@@ -306,6 +306,15 @@ the gate, and listing it under "will not install" hid that.
   one yet"). These belong in group D, which is where the same shape already
   lives.
 
+  **`typed_pipeline` is closed as of 2026-08-03 (#577), by dropping it.** An
+  entry whose gain says the install buys something nothing asks for has no
+  third wording available; `StagePipeline` needed no dependency to trace what
+  ran and where it failed, so the `Cap`, the probe, and the wheel's place in
+  the `structured` extra went, and the runner stayed exactly as it was. One of
+  the twenty-one is therefore closed by removal rather than by wiring — the
+  same third answer decisions/0006 named, reached this time without deleting
+  any working code.
+
 The lesson is the one this file exists to enforce, turned on itself: `find_spec`
 answers "is it here", and I wrote down "can it be had". Same error class as
 `importable ≠ working`, one level up the supply chain, and it survived because

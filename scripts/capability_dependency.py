@@ -13,9 +13,13 @@ and `reality_compiler/intent_parser_llm.py` imported both purely as availability
 probes (`# noqa: F401`) and called neither — and `parse()` *gated* on them, so a
 wearer who had wired a local model got the bare regex parser until they
 installed two libraries that did nothing (#575 ungated it; the probes remain).
-A grep for the same shape finds `typed_pipeline` (`pydantic_ai`, probe only —
-the sequential fallback is the only implementation) and `persona_tuning`
-(`hulearn`, probe only — the rule is injected, never built from hulearn).
+A grep for the same shape found two more, and both have since been closed —
+each the way its own seam allowed. `persona_tuning` (`hulearn`) was WIRED:
+`persona_humanlearn.tune` builds a `FunctionClassifier` from labelled cases, so
+the probe became a caller. `typed_pipeline` (`pydantic_ai`) was DROPPED (#577):
+the sequential runner was the only implementation and needed nothing, so there
+was no wiring to do — the capability entry went instead, and the checker has
+one fewer declaration to audit rather than one more use to find.
 
 Four buckets:
 

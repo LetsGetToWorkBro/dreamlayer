@@ -198,9 +198,16 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("typed_models", "Veil-as-type-invariant memory records", "structured",
         ("pydantic",), "structured", "memory/models_pydantic.py",
         gain="baseline guard is a runtime check; this makes a veiled memory impossible to even construct", impact=3, before=3.5, after=5),
-    Cap("typed_pipeline", "Traced RC stage pipeline", "structured",
-        ("pydantic_ai",), "structured", "reality_compiler/pipeline_pydanticai.py",
-        gain="the adapter already records what ran and where it failed, with no dependency at all — installing this buys the TYPED agent surface (validated stage IO, retries on a schema miss), which nothing in the tree asks for yet", impact=1, before=4, after=4.5),
+    # `typed_pipeline` was DROPPED here rather than reworded again (#577). Its
+    # `gain` had already been walked back to "the adapter already records what
+    # ran and where it failed, with no dependency at all — … which nothing in
+    # the tree asks for yet": an entry whose own sentence said the install buys
+    # nothing this tree can use. The seam imported the wheel as a probe and
+    # never referenced it again, so installing it moved this row from "missing"
+    # to "dormant" and changed no byte of what `run()` did — and a row on the
+    # wearer's Capabilities screen, with an install button under it, is the
+    # wrong place to park a promise for a caller that does not exist.
+    # `StagePipeline` stays exactly as it is: it is the whole implementation.
     Cap("llm_router", "One interface over ~100 LLM providers", "structured",
         ("litellm",), "llm", "ai_brain/litellm_backend.py",
         gain="baseline speaks to a few hand-wired providers; this routes across ~100 with fallback", impact=3, before=3, after=4.5),
@@ -534,7 +541,7 @@ _NOT_WIRED = frozenset({
     # it Brain-side now, on `BrainLenses.ingest_utterance`, and the flag follows
     # a FIELD the regex left empty and the parser filled.
     "speaker_id", "persona_tuning", "object_tracking", "nlp",
-    "structured_output", "typed_models", "typed_pipeline",
+    "structured_output", "typed_models",
     # platform / infra: no live loader / surface reaches these
     "plugin_entrypoints", "event_bus", "asgi_server",
     # crdt_sync stays listed as the honest DEFAULT and is promoted on a real

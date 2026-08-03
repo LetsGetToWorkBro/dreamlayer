@@ -366,8 +366,8 @@ split was measured and it is 1/18, not a genuine fork:
 
 The list is still real work: `social_graph`, `memory_dedup`, `typed_docs`,
 `typed_models`, `facial_aus`, `diarization`, `asr_alignment`,
-`live_interpret`, `skia_render`, `lsl_streams`, `plugin_entrypoints`,
-`typed_pipeline`. **Read `decisions/0007` before re-raising any of them** — it
+`live_interpret`, `skia_render`, `lsl_streams`, `plugin_entrypoints`.
+**Read `decisions/0007` before re-raising any of them** — it
 classifies all twenty-one by what is actually blocking each, with runnable
 checks, and five of the entries above are a dependency that will not install
 here rather than work anyone has declined to do.
@@ -384,7 +384,11 @@ dormant, with the reason written down.
 decisions/0006: it imported dowhy purely as a flag, never called it, and read
 three attributes the credibility channels do not have. Dropping a seam is a
 third valid answer, and the one to reach for when the adapter would be worse
-than the fallback it shadows.) Each is a decision — wire it Brain-side, or move
+than the fallback it shadows. `typed_pipeline` left the list the same way in
+#577 — but note what was dropped there: only the CLAIM. `StagePipeline` is
+untouched and still runs the RC stages; it imported pydantic-ai purely as a
+flag, so the capability row was the whole of what the wheel bought.)
+Each is a decision — wire it Brain-side, or move
 it to `_BY_DESIGN` with a reason. **Do not silently move one to `_BY_DESIGN` to shrink
 the list**; that bucket is a claim, and it is the claim the next audit checks.
 

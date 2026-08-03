@@ -724,19 +724,19 @@ def buckets(caps, closure):
 class TestTheCapabilityCheckerSeesTheWholeCatalogue:
 
     def test_it_reads_every_declared_capability(self, caps):
-        """68 today. The count matters because the handoff said ~39 for months
+        """67 today. The count matters because the handoff said ~39 for months
         — a checker reading half the catalogue would have agreed with it.
 
-        This is a PARSER floor, not a catalogue-size freeze. It fell 74 -> 68 as
-        six entries were deliberately retired (`asr_alignment`, `facial_aus`,
-        `skia_render`, `memory_dedup`, `frame_glasses`, and earlier
-        `causal_fusion`), each recorded with an inverted test. Lower it when an
-        entry is retired on purpose; never lower it to make a red run go green,
-        because the failure this guards is the checker silently reading half the
-        file.
+        This is a PARSER floor, not a catalogue-size freeze. It fell 74 -> 67 as
+        seven entries were deliberately retired (`asr_alignment`, `facial_aus`,
+        `skia_render`, `memory_dedup`, `frame_glasses`, `typed_pipeline` (#577),
+        and earlier `causal_fusion`), each recorded with an inverted test. Lower
+        it when an entry is retired on purpose; never lower it to make a red run
+        go green, because the failure this guards is the checker silently
+        reading half the file.
         """
         decl = caps._declared_caps()
-        assert len(decl) >= 68, f"only {len(decl)} capabilities parsed"
+        assert len(decl) >= 67, f"only {len(decl)} capabilities parsed"
 
     def test_every_capability_names_a_seam_or_is_a_documented_concept(self, caps):
         """`seam` is the only field that makes this checkable at all. One entry
@@ -1509,31 +1509,37 @@ class TestPiiRedactionIsNotCriedWolfOn:
         `("persona_tuning", "hulearn")` was RETIRED from this list on
         2026-08-02, which is the retirement working: `persona_humanlearn.tune`
         now calls `FunctionClassifier` for real, so the probe became a caller.
-        Retire the others the same way when their turn comes — do not relax the
-        assertion to keep them.
+        `("typed_pipeline", "pydantic_ai")` was retired on 2026-08-03 the OTHER
+        way (#577): nothing was wired, the capability was dropped instead, so
+        there is no declaration left for the checker to audit. Both exits close
+        the finding; neither is relaxing the assertion to keep the entry.
         """
         probe = {(k, m) for k, m, _s, _w in dep_buckets["probe"]}
         for entry in (("structured_output", "outlines"),
-                      ("structured_output", "instructor"),
-                      ("typed_pipeline", "pydantic_ai")):
+                      ("structured_output", "instructor")):
             assert entry in probe, (
                 f"{entry} is no longer probe-only — either it got wired "
                 "(update this test) or the checker stopped reading seams")
         assert ("persona_tuning", "hulearn") not in probe, (
             "hulearn is probe-only again — persona_humanlearn stopped calling "
             "FunctionClassifier, so the capability is a claim once more")
+        assert not [k for k, _m in probe if k == "typed_pipeline"], (
+            "typed_pipeline declares a probe-only dependency again — #577 "
+            "dropped the claim; re-declaring it needs a caller first")
 
 
 class TestTheDependencyCheckerSeesTheWholeCatalogue:
 
     def test_it_reads_every_declared_capability(self, dep):
         decl = dep._declared_caps()
-        assert len(decl) >= 68, f"only {len(decl)} capabilities parsed"
+        assert len(decl) >= 67, f"only {len(decl)} capabilities parsed"
         # `kind="service"` capabilities legitimately declare () — nothing is
         # pip-installed, so there is no probe to audit. Everything else must
         # carry at least one module, or it would silently leave the audit.
         non_empty = [(k, modules) for k, _t, modules, _s in decl if modules]
-        assert len(non_empty) >= 60, (
+        # 59 since `typed_pipeline` (#577) took its declared module with it —
+        # same deliberate-retirement rule as the catalogue floor above.
+        assert len(non_empty) >= 59, (
             f"only {len(non_empty)} capabilities with declared modules — "
             "entries are being dropped, not audited")
 
