@@ -16,21 +16,27 @@ once already — `ear.py` used to promote a batch of voice capabilities to
 "active" on start, describing engines that were not running, and now promotes
 only the ones a run genuinely drives.
 
-READ THE OUTPUT AS TRIAGE, NOT A SCORE. Unlike lenses, a great many of these
-SHOULD be unreachable from the Brain and making them reachable would be a
-regression:
+READ THE OUTPUT AS TRIAGE, NOT A SCORE — but read the reasons harder than the
+counts, because the reasons are where this drifted.
 
-  * `orchestrator/*` seams — the shipped Brain never builds an `Orchestrator`
-    (`decisions/0001`). Wiring them is the resurrection three PRs exist to
-    prevent.
-  * other targets — `simulator/*`, `bridge/frame_sdk.py`, `rem/nightly_mlx.py`
-    are the desktop stand-in, a different pair of glasses, and a Mac-only
-    nightly job.
+"Unreachable BY DESIGN" used to hold eleven capabilities and it was a PATH RULE:
+anything under `orchestrator/` matched, on the argument that the shipped Brain
+never builds an `Orchestrator` (`decisions/0001`) so wiring it would be the
+resurrection three PRs exist to prevent. That confuses two different claims.
+The Orchestrator must not come back — but "its only consumer is the
+Orchestrator" describes where a seam is wired TODAY, and it is precisely the
+diagnosis under eight capabilities re-hosted Brain-side during 2026-08-02. The
+prefix was filing open work as a settled decision.
 
-So this prints the list and the reason bucket, and — unlike its two siblings —
+So the bucket is split. `_BY_DESIGN` now holds only what is genuinely not a
+wearer feature (the desktop simulator), and `_NOT_YET_HOSTED` carries the rest
+with the user-facing loss spelled out per key. A key leaves that dict by being
+BUILT, never by being reclassified.
+
+This prints the list and the reason bucket, and — unlike its two siblings —
 exits 0. A number to argue with beats a gate that fails for a good reason.
 
-Six buckets, and two of them are defects:
+Seven buckets, and two of them are defects:
 
   * UNCONSTRUCTED — the seam IS loadable and nothing outside it names anything
     it defines. The capability-level version of the mistake this whole family of
@@ -53,6 +59,8 @@ Six buckets, and two of them are defects:
     load-bearing, not describe it.
   * declared DORMANT — unreachable and `_NOT_WIRED` says so, so the wearer is
     told "dormant" rather than shown a false green. Honest; still real work.
+  * NOT YET HOSTED BRAIN-SIDE — a complete seam whose only consumer is the
+    Orchestrator. Real work with a real loss, named in `_NOT_YET_HOSTED`.
   * unreachable BY DESIGN — reaching it would be the regression.
 
 The bucket order matters and it used to be wrong. Loadability was tested FIRST,
