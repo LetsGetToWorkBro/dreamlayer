@@ -33,12 +33,12 @@ dream    = ["brilliant-msg>=7,<8", "Pillow>=10"]   # pip install dreamlayer[drea
 
 # --- Optional integration groups (adapters lazy-import these; every one has a
 #     working fallback, so the core system runs with none of them installed) ---
-memory   = ["sqlite-vec>=0.1,<1", "chromadb>=1,<2", "sentence-transformers>=5,<6", "model2vec>=0.8,<1", "mem0ai>=2,<3", "lancedb>=0.34,<1", "usearch>=2,<3", "docarray>=0.41,<1", "networkx>=3,<4"]
+memory   = ["sqlite-vec>=0.1,<1", "chromadb>=1,<2", "sentence-transformers>=5,<6", "model2vec>=0.8,<1", "lancedb>=0.34,<1", "usearch>=2,<3", "docarray>=0.41,<1", "networkx>=3,<4"]
 voice    = ["silero-vad>=6,<7", "faster-whisper>=1,<2", "openwakeword>=0.6,<1", "sounddevice>=0.5,<1", "sherpa-onnx>=1,<2", "piper-tts>=1.2,<2", "kokoro>=0.9,<1"]
 # zero-shot voice cloning (Juno speaks in her own voice, offline) — heavy (torch),
 # opt-in only, so it is NOT in any deployment profile: `pip install dreamlayer[voice-clone]`
 voice-clone = ["coqui-tts>=0.24,<1"]
-asr-extra = ["whisperx>=3,<4"]
+
 # `pydantic-ai` was dropped from this group with the `typed_pipeline` claim
 # (#577): the only code that named it was an availability probe, and the wheel
 # brings ~60 packages (anthropic, google-genai, logfire, opentelemetry, …) that
@@ -102,7 +102,7 @@ infra    = ["rich>=14,<16", "watchdog>=6,<7", "zeroconf>=0.150,<1", "datasette>=
 # otherwise settles on the vulnerable 46.0.7); presidio floors match the modern
 # analyzer API. pip-audit (dep-audit.yml) gates the rest.
 privacy  = ["cryptography>=48.0.1,<50", "presidio-analyzer>=2.2,<3", "presidio-anonymizer>=2.2,<3", "anyio>=4,<5", "c2pa-python>=0.36,<1", "keyring>=24,<26"]
-platform = ["pluggy>=1,<2", "pyee>=13,<14", "argostranslate>=1,<2", "skia-python>=144,<145", "fastapi>=0.139,<1", "uvicorn>=0.51,<1", "frame-sdk>=1,<2", "pylsl>=1,<2", "wasmtime>=46,<48", "cbor2>=6,<7", "mlx>=0.32,<1; sys_platform=='darwin' and platform_machine=='arm64'", "mlx-lm>=0.31,<1; sys_platform=='darwin' and platform_machine=='arm64'"]
+platform = ["pluggy>=1,<2", "pyee>=13,<14", "argostranslate>=1,<2", "fastapi>=0.139,<1", "uvicorn>=0.51,<1", "pylsl>=1,<2", "wasmtime>=46,<48", "cbor2>=6,<7", "mlx>=0.32,<1; sys_platform=='darwin' and platform_machine=='arm64'", "mlx-lm>=0.31,<1; sys_platform=='darwin' and platform_machine=='arm64'"]
 
 # --- Deployment profiles: one install per target, composed from the groups
 #     above via self-referential extras. Pick ONE per machine:
@@ -111,7 +111,7 @@ platform = ["pluggy>=1,<2", "pyee>=13,<14", "argostranslate>=1,<2", "skia-python
 #     tests/test_capabilities.py asserts these stay in sync with capabilities.py. ---
 profile-halo  = ["dreamlayer[hardware]"]                       # bridge host next to the glasses: BLE only
 profile-phone = ["dreamlayer[memory,voice,structured,llm]"]    # pocket hub: local recall + STT, no heavy vision
-profile-mac   = ["dreamlayer[memory,voice,asr-extra,structured,llm,intelligence,vision,infra,privacy,platform]"]  # the full Brain
+profile-mac   = ["dreamlayer[memory,voice,structured,llm,intelligence,vision,infra,privacy,platform]"]  # the full Brain
 profile-cloud = ["dreamlayer[structured,llm,intelligence,privacy]"]  # remote runner: reasoning, no device/local-model stack
 
 [tool.uv]

@@ -19,6 +19,14 @@ RAW_FRAME_TYPES = frozenset({
     # Stasis (host → ble/host_comm_stasis.lua): {mode: freeze|offer|clear}
     # — the shutter dim + ribbon glyph. Keep in sync with message_types.lua.
     "stasis",
+    # Dream Mode reactors. `message_types.lua` has declared both since it was
+    # written — "Python side dream_mode/timbre_reactor.py … keep in sync" — and
+    # `dream_renderer.lua` / `horizon.lua` draw them. They were missing HERE, so
+    # a frame either reactor produced could not legally cross the bridge at all:
+    # the device half and the Python half were both complete and the wire
+    # between them refused the traffic.
+    "timbre",        # {known, side_dd, points[12]} — a known voice at the rim
+    "yesterlight",   # {active, notch_dd, echo_dd?} — the Horizon dialled back
 })
 
 # Raw frames still allowed while privacy-paused (mode control only; no

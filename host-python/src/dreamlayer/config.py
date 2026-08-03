@@ -38,6 +38,14 @@ class Config:
     # 32-d mock's, so the floor tracks it rather than the fixture.
     recall_min_confidence:      float = 0.35
     reduce_motion:              bool  = False
+    # A compiled Core ML classifier (.mlmodel/.mlpackage) for the vision ladder's
+    # Apple Neural Engine rung. Empty = not configured, and the ladder falls
+    # through to YOLO/MLX/CLIP/heuristic exactly as before. Settable from the
+    # panel as well as the environment, deliberately: `dream_model_path` was
+    # env-only once and a bundled .app cannot set an env var, so the feature was
+    # reachable to developers and to nobody else.
+    coreml_model_path:          str   = field(
+        default_factory=lambda: os.environ.get("DL_COREML_MODEL", "").strip())
     # Juno's spoken voice (Piper TTS): off by default — it needs the `voice`
     # extra and a voice model, and a headless Brain shouldn't surprise a room
     # with audio. Flip it on (panel toggle or `DL_JUNO_VOICE=1`) once a model

@@ -32,12 +32,87 @@ class SemanticRingBuffer:
     iterating the deque during an append raised "deque mutated during iteration".
     """
 
-    def __init__(self, capacity: int = 64):
+    def __init__(self, capacity: int = 64, privacy=None):
         self.capacity = max(1, int(capacity))
         self._buf: deque[BufferedEvent] = deque(maxlen=self.capacity)
         self._lock = threading.RLock()
+        # `privacy` makes the Veil a TYPE INVARIANT on this ring's capture path
+        # rather than a convention every caller has to remember (`typed_models`,
+        # the same opt-in `MemoryDB` takes).
+        #
+        # Every site that appends here checks `allow_capture()` first today —
+        # `world_lens._remember_sighting` even re-checks for the TOCTOU case —
+        # and the ring itself checks nothing, so the guarantee rests entirely on
+        # nobody ever forgetting. That is the shape `person_guard`/`voice_guard`
+        # had before they were centralised: a rule enforced at N call sites is a
+        # rule that holds until the N+1th.
+        #
+        # Default None keeps today's behaviour byte-for-byte; it is a tripwire
+        # the Brain opts into, not a new refusal for existing callers.
+        self._privacy = privacy
+        self._veil_checks = 0
+
+    def set_privacy(self, gate) -> None:
+        """Attach the veil after construction — the ring is built lazily, before
+        the Brain's gate is necessarily to hand."""
+        self._privacy = gate
+
+    @property
+    def veil_checks(self) -> int:
+        """How many appends the type invariant has actually vetted. Zero means
+        the tripwire is armed but nothing has crossed it, which is not the same
+        as the ring being guarded — `typed_models`' promotion follows this."""
+        return self._veil_checks
+
+    def _veil_check(self, event) -> None:
+        """Construct the typed record whose existence IS the permission.
+
+        `models_pydantic.MemoryEvent` cannot be built with `allowed=False`, so a
+        veiled keep raises here instead of landing in the ring. Raises rather
+        than dropping quietly, matching `MemoryDB._veil_check`: a silent refusal
+        is a memory the wearer believes was kept and was not.
+
+        The summary is deliberately NOT passed. This object exists only to be
+        refused or discarded, and copying the wearer's words into a validation
+        record buys nothing.
+        """
+        if self._privacy is None:
+            return
+        from .models_pydantic import MemoryEvent as TypedEvent
+        try:
+            allowed = bool(self._privacy.allow_capture())
+        except Exception:                          # noqa: BLE001 — unreadable → veiled
+            allowed = False
+        TypedEvent(kind=str(getattr(event, "kind", "") or "Note"),
+                   confidence=float(getattr(event, "confidence", 0.0) or 0.0),
+                   allowed=allowed)
+        self._veil_checks += 1
 
     def append(self, event: MemoryEvent, *, ts: float | None = None, source: str = "passive") -> None:
+        self._veil_check(event)
+        with self._lock:
+            self._buf.append(BufferedEvent(
+                event=event,
+                ts=time.time() if ts is None else ts,
+                source=source,
+            ))
+
+    def restore(self, event: MemoryEvent, *, ts: float | None = None,
+                source: str = "seed") -> None:
+        """Re-hydrate an ALREADY-KEPT memory. Recall, not capture.
+
+        Seeding the ring from rows that are already on disk is not a new keep,
+        and the veil's own contract says so: incognito "stops keeping new
+        memories, not recalling old ones" (`memory/privacy.PrivacyGate`). Gating
+        this on `allow_capture` would leave the ring empty for the whole of a
+        veiled session and the lenses would answer "nothing to report" about a
+        timeline that exists — a silence that reads as an absence.
+
+        It is not gated on `allow_recall` either, deliberately: nothing is
+        disclosed by re-hydrating in-memory state, and every READ of that state
+        is separately gated at answer time (`_LensGate.allow_recall`, checked in
+        front of each lens). The disclosure boundary is where it already was.
+        """
         with self._lock:
             self._buf.append(BufferedEvent(
                 event=event,

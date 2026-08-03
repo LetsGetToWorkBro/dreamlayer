@@ -28,8 +28,24 @@ async def run_until_veil(task_factories, stop_event) -> None:
     with explicit cancellation. Both guarantee no task outlives the Veil drop.
     """
     if _HAS_ANYIO:
+        # `started` is what stops a task's OWN failure from being read as
+        # "anyio is broken". A task group re-raises whatever its children raised
+        # (as an ExceptionGroup on 3.11+), and the old `except Exception` here
+        # caught that, logged it, and fell through — re-running every factory on
+        # the asyncio path. So one failing task ran TWICE, and the exception was
+        # then swallowed by `gather(return_exceptions=True)`, leaving the caller
+        # a clean return from work that had failed. For the Brain's only caller
+        # that meant two VLM requests carrying the wearer's camera frame instead
+        # of one (found wiring `veil_scope.py`, 2026-08-03).
+        #
+        # The fallback exists for anyio being UNUSABLE — absent, or a version
+        # whose task group will not open — so it now triggers only when the
+        # group was never entered. Once a child has started, re-running is
+        # strictly worse than propagating.
+        started = False
         try:
             async with anyio.create_task_group() as tg:
+                started = True
                 for f in task_factories:
                     tg.start_soon(f)
 
@@ -40,6 +56,8 @@ async def run_until_veil(task_factories, stop_event) -> None:
                 tg.start_soon(_watch)
             return
         except Exception as exc:
+            if started:
+                raise
             log.warning("[concurrency_anyio] anyio path failed: %s; asyncio", exc)
 
     tasks = [asyncio.ensure_future(f()) for f in task_factories]

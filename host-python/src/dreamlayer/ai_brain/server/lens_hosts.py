@@ -134,7 +134,12 @@ class BrainLenses:
         with self._lock:
             if self._ring is None:
                 from ...memory.ring_buffer import SemanticRingBuffer
-                self._ring = SemanticRingBuffer(RING_CAPACITY)
+                # The Veil as a type invariant on the keep path (`typed_models`):
+                # every `observe()` below already checks the gate, and this makes
+                # the ring refuse a veiled keep whether or not the NEXT caller
+                # remembers to. `_seed` uses `restore()` and is unaffected.
+                self._ring = SemanticRingBuffer(RING_CAPACITY,
+                                                privacy=_LensGate(self.brain))
             if not self._seeded:
                 self._seeded = True                  # set FIRST: a failing seed
                 self._seed()                         # must not retry every call
@@ -177,7 +182,7 @@ class BrainLenses:
                     meta = json.loads(row.get("meta") or "{}")
                 except (TypeError, ValueError):
                     pass
-                self._ring.append(
+                self._ring.restore(
                     MemoryEvent(kind=str(row.get("kind") or "memory"),
                                 summary=str(row.get("summary") or ""),
                                 confidence=float(row.get("confidence") or 0.5),
@@ -313,11 +318,24 @@ class BrainLenses:
             out["observed"] += 1
         try:
             from ...pipelines.ingest import extract_events
+            from .nlp_live import nlp_live as _nlp_live
             for ev in extract_events(text):
                 if ev.kind not in SPOKEN_KINDS:
                     continue                     # objects and places are not
                                                  # statements — see SPOKEN_KINDS
                 meta = dict(ev.meta or {})
+                # The parser pass, before the row is kept. `extract_events` is
+                # tier-1 regex: on a promise it leaves `person` and `due` as
+                # EMPTY STRINGS when its patterns miss, and on a task it emits
+                # neither field at all — so Commitment Drift gets a deadline-less
+                # promise and Saga gets a promise with nobody in it. `sharpen`
+                # only ever fills a field the regex left empty, and with spaCy
+                # absent it is byte-identical to not calling it (see
+                # `nlp_live.NLPLive.sharpen`). Sharpening HERE rather than after
+                # `observe` is what makes it count: the ring row is what Drift
+                # and Saga read, and a field added to a copy afterwards would
+                # improve nothing.
+                meta = _nlp_live(self.brain).sharpen(text, ev.kind, meta)
                 if self.observe(ev.kind, ev.summary, meta=meta, via=via,
                                 person=meta.get("person") or person,
                                 confidence=float(ev.confidence),
@@ -1111,12 +1129,23 @@ class BrainLenses:
             return {"nodes": [], "total": 0, "index": 0, "pushed": 0}
         from .brain_social import _ago as _ts_label
         rows = sorted(rows, key=lambda b: b.ts, reverse=True)
-        total = len(rows)
+        # Near-duplicates collapse HERE and not in the ring (`memory/dedup.py`):
+        # the Object Lens's "seen before N×" row is len() over raw ring entries,
+        # so merging at write time would make that count lie. Scrubbing back
+        # through the same sentence five times is noise; the count is signal.
+        from ...memory.dedup import collapse
+        merged = collapse(rows, lambda b: (b.event.summary or ""))
         nodes = [{"summary": (b.event.summary or "").strip(),
                   "kind": b.event.kind or "object",
                   "ts": b.ts, "ts_label": _ts_label(b.ts, now),
+                  "repeats": reps,
                   "confidence": round(float(getattr(b.event, "confidence", 0.0) or 0.0), 3)}
-                 for b in rows]
+                 for b, reps in merged]
+        # `total` is the MERGED length, not the raw one: it is the scrubber's
+        # bound (`min(index, total - 1)`) and the denominator its progress dot
+        # draws, so a raw total would let the wearer scrub past the end of the
+        # list they can actually see.
+        total = len(nodes)
         if not total:
             return {"nodes": [], "total": 0, "index": 0, "pushed": 0}
         idx = max(0, min(int(index or 0), total - 1))

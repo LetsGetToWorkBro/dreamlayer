@@ -139,7 +139,8 @@ class FaceEmbedder:
 
         self._call_count += 1
         return AUFrame(
-            au_values=[0.0] * 17,               # no AU model: see au_backends.py
+            au_values=[0.0] * 17,               # no AU model: the AU channel is
+                                                # off by design (fusion.AU_CHANNEL_REAL)
             face_confidence=face_confidence,
             embedding=list(embedding),
         )

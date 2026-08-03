@@ -43,7 +43,7 @@ from typing import Iterable, Optional, Tuple
 PROFILES: dict[str, Tuple[str, ...]] = {
     "profile-halo":  ("hardware",),
     "profile-phone": ("memory", "voice", "structured", "llm"),
-    "profile-mac":   ("memory", "voice", "asr-extra", "structured", "llm",
+    "profile-mac":   ("memory", "voice", "structured", "llm",
                       "intelligence", "vision", "infra", "privacy",
                       "platform"),
     "profile-cloud": ("structured", "llm", "intelligence", "privacy"),
@@ -106,9 +106,6 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("local_embeddings", "Real semantic embeddings, offline", "memory",
         ("sentence_transformers",), "memory", "memory/embedder_local.py",
         gain="baseline embeddings are mock vectors (or cloud); this makes memories truly searchable by meaning, offline", impact=5, before=1.5, after=5),
-    Cap("memory_dedup", "Dedup + decay over the memory stream", "memory",
-        ("mem0",), "memory", "lucid_recall/mem0_layer.py",
-        gain="fallback dedup is exact-match; this merges near-duplicates and decays stale ones", impact=3, before=2.5, after=4),
     Cap("typed_docs", "Validated multimodal memory records", "memory",
         ("docarray",), "memory", "memory/doc_schema.py",
         gain="baseline records are plain dataclasses; this validates every field", impact=2, before=3, after=4),
@@ -133,7 +130,13 @@ CAPABILITIES: Tuple[Cap, ...] = (
         gain="baseline has no local transcription at all; this transcribes on-device, audio never uploads", impact=5, before=0, after=5),
     Cap("wake_word", "Acoustic wake-phrase spotting", "voice",
         ("openwakeword",), "voice", "orchestrator/wakeword.py",
-        gain="baseline wakes on a regex over the transcript (ASR runs first); this fires on the wake phrase alone, so ASR only runs once addressed", impact=4, before=2.5, after=4.5),
+        # The old gain text ended "…so ASR only runs once addressed", and that
+        # is not true HERE: the always-on ear transcribes every segment anyway
+        # for the conversation ledger, so nothing is saved. What the spotter
+        # buys in this architecture is RELIABILITY — ASR mangles the phrase
+        # constantly ("hey you know", "a j you know") and the regex loses those
+        # wakes; the spotter listens to the audio and catches them.
+        gain="baseline wakes on a regex over what ASR heard, so a misheard \"hey juno\" is a wake you lose; this listens to the audio itself", impact=4, before=2.5, after=4.5),
     Cap("mic_capture", "Live microphone → the capture pipeline", "voice",
         ("sounddevice",), "voice", "orchestrator/capture.py",
         gain="baseline has no audio input at all; this reads the mic and drives the VAD→ASR→hub loop", impact=5, before=0, after=5),
@@ -169,9 +172,6 @@ CAPABILITIES: Tuple[Cap, ...] = (
         note="opt-in; BirdNET (6,000+ species) on the ambient-audio rung — no human identity in a bird call",
         gain="the glasses hear alarms and doorbells; with BirdNET they also know the Song Sparrow singing over your walk — fully offline, Pi-Zero-sized, pure delight", impact=2, before=0, after=4,
         optional=True),   # birdnetlib has no universal wheel — needs a compiler
-    Cap("asr_alignment", "Word-level timestamps for prosody", "voice",
-        ("whisperx",), "asr-extra", "truth_lens/prosody_whisperx.py",
-        gain="baseline has no word timing; this timestamps every word so tone becomes readable", impact=3, before=0, after=3.5),
     Cap("diarization", "Live who-is-speaking turns", "voice",
         ("diart",), None, "social_lens/diarize_diart.py", kind="manual",
         note="pip install diart",
@@ -231,14 +231,10 @@ CAPABILITIES: Tuple[Cap, ...] = (
         gain="baseline rankings are static; this adapts to your taste as you use it", impact=3, before=2.5, after=4),
     Cap("persona_tuning", "Human-in-the-loop persona classifier", "intelligence",
         ("hulearn",), "intelligence", "orchestrator/persona_humanlearn.py",
-        gain="the classifier already applies any rule callable you hand it — installing this is what lets you BUILD that rule by example (a FunctionClassifier drawn from labelled cases) instead of writing it by hand; nothing in the tree builds one yet", impact=1, before=3, after=4),
+        gain="your glasses already learn how sure they must be before interrupting you — swatting a card away is a label, letting it run is another, and the bar is re-fit from your own reactions either way; installing this cross-validates that fit instead of scoring it on the very cards it was chosen from, which flatters a short history", impact=1, before=3, after=4),
     Cap("object_tracking", "Identity-stable multi-object tracking", "intelligence",
         ("supervision",), "intelligence", "dream_mode/track_supervision.py",
         gain="baseline tracker loses objects when they overlap; this keeps identity through occlusion", impact=3, before=2.5, after=4),
-    Cap("facial_aus", "Micro-expression action units", "intelligence",
-        ("libreface", "feat", "facetorch"), None, "truth_lens/au_backends.py",
-        kind="manual", note="research installs; see adapter docstring",
-        gain="baseline passes frames through untouched; this reads micro-expressions for the truth lens", impact=4, before=0, after=4),
 
     # --- vision -------------------------------------------------------------------
     Cap("vision_classify", "Object recognition (CLIP/YOLO/VLM)", "vision",
@@ -335,16 +331,9 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("offline_translation", "Neural MT with no network", "platform",
         ("argostranslate",), "platform", "rosetta_argos.py",
         gain="baseline 'translation' returns the text unchanged; this actually translates, offline", impact=4, before=0, after=4.5),
-    Cap("skia_render", "GPU-crisp HUD rasterizing", "platform",
-        ("skia",), "platform", "hud/render_skia.py",
-        gain="baseline PIL rendering is solid; this adds GPU-crisp strokes if you want them", impact=1, before=3.5, after=4),
     Cap("asgi_server", "ASGI adapter for your own dispatch", "platform",
         ("fastapi",), "platform", "ai_brain/server_fastapi.py",
         gain="the Brain's own server is the stdlib one and stays that way; this wires a dispatch function YOU write to FastAPI, with the auth and error envelope handled", impact=1, before=3.5, after=4),
-    Cap("frame_glasses", "Brilliant Frame as a second display", "platform",
-        ("frame_sdk",), "platform", "bridge/frame_sdk.py",
-        gain="baseline targets Halo only; this lights up a Brilliant Frame too", impact=2, before=0, after=3.5,
-        optional=True),   # frame-sdk has no universal wheel — needs a compiler
     Cap("lsl_streams", "Lab Streaming Layer sensor export", "platform",
         ("pylsl",), "platform", "pipelines/lsl_transport.py",
         gain="baseline has no research export; this syncs sensors with lab tooling", impact=1, before=0, after=3),
@@ -479,7 +468,12 @@ _NOT_WIRED = frozenset({
     # promoted in `_capability_payload` when networkx answers over a NON-EMPTY
     # graph: the wheel over an empty graph returns nothing from every query, which
     # is exactly what the fallback does, so that must not read green.
-    "memory_dedup", "typed_docs", "social_graph",
+    # memory_dedup was RETIRED on 2026-08-02: near-duplicate collapsing works
+    # with no dependency at all (`memory/dedup.py`, on the read path), so there
+    # is nothing left to install and a catalogue of installable options is the
+    # wrong place for it. mem0's own default routes extraction through a cloud
+    # LLM, which is not an upgrade this product can offer (decisions/0007).
+    "typed_docs", "social_graph",
     # voice: the on-device "ear". Seven of these (voice_vad, local_asr,
     # mic_capture, asr_moonshine, onnx_speech, sound_events, bird_song) are now
     # driven by the Brain's opt-in ear (ai_brain/server/ear.py) — it sets
@@ -497,10 +491,13 @@ _NOT_WIRED = frozenset({
     # `tagger_live` lesson, where a present wheel with no model reported live for a
     # seam that could only ever return nothing.
     #
-    # wake_word (no wake engine yet), asr_alignment and diarization are still NOT
-    # promoted — they need the full Orchestrator path.
+    # wake_word (no wake engine yet) and diarization are still NOT promoted —
+    # they need the full Orchestrator path. `asr_alignment` was RETIRED on
+    # 2026-08-02: the reworked Truth Lens computes its voice-stress channel from
+    # `truth_lens/prosody.py` with no dependency, so whisperx only sharpened a
+    # channel that already works (decisions/0007).
     "voice_vad", "local_asr", "wake_word", "mic_capture", "live_interpret",
-    "sound_events", "asr_moonshine", "bird_song", "asr_alignment", "diarization",
+    "sound_events", "asr_moonshine", "bird_song", "diarization",
     "onnx_speech",
     # vision: six frontier lenses (math_ocr, doc_read, depth_sense,
     # openvocab_find, scene_segment, sky_sense) are now reachable from the phone /
@@ -518,14 +515,35 @@ _NOT_WIRED = frozenset({
     # image. Promotion is proof-based (`_dream_neural_ok`, set only after the
     # NEURAL painter produces a picture) and re-checked against the configured
     # path, so onnxruntime being importable still must not light this green.
-    # coreml_ondevice remains dormant (a macOS Vision classify backend not on the
-    # live path).
+    # coreml_ondevice stays listed as the honest DEFAULT and is promoted on a
+    # real prediction. Its `__call__` was `return None if not (...) else None` —
+    # None on both branches — so no configuration could make it answer, and
+    # `available` (coremltools imports) would have lit it green on a wheel
+    # alone. It is a real ANE classifier now, first on the ladder when the
+    # wearer has compiled a model, and dormant until one comes back with a label.
     "coreml_ondevice", "dream_style",
     # intelligence / structured: adapters wired only in tests
-    "speaker_id", "persona_tuning", "object_tracking", "facial_aus",
+    # persona_tuning stays listed as the honest DEFAULT and is promoted on a
+    # real fit. It had a tuner and one consumer — `MaturityGate`, built only by
+    # the `Orchestrator` the shipped Brain never instantiates (decisions/0001),
+    # so it was reachable from tests and the simulator and from nothing the
+    # wearer runs. `attention_live.AttentionGate` re-hosts the plain half
+    # Brain-side, the way `retention_live.py` did, and `push_event` consults it.
+    # It reports dormant until the wearer's own swats support a bar.
+    # nlp is listed here as a CORRECTION, not a downgrade. It reported "active"
+    # on nothing but an installed wheel, because it was never in this set — and
+    # neither of its two seams had a live caller. `CommitmentNLP` was built only
+    # by the Orchestrator (decisions/0001), and `pipelines.ingest`'s spaCy pass
+    # is tier 2, reached only through `IngestPipeline.ingest`, which is also
+    # Orchestrator-only; the Brain calls the pure tier-1 `extract_events`. So
+    # the highest-impact entry in the catalogue lit green on `import spacy`
+    # while the wearer's commitments were parsed by regex. `nlp_live.py` hosts
+    # it Brain-side now, on `BrainLenses.ingest_utterance`, and the flag follows
+    # a FIELD the regex left empty and the parser filled.
+    "speaker_id", "persona_tuning", "object_tracking", "nlp",
     "structured_output", "typed_models",
     # platform / infra: no live loader / surface reaches these
-    "plugin_entrypoints", "event_bus", "skia_render", "asgi_server",
+    "plugin_entrypoints", "event_bus", "asgi_server",
     # crdt_sync stays listed as the honest DEFAULT and is promoted on a real
     # merge. `vault_sync.py` was a complete, tested CRDT that nothing constructed,
     # while the Brain had held the other half the whole time — `self.rc` builds
@@ -533,7 +551,7 @@ _NOT_WIRED = frozenset({
     # a file the wearer carries between their own devices: the CRDT makes the
     # channel irrelevant (merge is commutative, associative, idempotent), which is
     # exactly why no server has to hold their figments.
-    "frame_glasses", "lsl_streams", "mlx_train", "wasm_plugins", "crdt_sync",
+    "lsl_streams", "mlx_train", "wasm_plugins", "crdt_sync",
     "mesh_range", "extism_plugins", "dashboard", "fs_watch",
     "lan_discovery", "spatial_viz",
     # privacy: the structural anyio veil-stop is never used (the flag-gate is).
@@ -632,6 +650,11 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # ai_brain/server/ear.py EAR_CAPS — set while the microphone is open
     "voice_vad", "local_asr", "mic_capture", "asr_moonshine", "onnx_speech",
     "sound_events", "bird_song", "live_interpret",
+    # …and `wake_word`, once `CapturePipeline` stopped dropping the wake engine
+    # it accepts on the floor and `EarHost.hear` stopped being a `return`. The
+    # flag follows the ACOUSTIC spotter having fired, never the wheel and never
+    # an answered utterance — the text-level regex answers those and always did.
+    "wake_word",
     # …and these six, each from its own live path (DL_WIRED_<KEY>)
     "crdt_sync", "dashboard", "dream_style", "social_graph", "speaker_id",
     # `wasm_plugins` and `extism_plugins` joined them once a `.wasm` package
@@ -647,6 +670,43 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # diarizer at all. Promoted only on a segment genuinely split into more
     # than one voice — the fallback answers one for everything.
     "diarization",
+    # …and `nlp`, once the parse reached the ingest path. Promoted only on a
+    # field the regex left empty — never on `CommitmentNLP.available`, which is
+    # just "spacy imported", and never on the pass having run, which it does on
+    # every commitment row whether or not spaCy is installed.
+    "nlp",
+    # …and three that had a working DL_WIRED_ setter and were never listed
+    # here. That is the usual honesty bug INVERTED, and it still made the panel
+    # print something false: `wires_on_install` reads this set, and the panel
+    # renders it as "installing the extra will land you on 'installed · not
+    # active yet'". For these three it lights up. Found by closing the loop in
+    # both directions (`test_capability_install_promise.py`) rather than by
+    # reading the file — the one-way check had been passing throughout.
+    "coreml_ondevice", "persona_tuning", "typed_models",
+    # …and `fs_watch`, once a watchdog observer per watched folder replaced a
+    # 3-second stat sweep. Promoted on a change event DELIVERED, never on an
+    # observer having started — a filesystem that emits nothing starts one
+    # just as happily.
+    "fs_watch",
+    # …and `mesh_range`, once the Brain could open a Meshtastic node and put
+    # a typed line on it. Promoted on a line that CROSSED, either way — a
+    # radio with no peer in range connects perfectly and carries nothing.
+    "mesh_range",
+    # …and `structured_concurrency`, once the one scope in the Brain that
+    # genuinely needed a cancel-all got one: `live_dream.scene` checked the
+    # Veil at the top and then ran VLM calls on the wearer's camera frame
+    # for as long as the backend took.
+    "structured_concurrency",
+    # …and `mlx_train`, once the trainer was written and `MLXBackend` learned
+    # to load an adapter. Promoted on an ADAPTER genuinely written — never on
+    # mlx importing, and never on a run having happened, because a run that
+    # refused for too small a corpus is the guard working.
+    "mlx_train",
+    # …and `lan_discovery`, once the Brain announced itself at all. Promoted on
+    # a service REGISTERED, which is the strongest evidence mDNS offers a
+    # publisher — there is no acknowledgement to wait for — and still far more
+    # than the wheel importing: a LAN address was found and the beacon is live.
+    "lan_discovery",
 })
 
 
@@ -661,9 +721,6 @@ _PROMOTED_AT_RUNTIME = frozenset({
 #: remembered — `test_capability_install_promise` asserts the call site is still
 #: there, and the entry has to be removed or moved when it stops being.
 _RUNS_ON_HUB = {
-    "memory_dedup": "orchestrator/orchestrator.py",   # Mem0Layer, on the live
-                                                      # LucidRecall path, gated
-                                                      # on mem0 truly loading
     "mesh_range": "orchestrator/ops_confluence.py",   # the LoRa mesh, which is
                                                       # a glasses radio
     # The odd one out, and worth the extra sentence. `MemoryEvent` is
@@ -857,11 +914,17 @@ PACKS: Tuple[Pack, ...] = (
          ("memory",), "~2–4 GB", 5, recommended=True),
     Pack("ears", "Sharp Ears",
          "Local speech: neural voice detection, on-device transcription, and Juno speaking in her own cloned voice. Audio never leaves this Mac.",
-         ("voice", "asr-extra", "voice-clone"), "~2–4 GB", 4),
+         ("voice", "voice-clone"), "~2–4 GB", 4),
     Pack("eyes", "Clear Eyes",
-         "Perception: object recognition, real voice fingerprints, proper language "
-         "parsing, and a painterly dream-mode lens — working today. The "
-         "identity-stable tracker ships as a library; nothing feeds it frames yet.",
+         # The hedge that used to close this line — "the identity-stable tracker "
+         # ships as a library; nothing feeds it frames yet" — was about
+         # `object_tracking`, and the ambient look loop has fed it centroids
+         # since it was wired. Every capability this pack carries switches on
+         # when it installs, so hedging would now be the false statement in the
+         # other direction (`test_a_fully_live_pack_is_not_hedged`).
+         "Perception: object recognition, identity-stable tracking, real voice "
+         "fingerprints, proper language parsing, and a painterly dream-mode "
+         "lens — working today.",
          ("vision", "intelligence", "dream-style"), "~3–5 GB", 4),
     Pack("guardian", "Guardian",
          "Deeper privacy and provenance: in-context PII scrubbing and Ed25519 "
@@ -894,7 +957,7 @@ _PACK_BY_KEY = {p.key: p for p in PACKS}
 # pack whose only gap is a build-only extra reads installed, and "Retry the rest"
 # doesn't loop forever re-attempting a dep that deterministically can't build.
 # These are the pip distribution names for the caps marked optional=True
-# (frame_glasses→frame-sdk, bird_song→birdnetlib, sound_pairing→ggwave);
+# (bird_song→birdnetlib, sound_pairing→ggwave);
 # test_pack_optional_reqs keeps these in lockstep so a newly-optional cap can't
 # silently fall through.
 PACK_OPTIONAL_REQS = frozenset({"frame-sdk", "birdnetlib", "ggwave"})

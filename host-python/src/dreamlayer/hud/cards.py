@@ -1298,9 +1298,21 @@ ALL_SAMPLES: dict[str, dict] = {
             {"kind": "triangle", "x": 96,  "y": 48, "size": 16},
         ],
     ),
-    # PaletteShiftCard is deliberately NOT in ALL_SAMPLES: it is a palette
-    # command carrier, not a drawable card — neither renderer draws it, so
-    # its "golden" could only ever be a black disc, and Meridian's golden
-    # contract forbids committing black frames as references
-    # (docs/CINEMA_V2_GOLDEN_REVIEW.md).
+    # PaletteShiftCard is deliberately NOT in ALL_SAMPLES, and the reason
+    # narrowed on 2026-08-02.
+    #
+    # It used to read "neither renderer draws it". The Live Lens draws it now
+    # (`glassPaletteShiftCard`) — as the colours themselves, which is the one
+    # card here whose content a text renderer could never carry.
+    #
+    # halo-lua still does not, and should not: the DEVICE receives palette
+    # weather natively as a raw `palette` frame (`ble/message_types.lua`
+    # PALETTE → `display/palette_animator.lua`), which animates the whole disc
+    # rather than drawing a card about it. The phone has no such channel, so
+    # the card IS the phone's palette surface. The asymmetry is the two
+    # transports differing, not a missing drawing.
+    #
+    # It stays out of ALL_SAMPLES because its golden on the device could only
+    # ever be a black disc, and Meridian's golden contract forbids committing
+    # black frames as references (docs/CINEMA_V2_GOLDEN_REVIEW.md).
 }

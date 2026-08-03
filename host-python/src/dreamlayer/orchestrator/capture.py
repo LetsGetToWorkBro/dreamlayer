@@ -33,6 +33,29 @@ AMBIENT_WINDOW_MS = 3000             # non-speech audio pooled before it's tagge
 AMBIENT_MAX_MS = 6000                # hard cap on the ambient buffer (drop-oldest)
 
 
+def _accepts(fn, name: str) -> bool:
+    """Whether `fn` takes a keyword called `name`.
+
+    Probed once and cached by the caller, the same way this file already probes
+    the tagger's signature. The alternative — calling with the kwarg and
+    catching TypeError — would swallow a TypeError raised INSIDE the hub and
+    silently call it a second time without the argument, running the whole
+    wake/command path twice on one utterance.
+    """
+    try:
+        import inspect
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):              # builtins, C callables
+        return False
+    for p in sig.parameters.values():
+        if p.kind is p.VAR_KEYWORD:
+            return True
+        if p.name == name and p.kind in (p.POSITIONAL_OR_KEYWORD,
+                                         p.KEYWORD_ONLY):
+            return True
+    return False
+
+
 class CapturePipeline:
     """VAD-gated speech → ASR → speaker → hub. Providers are injected (all
     optional); with none installed the pipeline still runs and simply produces
@@ -87,7 +110,25 @@ class CapturePipeline:
         # a stranger thereafter).
         self._enrolled_speakers = (list(enrolled_speakers)
                                    if enrolled_speakers is not None else None)
+        # Acoustic wake spotter (OpenWakeWordEngine / SherpaWakeWord), optional.
+        # It was ACCEPTED here and never read — assigned on this line and
+        # referenced nowhere else in the file — so a caller could hand the
+        # pipeline a fully working wake engine and the pipeline would drop it on
+        # the floor. `wake_word` could not be wired no matter what the ear did.
+        #
+        # It runs on the ENDPOINTED SEGMENT, not per window: a segment is one
+        # complete utterance, which is the granularity "was I addressed?" is
+        # asked at, and it costs one inference per utterance instead of five per
+        # second.
         self.wake = wake
+        #: (fired, score) from the last segment the spotter saw. `fired` is None
+        #: when no spotter ran at all — which is a different thing from a
+        #: spotter that ran and said no, and the hub needs to tell them apart.
+        self.last_wake: tuple = (None, 0.0)
+        #: Segments the spotter genuinely fired on. The promotion proof for
+        #: `wake_word`: an engine that loaded is not an engine that heard you.
+        self.wakes = 0
+        self._hear_takes_wake: bool | None = None  # hub signature, probed once
         self.last_speaker_embedding = None
         self.sample_rate = sample_rate
         self.silence_hang_ms = silence_hang_ms
@@ -274,8 +315,32 @@ class CapturePipeline:
             label = self._diarized_label(segment)
         self._acoustic_context(segment)
         self._speech_audio(segment)
-        self._route(text, label)
+        self._route(text, label, self._addressed(segment))
         return text
+
+    def _addressed(self, segment):
+        """Did the wake phrase occur in this utterance, acoustically?
+
+        True / False from a spotter that ran, and None when there is no spotter
+        — which the hub must distinguish, because "no engine" means fall back to
+        the text-level regex and "engine said no" does NOT mean discard the
+        regex's answer. The floor rule every optional dependency here is held
+        to: installing one must never lose a wake the fallback would have
+        caught.
+        """
+        if self.wake is None:
+            return None
+        try:
+            fired, score = self.wake.detect(segment)
+        except Exception as exc:                 # noqa: BLE001 — never break capture
+            self._record(exc)
+            self.last_wake = (None, 0.0)
+            return None
+        fired = bool(fired)
+        self.last_wake = (fired, float(score or 0.0))
+        if fired:
+            self.wakes += 1
+        return fired
 
     def _diarized_label(self, segment) -> str:
         """An anonymous turn tag for a segment identity could not name.
@@ -370,12 +435,17 @@ class CapturePipeline:
             except Exception as exc:
                 self._record(exc)
 
-    def _route(self, text: str, speaker_label: str) -> None:
+    def _route(self, text: str, speaker_label: str, addressed=None) -> None:
         """Feed the hub: the wake/command path AND the conversation ledger.
         Both are veil-gated inside the orchestrator already; failures recorded."""
         # wake / command path
         try:
-            self.orch.hear(text)
+            if self._hear_takes_wake is None:
+                self._hear_takes_wake = _accepts(self.orch.hear, "addressed")
+            if self._hear_takes_wake:
+                self.orch.hear(text, addressed=addressed)
+            else:
+                self.orch.hear(text)
         except Exception as exc:
             self._record(exc)
         # conversation ledger (captions, commitments, veritas ride on this)

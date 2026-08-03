@@ -205,6 +205,14 @@ type BrainState = {
    * inventing a direction from an assumed heading.
    */
   postLocation: (fix: { lat: number; lon: number; accuracy_m?: number; heading_deg?: number | null }) => Promise<boolean>;
+  // --- the glasses -----------------------------------------------------
+  // The Brain forwards every card it pushes to a connected Halo, because the
+  // link subscribes to the same fan-out the Live Lens does. These three are
+  // the only controls: nothing else in the app has to know the glasses exist.
+  haloStatus: HaloStatus;
+  getHalo: () => Promise<HaloStatus | null>;
+  connectHalo: (bridge?: "emulator" | "real") => Promise<HaloStatus | null>;
+  disconnectHalo: () => Promise<boolean>;
   // the brief the Brain's scheduler delivered on its own at brief_hour (no compute)
   getLatestBrief: () => Promise<{ text: string; bullets: string[]; ts: number } | null>;
   // the extended "long brief" — sectioned; fetched on demand and kept on the phone
@@ -289,6 +297,24 @@ function headers(m: MacMini): Record<string, string> {
  * Every outcome is reported to useConnectionStore, so the app has ONE truth
  * about reachability instead of a guess per call.
  */
+export type HaloStatus = {
+  connected: boolean;
+  // `driving` is the honest one: a connected radio that has carried nothing is
+  // not a working link, exactly as an importable adapter is not a wired one.
+  driving: boolean;
+  sent: number;
+  dropped: number;
+  failures: number;
+  queued: number;
+  last_error: string;
+  device: Record<string, unknown>;
+};
+
+export const HALO_OFFLINE: HaloStatus = {
+  connected: false, driving: false, sent: 0, dropped: 0, failures: 0,
+  queued: 0, last_error: "", device: {},
+};
+
 async function brainFetch(m: MacMini, path: string, opts: RequestInit = {}): Promise<Response> {
   const conn = useConnectionStore.getState();
   const o: RequestInit = { ...opts, headers: { ...headers(m), ...(opts.headers as object) } };
@@ -956,6 +982,56 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       return (await r.json()).items ?? [];
     } catch {
       return [];
+    }
+  },
+
+  haloStatus: HALO_OFFLINE,
+
+  getHalo: async () => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return null;
+    try {
+      const r = await brainFetch(m, "/dreamlayer/halo");
+      const j = (await r.json()) as HaloStatus;
+      set({ haloStatus: { ...HALO_OFFLINE, ...j } });
+      return get().haloStatus;
+    } catch {
+      // An unreachable Brain is not a disconnected glass — say nothing rather
+      // than reporting a link state nobody measured.
+      return null;
+    }
+  },
+
+  connectHalo: async (bridge = "emulator") => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return null;
+    try {
+      const r = await brainFetch(m, "/dreamlayer/halo", {
+        method: "POST",
+        body: JSON.stringify({ action: "connect", bridge }),
+      });
+      const j = await r.json();
+      if (!j?.ok) return null;
+      set({ haloStatus: { ...HALO_OFFLINE, ...j } });
+      return get().haloStatus;
+    } catch {
+      return null;
+    }
+  },
+
+  disconnectHalo: async () => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return false;
+    try {
+      const r = await brainFetch(m, "/dreamlayer/halo", {
+        method: "POST",
+        body: JSON.stringify({ action: "disconnect" }),
+      });
+      const j = await r.json();
+      set({ haloStatus: HALO_OFFLINE });
+      return !!j?.ok;
+    } catch {
+      return false;
     }
   },
 

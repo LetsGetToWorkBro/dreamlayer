@@ -48,8 +48,34 @@ class MLXBackend:
         self._max_tokens = int(getattr(config, "mlx_max_tokens", 512) or 512)
         self._model = None
         self._tokenizer = None
+        #: Whether the loaded model has the wearer's own LoRA on it. Read by the
+        #: status surface, so "the adapter trained" and "the adapter is being
+        #: used" stay separable — they are different claims and the second is
+        #: the one that changes an answer.
+        self.adapter_loaded = False
         # inject a (model, tokenizer, prompt, max_tokens) -> str in tests
         self._generate = _generate
+
+    def adapter_path(self):
+        """The wearer's trained adapter, or None.
+
+        Returns a path only when weights are ACTUALLY on disk. `mlx_lm.load`
+        raises on an adapter directory that holds nothing, so handing it a
+        configured-but-empty path would take the whole MLX tier down — the
+        answer path — over an overnight job that has not run yet. A missing
+        adapter is the normal state and must cost nothing.
+        """
+        from pathlib import Path
+        raw = (getattr(self.config, "mlx_adapter_dir", "") or "").strip()
+        if not raw:
+            return None
+        d = Path(raw).expanduser()
+        try:
+            if any(d.glob("*.safetensors")):
+                return str(d)
+        except OSError:
+            pass
+        return None
 
     def _ensure(self) -> bool:
         if self._generate is not None:
@@ -58,10 +84,30 @@ class MLXBackend:
             return True
         if not self.available:
             return False
+        adapter = self.adapter_path()
         try:                               # pragma: no cover - Apple-only path
-            self._model, self._tokenizer = mlx_lm.load(self._model_name)
+            if adapter:
+                self._model, self._tokenizer = mlx_lm.load(
+                    self._model_name, adapter_path=adapter)
+                self.adapter_loaded = True
+            else:
+                self._model, self._tokenizer = mlx_lm.load(self._model_name)
             return True
         except Exception as exc:           # pragma: no cover
+            if adapter:
+                # A bad adapter must not cost the wearer their local model.
+                # Retry BARE once: a stale LoRA (trained against a different
+                # base, or half-written by a killed run) is a recoverable
+                # nuisance, and refusing to answer at all because last night's
+                # job produced something odd is not.
+                log.error("[mlx] adapter load failed: %s; base model only", exc)
+                self.adapter_loaded = False
+                try:
+                    self._model, self._tokenizer = mlx_lm.load(self._model_name)
+                    return True
+                except Exception as exc2:
+                    log.error("[mlx] model load failed: %s", exc2)
+                    return False
             log.error("[mlx] model load failed: %s", exc)
             return False
 

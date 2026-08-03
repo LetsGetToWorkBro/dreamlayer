@@ -521,9 +521,9 @@ class TestTheUnresolvedPushCountIsPinned:
         _roots, reachable = lens._closure(
             lens._import_graph(files), {lens._module_name(p) for p in files})
         _pushed, unresolved = hud._pushed_types(reachable)
-        assert len(unresolved) == 6, (
+        assert len(unresolved) == 5, (
             f"the REAL tree's unresolved push-site count changed "
-            f"({len(unresolved)} != 6): {sorted(unresolved)} — if the resolver "
+            f"({len(unresolved)} != 5): {sorted(unresolved)} — if the resolver "
             "improved, verify each remaining site genuinely cannot be resolved "
             "locally and move this pin DOWN; if it grew, find what regressed")
         modules = sorted({u.rsplit(":", 1)[0] for u in unresolved})
@@ -534,8 +534,10 @@ class TestTheUnresolvedPushCountIsPinned:
                                              # calls live in other modules
             "ai_brain.server.server",        # the self-test's function-parameter
                                              # card (inter-procedural)
-            "ai_brain.server.truth_live",    # _push(result) — a TruthLens
-                                             # result, not a card
+            # truth_live left this list on 2026-08-02. Its `_push` BUILDS the
+            # card rather than forwarding one, so the inner push_event is the
+            # site, and `to_gauge_card` — a builder call assigned to a local,
+            # mutated, then returned — is read by `_fn_card_types_found` now.
         ], (
             "the REAL tree's unresolved push sites moved modules: "
             f"{modules} (from {sorted(unresolved)})")
@@ -546,31 +548,70 @@ class TestTheGlassIsTheONETheBrainCanReach:
 
     An earlier draft asked only "does `halo-lua` draw this type" and answered
     yes for all 24. But `Brain.push_event` fans out to the LIVE LENS — an SSE
-    stream to the browser page in `live.py` — and nothing under `ai_brain/`
-    calls `bridge.send_card`, so no Brain push has any path to the glasses
-    firmware at all. The checker was measuring the Orchestrator's renderer to
-    decide whether the Brain's cards were visible.
+    stream to the browser page in `live.py` — and for a long time nothing under
+    `ai_brain/` called `bridge.send_card`, so no Brain push had any path to the
+    glasses firmware at all. The checker was measuring the Orchestrator's
+    renderer to decide whether the Brain's cards were visible.
+
+    **That gap closed on 2026-08-02** (`ai_brain/server/halo_link.py`). The two
+    renderers are still measured separately — they draw different sets and
+    always will — but "the Brain cannot reach the device" is no longer true, and
+    the assertion below is inverted to say so.
     """
 
-    def test_the_brain_has_no_path_to_the_device_renderer(self):
+    def test_the_brain_reaches_the_device_renderer_through_exactly_one_seam(self):
+        """RETIRED, inverted. This asserted `not hits` — that NOTHING under
+        `ai_brain/` called `send_card`.
+
+        The whole `bridge/` package, including the real BLE transport, was
+        constructed only by `main.py`'s emulator helper and `simulator/`, both
+        hanging off the `Orchestrator` the shipped Brain never builds
+        (decisions/0001). So the transport was complete, tested, and reachable
+        only from code the wearer does not run — the same defect as
+        `persona_tuning`, `typed_models` and `memory_dedup`, and the largest,
+        because it is why nothing reached the glass.
+
+        The inversion keeps the property that made the original valuable: the
+        path must be ONE seam, not scattered `send_card` calls across the
+        producers. A single subscriber on the existing fan-out means every card
+        the Live Lens gets the glass gets; twenty call sites would mean twenty
+        chances to forget, and this test would stop being able to tell whether
+        any given card reaches the device.
+        """
         import pathlib
         import subprocess
         root = pathlib.Path(__file__).resolve().parents[4]
-        hits = subprocess.run(
-            ["grep", "-rn", "send_card", str(root / "host-python/src/dreamlayer/ai_brain")],
-            capture_output=True, text=True).stdout.strip()
-        assert not hits, (
-            "something under ai_brain/ now calls send_card — if the Brain has "
-            f"gained a path to halo-lua, this whole model needs revisiting:\n{hits}")
+        hits = [ln for ln in subprocess.run(
+            ["grep", "-rn", "send_card",
+             str(root / "host-python/src/dreamlayer/ai_brain")],
+            capture_output=True, text=True).stdout.strip().splitlines() if ln]
+        files = {ln.split(":", 1)[0].rsplit("/", 1)[-1] for ln in hits}
+        assert files == {"halo_link.py"}, (
+            "the Brain's path to the glasses must stay a single seam; "
+            f"send_card is now called from {sorted(files)}")
 
     def test_the_two_renderers_are_measured_separately(self, hud):
         device = hud._drawn_on_glass()
         live = hud._drawn_on_live_lens()
         assert device and live
-        assert len(live) < len(device), (
-            "the Live Lens is meant to be the SMALLER set — bespoke branches "
-            "for what the Brain pushes, plus a generic fallback. If it caught "
-            "up with halo-lua, check the scan is not matching comments again.")
+        # RETIRED, inverted — this asserted `len(live) < len(device)`.
+        #
+        # The Live Lens WAS the smaller set: 30 bespoke branches against
+        # halo-lua's 45, so fifteen of the forty card types `hud/cards.py`
+        # builds fell through to `glassEventCard` and arrived on the phone with
+        # the field carrying their answer dropped. Fourteen of those fifteen
+        # already drew properly on the glasses, which made the phone the
+        # surface that was behind.
+        #
+        # All fifteen have bespoke renderers as of 2026-08-02, so the sets are
+        # level at 45. The original's own failure message said to check the
+        # scan was not matching comments if this ever happened — it was
+        # checked: every one of the 45 has a real `t === "X"` dispatch arm, and
+        # `test_live_lens_card_parity.py` pins each by name.
+        assert len(live) >= len(device) - 1, (
+            f"the Live Lens fell behind again ({len(live)} vs {len(device)} on "
+            "the device) — a card type the Brain builds is drawing generically "
+            "on the phone")
         # NOT a subset, and the exceptions are the point rather than slack in
         # the test: a card the Brain pushes but the ORCHESTRATOR never sends has
         # no reason to exist in halo-lua, so the Live Lens is the only surface
@@ -584,14 +625,24 @@ class TestTheGlassIsTheONETheBrainCanReach:
             lens._import_graph(files), {lens._module_name(p) for p in files})
         pushed, _unresolved = hud._pushed_types(reachable)
         brain_only = live - device
-        assert brain_only, (
-            "no Brain-only card types at all — ConsistencyCard, StasisCard and "
-            "QuestRewardCard are pushed by lens_hosts and drawn by no device "
-            "renderer, so at least those three are expected here.")
+        # This used to assert `brain_only` was NON-empty, naming ConsistencyCard,
+        # StasisCard and QuestRewardCard as pushed-but-undrawn on the device.
+        # All three got device renderers on 2026-08-02 (renderer.lua:
+        # draw_consistency / draw_quest_reward / draw_stasis), which is the
+        # whole point of the Brain gaining a path to the glass — so an EMPTY set
+        # is now the good outcome and the assertion is inverted.
+        #
+        # The invariant that made the original valuable survives: whatever is
+        # here must be a type something actually pushes, or a branch was added
+        # for a card that never arrives.
         for ctype in brain_only:
             assert ctype in pushed or ctype in hud._BRAIN_ONLY_PUSHED, (
                 f"{ctype} has a Live Lens branch but nothing pushes it — "
                 "either wire the push or drop the branch.")
+        for ctype in ("ConsistencyCard", "StasisCard", "QuestRewardCard"):
+            assert ctype in device, (
+                f"{ctype} lost its device renderer — the Brain pushes it and "
+                "the glasses would fall back to draw_fallback")
 
     def test_the_generic_fallback_is_not_counted_as_a_drawing(self, hud):
         """`glassEventCard` draws `eyebrow` and `primary` only. Counting it
@@ -599,15 +650,28 @@ class TestTheGlassIsTheONETheBrainCanReach:
         field carrying the answer."""
         live = hud._drawn_on_live_lens()
         assert "HarkCard" in live           # has a real branch
-        # The negative case used to be ReadyCard, which now HAS a branch — it is
-        # `{type, dismiss_ms}` and nothing else, so the fallback drew its "…"
-        # placeholder, i.e. a resting state that looked like a failure.
-        # ErrorCard takes its place: still no branch, still must not be counted.
-        assert "ErrorCard" not in live
-        # …and the scan must not have degenerated into "any name in the file".
-        # These appear in comments and payloads here but have no dispatch arm.
-        assert "PaletteShiftCard" not in live
-        assert "QueryListeningCard" not in live
+        # The negative case has rotated twice, and the reason is the point.
+        # First ReadyCard gained a branch, so ErrorCard took its place. Now
+        # ErrorCard, PaletteShiftCard and QueryListeningCard all have branches
+        # too — every one of the forty types `hud/cards.py` builds does, as of
+        # 2026-08-02.
+        #
+        # So the guard can no longer be "a built type with no branch": there
+        # aren't any, and inventing one would mean leaving a card drawing
+        # generically on the phone purely to keep a test honest. What it CAN
+        # still prove is that the scan reads dispatch arms rather than names:
+        # `ObjectPanelCard` appears in this file and has no arm.
+        assert "ObjectPanelCard" not in live, (
+            "the scan has degenerated into 'any card name in the file' — it "
+            "must read `t === \"X\"` dispatch arms, or the generic fallback "
+            "starts counting as a drawing again")
+        # …and every name it DOES report must have a real arm.
+        import re as _re
+        from dreamlayer.ai_brain.server import live as _live_mod
+        missing = [c for c in sorted(live)
+                   if not _re.search(r't === "%s"\s*(\|\||\))' % c,
+                                     _live_mod._PAGE)]
+        assert not missing, f"reported without a dispatch arm: {missing}"
 
     def test_the_card_whose_answer_needs_a_branch_has_one(self, hud):
         """ObjectRecallCard puts the place — the entire answer — outside
@@ -660,10 +724,19 @@ def buckets(caps, closure):
 class TestTheCapabilityCheckerSeesTheWholeCatalogue:
 
     def test_it_reads_every_declared_capability(self, caps):
-        """74 today. The count matters because the handoff said ~39 for months
-        — a checker reading half the catalogue would have agreed with it."""
+        """67 today. The count matters because the handoff said ~39 for months
+        — a checker reading half the catalogue would have agreed with it.
+
+        This is a PARSER floor, not a catalogue-size freeze. It fell 74 -> 67 as
+        seven entries were deliberately retired (`asr_alignment`, `facial_aus`,
+        `skia_render`, `memory_dedup`, `frame_glasses`, `typed_pipeline` (#577),
+        and earlier `causal_fusion`), each recorded with an inverted test. Lower
+        it when an entry is retired on purpose; never lower it to make a red run
+        go green, because the failure this guards is the checker silently
+        reading half the file.
+        """
         decl = caps._declared_caps()
-        assert len(decl) >= 70, f"only {len(decl)} capabilities parsed"
+        assert len(decl) >= 67, f"only {len(decl)} capabilities parsed"
 
     def test_every_capability_names_a_seam_or_is_a_documented_concept(self, caps):
         """`seam` is the only field that makes this checkable at all. One entry
@@ -689,9 +762,56 @@ class TestTheCapabilityCheckerSeesTheWholeCatalogue:
         for prefix, why in caps._BY_DESIGN:
             assert prefix and len(why) > 20, (prefix, why)
 
-    def test_orchestrator_seams_land_in_by_design_not_in_the_open_list(self, caps):
-        assert caps._by_design("orchestrator/wakeword.py")
-        assert not caps._by_design("memory/doc_schema.py")
+    def test_an_orchestrator_seam_is_not_by_design_any_more(self, caps):
+        """The inversion. `_BY_DESIGN` used to carry an `orchestrator/` prefix,
+        so eleven capabilities were filed as settled decisions on a PATH RULE —
+        including `nlp`, the only impact-5 entry there is. "Its consumer is the
+        Orchestrator" is the reason eight capabilities were re-hosted Brain-side,
+        not a reason to stop looking. They live in `_NOT_YET_HOSTED` now, each
+        with the wearer-facing loss written out, and the report prints them as
+        real work."""
+        assert not caps._by_design("orchestrator/wakeword.py")
+        assert not caps._not_yet("memory/doc_schema.py")
+
+    def test_the_not_yet_bucket_says_what_the_wearer_loses(self, caps):
+        """EMPTY as of 2026-08-03, and it got there by every entry being BUILT.
+
+        The assertion inverts rather than being deleted. What still has to hold
+        is the BAR: a key here must carry a real user-facing loss, because a
+        blank or generic string turns the bucket back into the place to hide
+        gaps that `_BY_DESIGN` had become. The next capability whose only
+        consumer is the Orchestrator lands here and has to say what it costs."""
+        for key, why in caps._NOT_YET_HOSTED.items():
+            assert key and len(why) > 20, (key, why)
+
+    def test_the_mechanism_survives_the_bucket_emptying(self, caps):
+        """A checker whose interesting bucket is empty is one nobody notices
+        has stopped working. `_not_yet` must still resolve a key it is given,
+        and the bucket must still be collected and printed."""
+        import sys
+        assert caps._not_yet("anything") == ""       # nothing is filed today
+        caps._NOT_YET_HOSTED["_probe"] = (
+            "a placeholder loss long enough to clear the bar")
+        try:
+            assert caps._not_yet("_probe")
+            monkey = sys.argv
+            sys.argv = ["capability_reachability.py"]
+            try:
+                assert caps.main() == 0
+            finally:
+                sys.argv = monkey
+        finally:
+            caps._NOT_YET_HOSTED.pop("_probe", None)
+
+    def test_a_key_leaves_the_not_yet_bucket_only_by_being_built(self, caps):
+        """`nlp` was the first out. It must not have been quietly moved to
+        `_BY_DESIGN` — that would be the reclassification this split exists to
+        make impossible — and it must now be genuinely driven."""
+        assert "nlp" not in caps._NOT_YET_HOSTED
+        assert not caps._by_design(
+            "orchestrator/commitment_nlp.py, social_lens/ner_spacy.py")
+        from dreamlayer.capabilities import _PROMOTED_AT_RUNTIME
+        assert "nlp" in _PROMOTED_AT_RUNTIME
 
     def test_the_dormant_set_is_read_from_capabilities_not_hardcoded(self, caps):
         """`_NOT_WIRED` is the product's own honest-status list. Reading it is
@@ -699,7 +819,10 @@ class TestTheCapabilityCheckerSeesTheWholeCatalogue:
         file" when 18 of them are named there with the reason written out."""
         dormant = caps._declared_dormant()
         assert len(dormant) >= 15, f"only {len(dormant)} parsed — set literal?"
-        for key in ("memory_dedup", "social_graph", "live_interpret"):
+        # `memory_dedup` used to be named here and was retired on 2026-08-02:
+        # near-duplicate collapsing needs no dependency, so there is nothing to
+        # install and nothing to declare dormant.
+        for key in ("typed_docs", "social_graph", "live_interpret"):
             assert key in dormant, key
         assert "vector_search" not in dormant     # wired; must stay checkable
 
@@ -878,8 +1001,16 @@ class TestLoadableIsNotOneState:
         for key in ("social_graph", "dream_style", "crdt_sync"):
             assert key in promoted, f"the literal flag for {key} was not read"
         # and not everything — a set that swallowed the catalogue would empty the
-        # inert bucket and hide the real shortlist
-        assert "coreml_ondevice" not in promoted
+        # inert bucket and hide the real shortlist.
+        #
+        # This used to name `coreml_ondevice`, which is promoted now: its
+        # `__call__` was `return None if not (...) else None` and is a real ANE
+        # classifier. The guard needs a capability that genuinely has NO
+        # promoter, so it names the ones still in that bucket — and if they are
+        # ever wired, this line has to move again rather than being deleted,
+        # because a non-vacuity guard that stops guarding is worse than none.
+        assert "asgi_server" not in promoted
+        assert "structured_output" not in promoted
         assert "asgi_server" not in promoted
 
     def test_a_test_setting_a_flag_does_not_count_as_promotion(self, caps):
@@ -903,7 +1034,7 @@ class TestLoadableIsNotOneState:
         partition the catalogue. A key in two buckets double-counts; a key in
         none disappears from the audit entirely."""
         names = ("ok", "unconstructed", "conditional", "driven", "open_gaps",
-                 "dormant", "expected", "concepts")
+                 "dormant", "expected", "not_yet", "concepts")
         seen: dict = {}
         for name in names:
             for row in buckets[name]:
@@ -1000,9 +1131,19 @@ class TestThePushScanKnowsBuiltFromPushed:
         pushed, unresolved = hud._pushed_types(self._reachable(hud))
         assert "IntroKeptCard" in pushed, (
             "a one-argument `self._push(card)` was dropped again")
-        assert any("truth_live" in u for u in unresolved), (
-            "TruthRead._push takes a RESULT, not a card — it cannot be named, "
-            "so it must at least be counted")
+        # RETIRED, inverted. This asserted truth_live stayed UNRESOLVED, on the
+        # grounds that `TruthRead._push` takes a result rather than a card.
+        # True of the outer call — and the type was decidable one line inside,
+        # where `_push` does `card = result.to_gauge_card()` and pushes it.
+        # `_push` wrappers that BUILD rather than forward are scanned now, and
+        # `to_gauge_card` (a builder call assigned to a local, mutated, then
+        # returned) is read by `_fn_card_types_found`.
+        assert not any("truth_live" in u for u in unresolved), (
+            "truth_live went back to unresolvable — check the builder/forwarder "
+            "split in `_pushed_types` and the return-a-local shape in "
+            "`_fn_card_types_found`")
+        assert "TruthLensCard" in pushed, (
+            "truth_live resolves but does not name TruthLensCard")
 
     def test_the_deployers_same_named_method_is_still_not_a_push(self, hud):
         """`brain_rc` calls `.push_event(name)` on a deployer that has nothing
@@ -1391,12 +1532,14 @@ class TestTheDependencyCheckerSeesTheWholeCatalogue:
 
     def test_it_reads_every_declared_capability(self, dep):
         decl = dep._declared_caps()
-        assert len(decl) >= 70, f"only {len(decl)} capabilities parsed"
+        assert len(decl) >= 67, f"only {len(decl)} capabilities parsed"
         # `kind="service"` capabilities legitimately declare () — nothing is
         # pip-installed, so there is no probe to audit. Everything else must
         # carry at least one module, or it would silently leave the audit.
         non_empty = [(k, modules) for k, _t, modules, _s in decl if modules]
-        assert len(non_empty) >= 60, (
+        # 59 since `typed_pipeline` (#577) took its declared module with it —
+        # same deliberate-retirement rule as the catalogue floor above.
+        assert len(non_empty) >= 59, (
             f"only {len(non_empty)} capabilities with declared modules — "
             "entries are being dropped, not audited")
 

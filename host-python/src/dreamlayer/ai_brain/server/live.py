@@ -1330,7 +1330,37 @@ function gend(ms){                                /* fade the card on + auto-dis
      card said the opposite of the truth. An explicit 0 now persists; anything
      falsy-but-absent still takes the caller's fallback. */
   if (ms === 0) return;
-  glassTimer = setTimeout(glassClear, ms || 4200);
+  /* Running the full timer is the only evidence of a card the wearer TOLERATED.
+     Any other clear — a replacement card, the dream canvas, a mode change — is
+     not the wearer's verdict on it, so it reports nothing rather than logging a
+     "kept" nobody meant. attnArm/attnReport, below. */
+  glassTimer = setTimeout(() => { attnReport(false); glassClear(); }, ms || 4200);
+}
+/* ---- the one signal that never used to cross back to the Brain ----
+   Every card auto-expired on a timer, so the Brain could not tell a card that
+   was read from one that was swatted away, and its only learned control had
+   nothing to learn from. A tap on the disc while a proactive card shows is the
+   swat; letting it run out is the keep. Nothing else is reported, and a card
+   with no confidence on it is never armed at all — there would be no number to
+   attribute the reaction to. */
+const ATTN_KINDS = {proactive_memory: 1, commitment_recall: 1,
+                    commitment_drift: 1, brief: 1, object_recall: 1,
+                    they_said: 1, candor: 1, hark: 1};
+let attnPending = null;
+function attnArm(kind, card){
+  attnPending = (ATTN_KINDS[kind] && card && typeof card.confidence === "number")
+    ? {kind: kind, confidence: card.confidence} : null;
+}
+function attnReport(dismissed){
+  const p = attnPending; attnPending = null;
+  if (!p) return;
+  try {
+    fetch("/dreamlayer/attention", {
+      method: "POST",
+      headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+      body: JSON.stringify({kind: p.kind, confidence: p.confidence,
+                            dismissed: !!dismissed})}).catch(() => {});
+  } catch (e) {}
 }
 function gwrap(str, n){                           /* soft-wrap to lines of ~n chars */
   const words = String(str || "").split(/\s+/).filter(Boolean);
@@ -2368,6 +2398,272 @@ function introAsk(name){
      {label: "Skip", fn: n => send("dismiss", n)}]);
 }
 
+/* ---- the fifteen the phone drew generically ------------------------------
+   Measured, not guessed: 40 card types are built by `hud/cards.py`, halo-lua
+   draws 45, and the Live Lens drew 30. The other fifteen fell through to
+   `glassEventCard`, which draws `eyebrow` + `primary` AND NOTHING ELSE — so a
+   card whose answer lives in another field arrived gutted. Fourteen of the
+   fifteen already had a proper drawing ON THE GLASSES, which makes the phone
+   the surface that was behind.
+
+   Each of these keeps the field the card is actually about: Ember's cue and
+   its rep count, Scholar's and Taste's item lists, the glance chooser's
+   options, a message's channel, an event's countdown. */
+
+function glassEmberCard(c){                          /* the practice, four beats */
+  /* One renderer for four types because they are ONE ceremony at four moments:
+     prompt (do you still have it), reveal (here is what you kept), flare (it
+     came back), graduated (it lives in you now). They share `cue`; the beat is
+     what differs, and drawing four near-identical discs would have been four
+     places to drift. */
+  const ctx = glassCtx(); gback(ctx);
+  const t = String(c.type || "");
+  const grad = t === "EmberGraduatedCard";
+  const ring = grad ? GP.accent_success : GP.memory_trace;
+  garc(ctx, 128, 122, grad ? 74 : 62, 0, 360, ring);
+  if (grad) garc(ctx, 128, 122, 82, 0, 360, GP.accent_success_dim);
+  gtext(ctx, String(c.eyebrow || "EMBER").toUpperCase().slice(0, 20), 128, 50,
+        ring, "sm");
+  const cue = gwrap(String(c.cue || c.primary || "").trim(), 20).slice(0, 2);
+  cue.forEach((ln, i) => gtext(ctx, ln, 128, 100 + i * 18, GP.text_primary, "lg"));
+  /* the ANSWER is the whole point of a reveal and is the field the generic
+     renderer dropped */
+  const answer = String(c.answer || "").trim();
+  if (answer)
+    gwrap(answer, 24).slice(0, 2).forEach((ln, i) =>
+      gtext(ctx, ln, 128, 148 + i * 15, GP.memory_trace, "sm"));
+  else {
+    const foot = String(c.footer || "").trim();
+    if (foot) gtext(ctx, foot.slice(0, 30), 128, 156, GP.text_ghost, "sm");
+  }
+  /* reps as pips, not a number: the practice is a count you feel, and a row of
+     marks reads at a glance where "reps: 4" does not */
+  const reps = Math.max(0, Math.min(9, parseInt(c.reps, 10) || 0));
+  for (let i = 0; i < reps; i++)
+    gdiamond(ctx, 128 - (reps - 1) * 5 + i * 10, 182, 3, ring);
+  const days = parseInt(c.kept_days, 10) || parseInt(c.next_days, 10) || 0;
+  if (days) gtext(ctx, (c.kept_days ? "kept " : "next in ") + days + "d",
+                  128, 202, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 6000);
+}
+
+function glassListCard(c){                           /* Scholar + Taste */
+  /* Both are "here are N things, ranked". `items` is the card; `primary` is a
+     heading. The generic renderer kept the heading and dropped every item,
+     which is the entire content. */
+  const ctx = glassCtx(); gback(ctx);
+  const accent = String(c.type) === "TasteCard" ? GP.accent_success
+                                                : GP.memory_trace;
+  garc(ctx, 128, 128, 96, 0, 360, GP.border_subtle);
+  gtext(ctx, String(c.eyebrow || "").toUpperCase().slice(0, 20), 128, 48,
+        accent, "sm");
+  const head = String(c.primary || "").trim();
+  if (head) gtext(ctx, head.slice(0, 26), 128, 74, GP.text_primary, "md");
+  /* An UNAVAILABLE list is not an empty list, and saying "nothing" when the
+     lens could not look would be a claim about the world we cannot make. */
+  if (c.unavailable){
+    gtext(ctx, "not set up on this device", 128, 130, GP.text_ghost, "sm");
+    gend(c.dismiss_ms || 5000); return;
+  }
+  const items = Array.isArray(c.items) ? c.items.slice(0, 4) : [];
+  if (!items.length){
+    gtext(ctx, String(c.detail || "nothing yet").slice(0, 30), 128, 130,
+          GP.text_ghost, "sm");
+  } else {
+    items.forEach((it, i) => {
+      const label = String((it && (it.label || it.name || it.title)) || it || "");
+      gdiamond(ctx, 44, 106 + i * 24, 3, accent);
+      ctx.textAlign = "left";
+      gtext(ctx, label.slice(0, 22), 58, 110 + i * 24, GP.text_primary, "sm");
+      ctx.textAlign = "center";
+    });
+  }
+  const d = String(c.detail || "").trim();
+  if (d && items.length) gtext(ctx, d.slice(0, 30), 128, 206, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 6000);
+}
+
+function glassGlanceChoiceCard(c){                   /* which lens for this look */
+  /* The options ARE the card — it is a question, and a question drawn without
+     its answers is just a statement you cannot act on. */
+  const ctx = glassCtx(); gback(ctx);
+  garc(ctx, 128, 128, 92, 0, 360, GP.border_subtle);
+  gtext(ctx, String(c.eyebrow || "WHICH LENS?").toUpperCase().slice(0, 20),
+        128, 50, GP.memory_trace, "sm");
+  const scene = String(c.scene || c.primary || "").trim();
+  if (scene) gtext(ctx, scene.slice(0, 24), 128, 80, GP.text_secondary, "sm");
+  const opts = Array.isArray(c.options) ? c.options.slice(0, 3) : [];
+  opts.forEach((o, i) => {
+    const label = String((o && (o.label || o.name)) || o || "");
+    const y = 118 + i * 30;
+    garc(ctx, 128, y, 13, 0, 360, GP.memory_trace);
+    gtext(ctx, String(i + 1), 128, y + 4, GP.memory_trace, "sm");
+    ctx.textAlign = "left";
+    gtext(ctx, label.slice(0, 18), 150, y + 4, GP.text_primary, "sm");
+    ctx.textAlign = "center";
+  });
+  if (!opts.length) gtext(ctx, "…", 128, 128, GP.text_secondary, "md");
+  gend(c.dismiss_ms || 8000);
+}
+
+function glassMessageCard(c){                        /* a text or an email */
+  /* `channel` says WHICH inbox and `headline` who it is from — both dropped by
+     the generic path, which left an unattributed line of text with no way to
+     tell a work email from a message from your sister. */
+  const ctx = glassCtx(); gback(ctx);
+  const ch = String(c.channel || "").toLowerCase();
+  const accent = ch.indexOf("mail") >= 0 ? GP.accent_attention : GP.memory_trace;
+  garc(ctx, 128, 128, 94, 0, 360, GP.border_subtle);
+  gtext(ctx, (ch || "message").toUpperCase().slice(0, 16), 128, 50, accent, "sm");
+  const who = String(c.headline || "").trim();
+  if (who) gtext(ctx, who.slice(0, 22), 128, 82, GP.text_primary, "md");
+  gwrap(String(c.primary || c.detail || "").trim(), 24).slice(0, 3)
+    .forEach((ln, i) => gtext(ctx, ln, 128, 118 + i * 17, GP.text_secondary, "sm"));
+  const acts = Array.isArray(c.actions) ? c.actions.slice(0, 2) : [];
+  if (acts.length)
+    gtext(ctx, acts.map(a => String((a && (a.label || a.name)) || a)).join("  ·  ")
+          .slice(0, 28), 128, 194, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 6000);
+}
+
+function glassUpcomingCard(c){                       /* leave in N minutes */
+  /* `minutes` is the card. A countdown drawn as a ring is readable without
+     being read — the arc IS the number, and the number is also there. */
+  const ctx = glassCtx(); gback(ctx);
+  const mins = Math.max(0, parseInt(c.minutes, 10) || 0);
+  const urgent = mins <= 10;
+  const accent = urgent ? GP.accent_attention : GP.memory_trace;
+  /* 60 minutes = a full ring; anything longer pins at full rather than wrapping
+     round, because a second lap would read as less time, not more */
+  const frac = Math.max(0.03, Math.min(1, mins / 60));
+  garc(ctx, 128, 128, 88, 0, 360, GP.border_subtle);
+  garc(ctx, 128, 128, 88, -90, -90 + 360 * frac, accent);
+  gtext(ctx, String(c.headline || "UP NEXT").toUpperCase().slice(0, 18),
+        128, 56, accent, "sm");
+  gwrap(String(c.primary || "").trim(), 18).slice(0, 2)
+    .forEach((ln, i) => gtext(ctx, ln, 128, 112 + i * 18, GP.text_primary, "lg"));
+  gtext(ctx, mins ? "in " + mins + " min" : "now", 128, 162, accent, "md");
+  const d = String(c.detail || "").trim();
+  if (d) gtext(ctx, d.slice(0, 28), 128, 190, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 6000);
+}
+
+function glassHereCard(c){                           /* you left this here */
+  const ctx = glassCtx(); gback(ctx);
+  garc(ctx, 128, 128, 90, 0, 360, GP.border_subtle);
+  gdiamond(ctx, 128, 66, 5, GP.memory_trace);
+  gtext(ctx, String(c.headline || "HERE").toUpperCase().slice(0, 18), 128, 90,
+        GP.memory_trace, "sm");
+  gwrap(String(c.primary || "").trim(), 20).slice(0, 2)
+    .forEach((ln, i) => gtext(ctx, ln, 128, 132 + i * 18, GP.text_primary, "lg"));
+  const d = String(c.detail || "").trim();
+  if (d) gtext(ctx, d.slice(0, 30), 128, 180, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 5000);
+}
+
+function glassQueryListeningCard(c){                 /* the ask is open */
+  /* `{type, dismiss_ms}` and nothing else: this card is PURELY a state, so
+     there is no field to lose and the only honest drawing is the state itself.
+     Animated, because a still ring cannot say "still listening". */
+  const ctx = glassCtx(); gback(ctx);
+  clearInterval(glassAnim);
+  let t = 0;
+  const draw = () => {
+    const x = glassCtx(); gback(x);
+    for (let i = 0; i < 3; i++){
+      const r = 34 + i * 16 + Math.sin(t / 8 + i) * 4;
+      garc(x, 128, 128, Math.round(r), 0, 360,
+           i === 0 ? GP.memory_trace : GP.border_subtle);
+    }
+    gtext(x, "LISTENING", 128, 200, GP.memory_trace, "sm");
+    t++;
+  };
+  draw();
+  glassAnim = setInterval(draw, 80);
+  gend(c.dismiss_ms || 0);
+}
+
+function glassLoadingCard(c){                        /* thinking */
+  const ctx = glassCtx(); gback(ctx);
+  clearInterval(glassAnim);
+  let t = 0;
+  const draw = () => {
+    const x = glassCtx(); gback(x);
+    garc(x, 128, 128, 46, 0, 360, GP.border_subtle);
+    const a = (t * 9) % 360;
+    garc(x, 128, 128, 46, a, a + 70, GP.memory_trace);
+    gtext(x, "…", 128, 134, GP.text_secondary, "md");
+    t++;
+  };
+  draw();
+  glassAnim = setInterval(draw, 60);
+  gend(c.dismiss_ms || 0);
+}
+
+function glassLowConfidenceCard(c){                  /* I could not see it */
+  /* An honest refusal, and it must NOT look like an error: the device is
+     working, it simply will not guess. Drawn open and quiet — a dashed ring
+     rather than a solid one — so a wearer reads "no answer", not "broken". */
+  const ctx = glassCtx(); gback(ctx);
+  for (let a = 0; a < 360; a += 24) garc(ctx, 128, 128, 74, a, a + 12,
+                                         GP.border_subtle);
+  const kind = String(c.kind || "").trim();
+  gtext(ctx, "NOT SURE", 128, 100, GP.confidence_low, "sm");
+  gwrap(String(c.primary || "couldn't see it").trim(), 20).slice(0, 2)
+    .forEach((ln, i) => gtext(ctx, ln, 128, 132 + i * 17, GP.text_secondary, "md"));
+  if (kind) gtext(ctx, kind.slice(0, 24), 128, 178, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 4000);
+}
+
+function glassErrorCard(c){                          /* something broke */
+  const ctx = glassCtx(); gback(ctx);
+  garc(ctx, 128, 128, 76, 0, 360, GP.accent_attention_dim);
+  gtext(ctx, "SOMETHING BROKE", 128, 92, GP.accent_attention, "sm");
+  gwrap(String(c.primary || "").trim(), 22).slice(0, 3)
+    .forEach((ln, i) => gtext(ctx, ln, 128, 126 + i * 17, GP.text_primary, "sm"));
+  gend(c.dismiss_ms || 5000);
+}
+
+function glassPaletteShiftCard(c){                   /* the room's colour */
+  /* `colors` is the card, and it is not text at all — the one type here whose
+     content a text renderer could never carry. The GLASSES get this natively as
+     a raw `palette` frame their animator sweeps across the whole disc; the
+     phone has no such channel, so the card IS the phone's palette surface. */
+  const ctx = glassCtx(); gback(ctx);
+  const cols = Array.isArray(c.colors) ? c.colors.slice(0, 6) : [];
+  if (cols.length){
+    const step = 360 / cols.length;
+    cols.forEach((col, i) => {
+      /* the device speaks YCbCr slots; a browser wants CSS. Luma alone is a
+         faithful reduction — it is the channel the palette actually shifts —
+         and inventing chroma we were not sent would be a prettier lie. */
+      let fill;
+      if (col && typeof col === "object" && typeof col.y === "number"){
+        const l = Math.max(0, Math.min(255, col.y | 0));
+        fill = "rgb(" + l + "," + l + "," + l + ")";
+      } else if (typeof col === "number"){
+        fill = "#" + (col >>> 0).toString(16).padStart(6, "0").slice(-6);
+      } else {
+        fill = String((col && (col.hex || col.color)) || "#888");
+      }
+      ctx.beginPath();
+      ctx.moveTo(128, 128);
+      ctx.arc(128, 128, 84, (i * step - 90) * Math.PI / 180,
+              ((i + 1) * step - 90) * Math.PI / 180);
+      ctx.closePath();
+      ctx.fillStyle = fill; ctx.globalAlpha = 0.5; ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+  }
+  ctx.beginPath(); ctx.arc(128, 128, 52, 0, 2 * Math.PI);
+  ctx.fillStyle = GP.background; ctx.fill();
+  gtext(ctx, String(c.mood || "").toUpperCase().slice(0, 14), 128, 132,
+        GP.text_secondary, "sm");
+  /* dismiss_ms is 0 by contract — it is consumed, not read — so it is given a
+     real lifetime here from the shift's own duration. */
+  gend(Math.max(1500, parseInt(c.duration_ms, 10) || 2000));
+}
+
 function glassEventCard(c){                          /* any pushed card with no bespoke renderer */
   const ctx = glassCtx(); gback(ctx);
   garc(ctx, 128, 108, 44, 0, 360, GP.border_subtle);
@@ -2398,7 +2694,7 @@ let dreamGen = 0;                 /* bumped on every enter/exit — an await tha
 let dreamACtx = null, dreamLastTick = 0, dreamT = 0;
 const DREAM_TICK_MS = 500;                 /* 2 Hz — DreamEngine.AMBIENT_HZ */
 const dweather = {pressure: 0, energy: 0, luma: 0.35};
-const dmotion = {mag: 0};
+const dmotion = {mag: 0, pitch: 0};
 const dparticles = [];
 for (let i = 0; i < 24; i++)               /* 24 particles, as the device */
   dparticles.push({a: i / 24 * Math.PI * 2, r: 28 + (i * 53) % 62,
@@ -2413,6 +2709,11 @@ function onDreamMotion(e){
   const a = (e.accelerationIncludingGravity || e.acceleration || {});
   const m = Math.abs(a.x || 0) + Math.abs(a.y || 0) + Math.abs(a.z || 0);
   dmotion.mag = dmotion.mag * 0.8 + Math.min(1, Math.abs(m - 9.8) / 12) * 0.2;
+  /* Yesterlight reads PITCH in radians, up negative — the held look back. The
+     accelerometer's y/z pair gives it directly, and without this the lens
+     would have been fed a constant 0 and could never arm. */
+  const ay = a.y || 0, az = a.z || 0;
+  if (ay || az) dmotion.pitch = dmotion.pitch * 0.8 + Math.atan2(-ay, -az) * 0.2;
 }
 async function enterDream(){
   dreamOn = true;
@@ -2461,6 +2762,7 @@ function exitDream(){
 function toggleDream(){ if (dreamOn) exitDream(); else enterDream(); }
 function dreamTick(){                      /* the 2 Hz reactor pass */
   let pressure = 0, energy = 0, amp = 0;
+  let _bands = null;
   if (dreamAnalyser && !veil) {
     const bins = new Uint8Array(dreamAnalyser.frequencyBinCount);
     dreamAnalyser.getByteFrequencyData(bins);
@@ -2470,16 +2772,56 @@ function dreamTick(){                      /* the 2 Hz reactor pass */
     for (let i = 0; i < bins.length; i++) amp += bins[i];
     pressure = lo / (8 * 255); energy = hi / (72 * 255);
     amp = amp / (bins.length * 255);
+    /* MicReactor reads 32 normalised bands. Reducing here rather than shipping
+       the raw FFT keeps the payload tiny (32 floats at 2 Hz) and is the same
+       shape the glasses' own reactor consumes. */
+    _bands = [];
+    const per = Math.max(1, Math.floor(bins.length / 32));
+    for (let b = 0; b < 32; b++){
+      let s = 0;
+      for (let k = 0; k < per; k++) s += bins[b * per + k] || 0;
+      _bands.push(s / (per * 255));
+    }
   }
   /* becalmed drift when quiet/veiled — the sky never flatlines */
   dweather.pressure = dweather.pressure * 0.7 + (pressure + dmotion.mag * 0.3) * 0.3;
   dweather.energy   = dweather.energy * 0.7 + energy * 0.3;
   dweather.luma     = 0.3 + Math.min(0.4, amp * 0.8 + dmotion.mag * 0.15);
   confBeat();                        /* the shared sky rides the same 2 Hz */
+  dreamBeatToBrain(_bands, amp);     /* …and the Brain paints both surfaces */
   if (performance.now() - _lastSceneT >= SCENE_MS) {   /* the scene, at 4 s */
     _lastSceneT = performance.now();
     dreamSceneBeat();
   }
+}
+/* ---- the dream beat the BRAIN acts on ------------------------------------
+   The phone ships the SPECTRUM, not a colour. The palette decision lives in
+   `dream_mode/mic_reactor.py` — the same primitive the glasses' own engine
+   runs — so there is one definition of what a room's weather looks like
+   instead of a second one written in JavaScript that drifts from it.
+
+   The Brain answers by pushing to BOTH surfaces: a raw `palette` frame the
+   glasses' animator sweeps across the disc, and a PaletteShiftCard for this
+   page, which has no native palette channel. Veiled → nothing is sent and the
+   Brain refuses again at its own gate.
+
+   Fire-and-forget at 2 Hz: a dropped beat costs one shade of one frame, and
+   waiting on it would stutter the dream loop. */
+let _dreamBeatBusy = false;
+function dreamBeatToBrain(bands, amp){
+  if (!bands || !bands.length || veil || _dreamBeatBusy) return;
+  _dreamBeatBusy = true;
+  try {
+    fetch("/dreamlayer/dream/pose", {
+      method: "POST",
+      headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+      body: JSON.stringify({
+        fft: bands.map(v => Math.round(v * 1000) / 1000),
+        amplitude: Math.round((amp || 0) * 1000) / 1000,
+        pose: {pitch: dmotion.pitch || 0},
+      }),
+    }).catch(() => {}).then(() => { _dreamBeatBusy = false; });
+  } catch (e) { _dreamBeatBusy = false; }
 }
 function dreamCurl(x, y, t){               /* cheap curl of a drifting field */
   const n = (a, b) => Math.sin(a * 0.061 + t * 0.00021 + Math.sin(b * 0.047 - t * 0.00013));
@@ -2659,6 +3001,17 @@ $("tournext").onclick = tourNext;
 $("tourskip").onclick = endTour;
 $("tourbtn").onclick = () => startTour(true);
 $("tourbtn").onkeydown = e => { if (e.key===" "||e.key==="Enter") startTour(true); };
+
+/* Swat: a tap on the disc dismisses the proactive card showing on it, and says
+   so. Deliberately inert when nothing is armed — a tap on an idle disc, or on a
+   direct answer the wearer asked for, must not teach the gate anything. This is
+   the glass equivalent of the shake the Orchestrator reads (ops_ingest's
+   SHAKE_DISMISS), which the Brain never had. */
+$("glass").addEventListener("click", () => {
+  if (!attnPending) return;
+  attnReport(true);
+  glassClear();
+});
 
 
 /* ---- confluence: two skies, one room -------------------------------------
@@ -3932,6 +4285,7 @@ function stopEvents(){ try { if (evSource) evSource.close(); } catch (e) {} evSo
 function renderEvent(ev){
   if (dreamOn) return;                 /* never stomp the dream canvas */
   const c = ev.card, t = c && c.type;
+  attnArm(ev.kind, c);                 /* before any draw — gend() reads it */
   /* a self-test card announces itself — it must never read as a real alarm or a
      real brief (the Brain stamps selftest + a SELF-TEST eyebrow; we keep it) */
   const test = !!(c && c.selftest);
@@ -3970,6 +4324,20 @@ function renderEvent(ev){
   else if (t === "SynesthesiaCard") glassSynesthesiaCard(c);
   else if (t === "TruthLensCard") glassTestimonyCard(c);
   else if (t === "IntroOfferCard" || t === "IntroKeptCard") glassIntroCard(c);
+  /* the fifteen that used to fall through to glassEventCard */
+  else if (t === "EmberPromptCard" || t === "EmberFlareCard"
+           || t === "EmberRevealCard" || t === "EmberGraduatedCard")
+    glassEmberCard(c);
+  else if (t === "ScholarCard" || t === "TasteCard") glassListCard(c);
+  else if (t === "GlanceChoiceCard") glassGlanceChoiceCard(c);
+  else if (t === "MessageCard") glassMessageCard(c);
+  else if (t === "UpcomingCard") glassUpcomingCard(c);
+  else if (t === "HereCard") glassHereCard(c);
+  else if (t === "QueryListeningCard") glassQueryListeningCard(c);
+  else if (t === "LoadingCard") glassLoadingCard(c);
+  else if (t === "LowConfidenceCard") glassLowConfidenceCard(c);
+  else if (t === "ErrorCard") glassErrorCard(c);
+  else if (t === "PaletteShiftCard") glassPaletteShiftCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 

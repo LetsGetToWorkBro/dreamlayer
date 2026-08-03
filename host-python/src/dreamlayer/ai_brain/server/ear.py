@@ -33,8 +33,14 @@ log = logging.getLogger("dreamlayer.ear")
 # the Brain sets DL_WIRED_<KEY> for each so capabilities.state() reports them
 # "active" (installed → really on); when the ear stops they revert to "dormant".
 # We deliberately do NOT claim the caps this minimal ear does not exercise —
-# wake_word (a wake-word engine), diarization and asr_alignment stay dormant
-# until the full Orchestrator path is wired, so the meter never over-reports.
+# asr_alignment stays dormant until the full Orchestrator path is wired, so the
+# meter never over-reports.
+#
+# `wake_word` IS here now, and like `live_interpret` it is NOT put in
+# `active_caps` at start(): that set is fixed when the microphone opens, and
+# what promotes this is the spotter having genuinely FIRED, which can only
+# happen later. `_sync_ear_wired` asks `wake_live()` fresh on every sync for
+# exactly that reason. An engine that loaded is not an engine that heard you.
 #
 # `live_interpret` IS here now, and it is promoted on a stricter test than the
 # others: not "the wheel is installed", not even "an interpreter object exists",
@@ -44,7 +50,8 @@ log = logging.getLogger("dreamlayer.ear")
 # SeamlessM4T model is a multi-gigabyte lazy load that can fail long after the
 # wheel imports, so nothing short of a real translated line proves it runs.
 EAR_CAPS = ("voice_vad", "local_asr", "mic_capture", "asr_moonshine",
-            "onnx_speech", "sound_events", "bird_song", "live_interpret")
+            "onnx_speech", "sound_events", "bird_song", "live_interpret",
+            "wake_word")
 
 
 class _EarGate:
@@ -90,6 +97,12 @@ class EarHost:
         # None = not tried, False = tried and unavailable, else the diarizer.
         self._diar: object = None
         self._last_answer_ts = 0.0
+        self._last_wake_ts = 0.0
+        #: Utterances the wake path actually answered — either signal. Distinct
+        #: from `wake_live()`, which counts only the ACOUSTIC spotter.
+        self.wake_answers = 0
+        self._wake = None
+        self._wake_built = False
         self.last_heard = ""
         self.heard_count = 0
         self.active_caps = frozenset()          # the caps THIS run genuinely drives
@@ -113,13 +126,137 @@ class EarHost:
 
     # -- CapturePipeline host contract -------------------------------------
 
-    def hear(self, text: str) -> None:
-        """Wake / command path. The minimal ear ships no wake-word engine (that
-        is the full Orchestrator's job — wake_word stays dormant), so this is a
-        no-op. Present so CapturePipeline._route's contract is satisfied without
-        raising. Deliberately logs NOTHING here: the transcript is sensitive and
-        must never be interpolated into a log message (logging-discipline seam)."""
-        return
+    def hear(self, text: str, addressed=None) -> None:
+        """Wake / command path — "Hey Juno, …" answered on the glass.
+
+        This was a `return`. The always-on ear transcribed everything, folded it
+        into memory, and could not be TALKED TO: the one gesture the product is
+        named for did nothing, and `wake_word` could not be wired because there
+        was nothing for a spotter to trigger.
+
+        TWO WAKE SIGNALS, AND THEY ARE OR'ed
+        ------------------------------------
+        `addressed` is the ACOUSTIC verdict — True/False from a spotter that
+        ran, None when there is no spotter. `voice.detect_wake` is the text-level
+        regex over what ASR produced. Either one is enough.
+
+        Never AND. The floor rule this repo holds every optional dependency to
+        says installing one must not return LESS than the fallback, and an
+        acoustic spotter that could veto the regex would do exactly that — a
+        quiet "hey juno" that the model scores at 0.4 and ASR transcribes
+        perfectly would stop working the day the wearer installed the engine.
+        The other direction is the real prize: ASR mishears the phrase
+        constantly ("hey you know", "a j you know"), and the spotter listens to
+        the audio, so it catches the wakes the regex loses.
+
+        That is worth being precise about, because the capability's own gain
+        text is wrong for THIS product: it says the spotter means "ASR only runs
+        once addressed". Not here — the ear transcribes every segment anyway for
+        the conversation ledger, so nothing is saved. What is bought is
+        RELIABILITY, not latency, and claiming the latency would be describing
+        an architecture we do not have.
+
+        POSTURE
+        -------
+        Veil-gated: incognito means the ear neither remembers nor answers.
+        Unlike `note_question` (the ambient answer-ahead path, which forces
+        `no_cloud=True` because a bystander's overheard sentence chose nothing),
+        this utterance was ADDRESSED to the device — the wearer's own request,
+        which is precisely what their cloud configuration is configured for. So
+        it takes the same posture as `/dreamlayer/voice`: the Brain's own config
+        decides, and `Brain.ask` still refuses to egress while incognito.
+
+        Only `ask`/`recall` are routed. Every other intent is a device ACTION
+        (stash, focus, forget), and firing those from room audio is a far bigger
+        consent question than answering one — the phone and panel own that path
+        deliberately, not by omission.
+
+        Never raises, and never logs the text: the transcript is sensitive and
+        must not be interpolated into a log message (logging-discipline seam).
+        """
+        text = (text or "").strip()
+        if not text:
+            return
+        try:
+            from ...orchestrator.voice import parse_intent
+            spoken, remainder = self._salutation(text)
+            if not (spoken or addressed is True):
+                return                           # nobody was talking to us
+            # A spotter fired on audio the regex could not confirm, so there is
+            # no phrase to strip and the whole line is the question.
+            query_text = remainder if spoken else text
+            if not query_text:
+                return                           # the wake phrase, and nothing
+            if self._veiled():                   # else — no question to answer
+                return
+            import time as _t
+            now = _t.time()
+            if now - self._last_wake_ts < self._WAKE_MIN_GAP_S:
+                # A spotter stuck at fire-on-everything would otherwise repaint
+                # the glass every segment. Deliberately separate from
+                # `_ANSWER_MIN_GAP_S`: that one throttles UNASKED answers and is
+                # long, this one only stops a runaway and is short enough that a
+                # wearer asking two questions in a row gets two answers.
+                return
+            self._last_wake_ts = now
+            self.wake_answers += 1
+            it = parse_intent(query_text)
+            if it.kind not in ("ask", "recall"):
+                return
+            ans = self.brain.ask(it.args.get("query", "") or query_text)
+            from ...hud import cards
+            if ans is None or ans.is_empty():
+                self.brain.push_event("juno", cards.low_confidence())
+                return
+            self.brain.push_event("juno", cards.juno_reply(ans.text))
+        except Exception as exc:                 # noqa: BLE001 — never cost the
+            log.warning("[ear] wake path failed: %s",   # utterance its memory
+                        type(exc).__name__)
+
+    @staticmethod
+    def _salutation(text: str):
+        """`detect_wake`, but only the phrases somebody says ON PURPOSE.
+
+        `voice.WAKE` contains bare "juno" and bare "dreamlayer", and
+        `detect_wake` matches either as a leading token. That was harmless while
+        `hear()` was a no-op. The moment it answers, *"Juno is a nice name for a
+        dog"* becomes a question sent to `ask()` and drawn on the glass
+        mid-conversation — and so does any sentence starting with the product's
+        own name, which is a thing wearers of this product say.
+
+        The bare forms stay valid on `/dreamlayer/voice`, where somebody
+        deliberately opened the mic and spoke into it. The AMBIENT path needs a
+        stronger signal because nobody chose to address anything, so it takes
+        only the salutation forms.
+
+        DERIVED from `WAKE` rather than duplicated: adding "hi juno" there arms
+        this automatically, and adding a bare word does not — which is the exact
+        asymmetry the two paths want.
+        """
+        from ...orchestrator.voice import WAKE
+        t = (text or "").strip()
+        low = t.lower()
+        for w in (p for p in WAKE if " " in p):
+            if low == w or low.startswith(w + " ") or low.startswith(w + ","):
+                return True, t[len(w):].lstrip(" ,.!—-").strip()
+        return False, t
+
+    def _veiled(self) -> bool:
+        """The Veil, fail-closed — an unreadable posture is treated as veiled."""
+        try:
+            return bool(self.brain.incognito_now())
+        except Exception:                        # noqa: BLE001
+            return True
+
+    def wake_live(self) -> bool:
+        """Whether the ACOUSTIC spotter has genuinely fired this run.
+
+        Not "an engine loaded", and deliberately not `wake_answers` either:
+        answering counts the text regex too, and that has always worked. The
+        capability is the spotter, so the proof is the spotter hearing
+        something.
+        """
+        return int(getattr(self._pipe, "wakes", 0) or 0) > 0
 
     def ingest_caption(self, text: str, speaker=None) -> None:
         """Fold a transcribed utterance into the Brain's memory — Veil-gated and
@@ -174,6 +311,16 @@ class EarHost:
                     veil_ok=False)
         except Exception as exc:                 # noqa: BLE001 — a card must never
             log.warning("[ear] caption push failed: %s", type(exc).__name__)
+        # …and paint that voice's timbre at the rim (Dream Mode's Timbre lens).
+        # Here because this is the one place a speaker LABEL exists: the reactor
+        # needs to know who spoke, and nothing downstream of the caption does.
+        # It reads only the label — never the transcript — and its own cooldown
+        # keeps a talkative room from strobing the rim.
+        try:
+            from .dream_reactors import reactors
+            reactors(self.brain).note_speaker(speaker or "")
+        except Exception as exc:                 # noqa: BLE001 — never break capture
+            log.warning("[ear] timbre push failed: %s", type(exc).__name__)
         # …and CATCH A NAME, when someone introduced themselves. Only a closed
         # grammar of self-introductions ("my name is …", "I'm …") captures
         # anything, so ordinary chatter produces nothing — and hearing a name
@@ -300,6 +447,12 @@ class EarHost:
            "will", "would", "should", "have", "has", "had")
     _ANSWER_MIN_CONFIDENCE = 0.35
     _ANSWER_MIN_GAP_S = 20.0
+    #: Runaway guard on the ADDRESSED path, not a throttle. Long enough that a
+    #: spotter firing on every segment cannot repaint the glass continuously,
+    #: short enough that "Hey Juno, what did Ana say" followed immediately by
+    #: "Hey Juno, and when" gets two answers — which `_ANSWER_MIN_GAP_S` at 20 s
+    #: would silently eat.
+    _WAKE_MIN_GAP_S = 2.0
 
     @classmethod
     def _is_question(cls, text: str) -> bool:
@@ -424,6 +577,50 @@ class EarHost:
                          type(exc).__name__)
                 self._diar = False
         return self._diar or None
+
+    def _wake_engine(self):
+        """The acoustic wake spotter, or None when openWakeWord is absent.
+
+        Built once and held: the model is a few MB of ONNX and it carries
+        rolling state across calls, so a fresh one per segment would both cost
+        a load per utterance and reset whatever context it uses to score.
+
+        A spotter whose model failed to load is NOT held. `OpenWakeWordEngine`
+        keeps `available` True (the wheel imported) with `_model` None after a
+        load failure, and `detect` then returns `(False, 0.0)` forever — a seam
+        that can only ever return its own null. Handing that to the pipeline
+        would turn `addressed` from None ("no engine, trust the regex") into
+        False ("an engine listened and heard nothing") on every single segment,
+        which is the same information but a strictly worse-sounding one, and it
+        would make `wake_live()` permanently false while the report insisted the
+        capability was installed. Same test `_diarizer` applies for the same
+        reason.
+        """
+        if not self._wake_built:
+            self._wake_built = True
+            try:
+                from ...orchestrator.wakeword import OpenWakeWordEngine
+                e = OpenWakeWordEngine()
+                self._wake = e if getattr(e, "_model", None) is not None else None
+            except Exception as exc:             # noqa: BLE001
+                log.info("[ear] wake spotter unavailable: %s",
+                         type(exc).__name__)
+                self._wake = None
+            if self._wake is None:
+                # The sherpa keyword spotter, when a model directory supplies
+                # one. Second rung by the same rule as the others — but note
+                # this is the one place the ORDER is arguably wrong on licence
+                # grounds rather than technical ones: sherpa-onnx is Apache-2.0
+                # and openWakeWord is non-commercial. Whoever ships this may
+                # want them the other way round; that is not a decision to make
+                # silently here, so the note is the flag.
+                self._wake = self._sherpa().wake()
+        return self._wake
+
+    def _sherpa(self):
+        """The Brain's unified ONNX engine — the last rung under every seam."""
+        from .sherpa_live import stack
+        return stack(self.brain)
 
     def _voice_seam(self):
         """(embedder, resolver, enrolled_names) for the CapturePipeline, or
@@ -599,6 +796,15 @@ class EarHost:
             from ...orchestrator.asr_select import make_asr, asr_engine_name
             asr = make_asr(None, None)
             if asr is None:
+                # Last rung: the unified ONNX engine, when the wearer pointed
+                # the Brain at a sherpa model directory. Deliberately AFTER
+                # Moonshine and faster-whisper — installing one wheel must not
+                # take a working purpose-built engine away from somebody who
+                # already had one. On a machine with neither, this is the whole
+                # voice stack from a single install, which is the capability's
+                # actual pitch.
+                asr = self._sherpa().asr()
+            if asr is None:
                 return {"ok": False, "reason": "no-asr",
                         "detail": "no on-device speech engine installed "
                                   "(install the Sharp Ears pack)"}
@@ -616,6 +822,12 @@ class EarHost:
                 tagger = default_sound_detector()
             except Exception:                    # noqa: BLE001
                 tagger = None
+            # `SoundEventDetector` has its own sherpa rung, but it reads
+            # $DL_AUDIO_TAG_DIR — a second directory to configure, and env-only,
+            # which the bundled .app cannot set. A wearer who pointed the Brain
+            # at ONE sherpa export should get tagging out of it too.
+            if tagger is None or not getattr(tagger, "ready", False):
+                tagger = self._sherpa().tagger() or tagger
             if not self._bird_built:
                 self._bird_built = True
                 try:
@@ -623,7 +835,17 @@ class EarHost:
                     self._bird = default_bird_lens()
                 except Exception:                # noqa: BLE001
                     self._bird = None
+            # `default_vad()` is never None — with silero absent it returns a
+            # gate running the cheap energy heuristic, which is a real decision
+            # and the reason the ambient path works at all. So the sherpa rung
+            # slots in on `_model is None` rather than on `vad is None`: a
+            # loaded Silero VAD keeps its place, and an energy threshold gives
+            # way to a real model. Writing this as `default_vad() or …` would
+            # have silently made the rung unreachable forever, which is the
+            # shape of defect this whole line of work is about.
             vad = default_vad()
+            if getattr(vad, "_model", None) is None:
+                vad = self._sherpa().vad() or vad
             # Who is speaking — the producer `said_by` never had. Only wired
             # when the wearer has consented AND a real speaker model loaded;
             # `voice_recall()` returns (None, None, None) otherwise and the
@@ -644,6 +866,7 @@ class EarHost:
                                    tagger=tagger, bird=self._bird,
                                    speaker=speaker, speaker_resolver=resolver,
                                    enrolled_speakers=enrolled,
+                                   wake=self._wake_engine(),
                                    diarizer=self._diarizer())
             try:
                 pipe.start(mic)

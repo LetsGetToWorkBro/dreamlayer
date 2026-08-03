@@ -66,23 +66,26 @@ def test_dense_router_fallback():
     assert DenseRouter().route("anything") is None  # empty router
 
 
-# --- lucid_recall: mem0 layer dedup + privacy guard --------------------------
-def test_mem0_layer_fallback_and_privacy():
-    from dreamlayer.lucid_recall.mem0_layer import Mem0Layer
+# --- lucid_recall: the mem0 layer is gone; dedup is local --------------------
+def test_dedup_is_local_and_needs_no_cloud_layer():
+    """RETIRED, inverted — `lucid_recall/mem0_layer.py` was removed 2026-08-02.
 
-    class _Veil:
-        def __init__(self, on): self._on = on
-        def allow_capture(self): return self._on
+    It worked: exact-summary dedup in the fallback, a privacy gate on `add()`.
+    Two things retired it. Its only constructor was the `Orchestrator` the
+    shipped Brain never builds, and mem0's own `Memory()` routes extraction
+    through a cloud LLM by default — so the "upgrade" the catalogue offered was
+    to send the wearer's memories off-device in order to notice that two of
+    them were similar.
 
-    m = Mem0Layer()
-    assert m.add("marcus owes the lease") is True
-    assert m.add("marcus owes the lease") is True         # dedup, not duplicated
-    assert len([r for r in m._local if "lease" in r["text"]]) == 1
-    hits = m.search("lease")
-    assert hits and "lease" in hits[0]["text"]
-
-    blocked = Mem0Layer(privacy=_Veil(False))
-    assert blocked.add("secret") is False                 # veil down → refuses
+    Near-duplicate collapsing is `memory/dedup.py` now: no dependency, on the
+    READ path, and it merges restatements rather than only byte-identical
+    repeats — strictly more than the layer it replaced.
+    """
+    import importlib.util
+    assert importlib.util.find_spec("dreamlayer.lucid_recall.mem0_layer") is None
+    from dreamlayer.memory.dedup import NEAR_THRESHOLD, similarity
+    assert similarity("marcus owes the lease",
+                      "marcus owes me the lease") >= NEAR_THRESHOLD
 
 
 # --- memory: typed doc schema round-trips (dataclass fallback) ---------------

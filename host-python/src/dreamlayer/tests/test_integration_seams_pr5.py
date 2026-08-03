@@ -67,13 +67,17 @@ def test_rosetta_argos_translate_fn_identity():
 
 
 # --- hud/render_skia: delegates to the PIL fallback when Skia absent ----------
-def test_render_skia_falls_back():
-    from dreamlayer.hud.render_skia import make_skia_renderer, available
-    sentinel = object()
-    render = make_skia_renderer(lambda card: sentinel)
-    out = render({"title": "Timer"})
-    if not available:
-        assert out is sentinel     # went straight to the PIL fallback
+def test_there_is_no_python_skia_renderer_to_fall_back_from():
+    """RETIRED, inverted — `hud/render_skia.py` was removed on 2026-08-02.
+
+    It rasterized correctly and could never reach a wearer: the glasses render
+    in Lua (`halo-lua/display/renderer.lua`) and the Live Lens renders on a JS
+    canvas, so the only thing Skia plugged into was `hud.renderer.CardRenderer`
+    — used by golden-image tests, the export helper and the SDK preview, and by
+    nothing in `ai_brain/`. See decisions/0007.
+    """
+    import importlib.util
+    assert importlib.util.find_spec("dreamlayer.hud.render_skia") is None
 
 
 # --- ai_brain/server_fastapi: import-safe; app iff fastapi present ------------
@@ -130,45 +134,90 @@ def test_nightly_mlx_noop_and_veil():
     assert t._collect(_Ring(), privacy=_Veil(False)) == []
 
 
-def test_nightly_mlx_present_reports_not_implemented(monkeypatch):
-    """With mlx present and examples collected, train_nightly must not claim a
-    success for training that never ran (#582)."""
+def test_nightly_mlx_present_now_trains_rather_than_declining(monkeypatch):
+    """INVERTED on 2026-08-03. This used to pin "must not claim a success for
+    training that never ran (#582)" — the right assertion while the LoRA step
+    was a stub, and the finding that became `decisions/0008`.
+
+    The trainer exists now, so the assertion flips to the thing that still
+    matters and is easy to lose: a run reports `trained` only when weights are
+    genuinely on disk. A zero exit with nothing written is the same overclaim
+    wearing different clothes, and it has its own case in
+    `test_train_live.py`."""
     import sys
     import types
 
     import dreamlayer.rem.nightly_mlx as nightly_mlx
-    from dreamlayer.rem.nightly_mlx import MlxNightlyTrainer
+    from dreamlayer.rem.nightly_mlx import MIN_EXAMPLES, MlxNightlyTrainer
 
     class _Ring:
         def memories(self):
-            return [{"summary": "lease due friday"}, {"summary": "call maya"}]
+            return [{"id": i, "kind": "conversation", "summary": f"line {i}"}
+                    for i in range(MIN_EXAMPLES + 10)]
 
     fake_mlx_lm = types.ModuleType("mlx_lm")
     fake_mlx_lm.lora = types.ModuleType("mlx_lm.lora")
     monkeypatch.setattr(nightly_mlx, "_HAS_MLX", True)
     monkeypatch.setitem(sys.modules, "mlx_lm", fake_mlx_lm)
 
-    s = MlxNightlyTrainer().train_nightly(_Ring(), privacy=_Veil(True))
-    assert s.trained is False
-    assert s.adapter_path is None
-    assert s.examples == 2
-    assert "not implemented" in s.reason
+    import tempfile
+    from pathlib import Path
+    d = Path(tempfile.mkdtemp())
+
+    ran = []
+
+    def _runner(argv, timeout):
+        ran.append(argv)
+        return 0, ""
+
+    # Exit 0 and NO weights: still not a success.
+    t = MlxNightlyTrainer(adapter_dir=str(d), runner=_runner)
+    s = t.train_nightly(_Ring(), privacy=_Veil(True))
+    assert ran, "the trainer never invoked mlx-lm"
+    assert s.trained is False and "wrote no adapter" in s.reason
+
+    # Weights on disk: trained, with the adapter named.
+    (d / "adapters.safetensors").write_bytes(b"w")
+    s = MlxNightlyTrainer(adapter_dir=str(d), runner=_runner).train_nightly(
+        _Ring(), privacy=_Veil(True))
+    assert s.trained is True and s.adapter_path == str(d)
+    assert s.row_ids, "no manifest of which rows produced the weights"
 
 
-# --- bridge/frame_sdk + noa_patterns: records payloads without the SDK --------
-def test_frame_display_and_noa_patterns():
-    from dreamlayer.bridge.frame_sdk import FrameDisplay
+def test_there_is_no_frame_sdk_bridge_to_fall_back_from():
+    """RETIRED, inverted — `bridge/frame_sdk.py` and the `frame_glasses`
+    capability were removed on 2026-08-02.
+
+    They were a display adapter for Brilliant Labs **Frame**, a different device
+    from the **Halo** this product is built for. Nothing in the tree constructed
+    `FrameDisplay` outside its own tests, and nothing ever would: the Brain
+    speaks to the glasses through `bridge/real_bridge.py` over the Halo
+    protocol in `halo-lua/ble/message_types.lua`.
+
+    Deleting it rather than filing it as "unreachable by design" is the point.
+    A capability the product will never build for is not a design decision the
+    report should carry — it is an entry that makes the catalogue longer and the
+    honesty numbers worse, and every audit had to re-decide it.
+
+    FAILS ON REVERT: re-adding the module or the catalogue entry lights this up.
+    """
+    import importlib
+
+    import pytest
+    with pytest.raises(ImportError):
+        importlib.import_module("dreamlayer.bridge.frame_sdk")
+    from dreamlayer.capabilities import CAPABILITIES
+    assert not [c for c in CAPABILITIES if c.key == "frame_glasses"]
+
+
+# --- noa_patterns: a card flattened to display lines, no SDK involved ---------
+# The `FrameDisplay` half of this case went with `bridge/frame_sdk.py`.
+# `card_to_frame_lines` is pure text layout and stays.
+def test_noa_patterns():
     from dreamlayer.bridge.noa_patterns import card_to_frame_lines
 
     lines = card_to_frame_lines({"title": "Maya", "answer": "owes you $20 from lunch"})
     assert lines[0] == "Maya" and any("owes" in ln for ln in lines)
-
-    d = FrameDisplay()
-    res = d.connect()
-    if not d.available:
-        assert res["ok"] is False
-    d.show_card({"title": "Maya", "answer": "hi"})
-    assert d.sent and d.sent[-1]["kind"] == "card"
 
 
 # --- pairing_ratelimit: lockout after N fails, cleared by success -------------
