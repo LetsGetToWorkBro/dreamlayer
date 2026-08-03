@@ -104,6 +104,7 @@ def main(argv=None) -> int:
     brain.start_brief_scheduler()     # deliver the morning brief at brief_hour
     brain.start_calendar_sync()       # pull macOS Calendar.app into the agenda
     brain.start_source_sync()         # fold local memory sources in on a poll
+    brain.start_home_hud()            # tap the glass when the house needs you
     brain.start_retention_scheduler()  # age memory out (hot/warm) while we run
     brain.start_ear()                 # resume the always-on ear if opted in (no-op otherwise)
 

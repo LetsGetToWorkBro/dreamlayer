@@ -132,7 +132,8 @@ _NOT_YET_HOSTED = {
     # `wake_word` left next — the ear builds an `OpenWakeWordEngine`, the
     # pipeline consults it per endpointed segment, and `EarHost.hear` answers
     # an addressed utterance instead of being a `return`.
-    "home_hud": "the glass never taps you that the garage is open",
+    # `home_hud` left next — `ai_brain/server/home_live.py` polls Home
+    # Assistant and pushes the household alerts `home_alerts` already built.
     # `lan_discovery` left next — `ai_brain/server/discovery_live.py` advertises
     # the Brain on start and the CLI browses for it when no `--brain` is given.
     "mesh_range": "the tincan bond stays Bluetooth-range instead of miles",

@@ -721,6 +721,27 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                     log.warning("folder watch poll failed", exc_info=True)
         threading.Thread(target=loop, daemon=True).start()
 
+    def start_home_hud(self) -> bool:
+        """Poll Home Assistant so the glass can tap you about the house.
+
+        Returns whether a poller started. Nothing is started for a Brain with no
+        Home Assistant URL — which is almost all of them, and a daemon thread
+        waking every minute to rediscover that is a cost with no payoff.
+        """
+        try:
+            from .home_live import home
+            return home(self).start()
+        except Exception:                            # noqa: BLE001 — never fail boot
+            log.warning("home HUD unavailable", exc_info=True)
+            return False
+
+    def stop_home_hud(self) -> None:
+        try:
+            from .home_live import home
+            home(self).stop()
+        except Exception:                            # noqa: BLE001
+            pass
+
     def stop_watching(self) -> None:
         if self._watch_stop is not None:
             self._watch_stop.set()
@@ -1933,6 +1954,16 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         if {"interpret_enabled", "interpret_target"} & set(updates):
             self._apply_interpret()
             self._sync_ear_wired()
+        # The same trap once more. `start_home_hud` starts nothing for a Brain
+        # with no Home Assistant URL — which is the state every Brain boots in —
+        # and `HomeHUD` caches the bridge it built from that config. So a wearer
+        # who types their URL into the panel would save a setting that did
+        # nothing until the next restart, with the panel reading it back
+        # perfectly. Rebuilt and restarted here instead.
+        if {"home_assistant_url", "home_assistant_token"} & set(updates):
+            self.stop_home_hud()
+            self._home_hud = None
+            self.start_home_hud()
         # Same trap, same fix: the room read lives on the EarHosts too, so a
         # config POST that only wrote the flag would persist a switch that did
         # nothing until the next ear restart.
@@ -3429,6 +3460,21 @@ def _brain_view_payload(brain: Brain) -> dict:
     }
 
 
+def _home_status(brain: Brain) -> dict:
+    """`HomeHUD.status()`, without building one to ask.
+
+    Same rule every promotion in this tree follows: a status poll must not be
+    what constructs the thing it is reporting on, or every poll looks like use.
+    """
+    got = getattr(brain, "_home_hud", None)
+    if got is None:
+        return {"configured": False, "polls": 0, "pushed": 0, "live": False}
+    try:
+        return got.status()
+    except Exception:                                # noqa: BLE001
+        return {"configured": False, "polls": 0, "pushed": 0, "live": False}
+
+
 def _capability_payload(brain: Brain) -> dict:
     """Live optional-capability report for the panel (dreamlayer/capabilities.py)
     with the panel's own persisted off-switches applied. Env DL_DISABLE_* still
@@ -3580,6 +3626,14 @@ def _capability_payload(brain: Brain) -> dict:
             env["DL_WIRED_PERSONA_TUNING"] = "1"
     except Exception:                               # noqa: BLE001
         pass
+    # `home_hud` gets NO DL_WIRED_ flag, and that is the correct answer rather
+    # than an omission. It is `kind="service"`, so `state()` short-circuits to
+    # "external" — a service to reach, not a library to install — and it has no
+    # dormant/active axis for a flag to move. `_PROMOTED_AT_RUNTIME` is defined
+    # as capabilities in `_NOT_WIRED` that a running subsystem promotes, and a
+    # service is in neither set. Its liveness rides `HomeHUD.status()`, which
+    # says something a flag could not: configured, polling, and how many cards
+    # have actually reached the glass.
     # `fs_watch` — the folders reacting instead of being asked. The flag
     # follows a change event genuinely DELIVERED, never an observer having
     # started: starting one on a network mount that emits nothing looks
@@ -4975,6 +5029,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 "email_docs": brain.email_docs,
                 "stats": brain.index.stats(),
                 "source_status": sources,
+                # The house, if the wearer wired one. `home_hud` is a SERVICE,
+                # so the capability meter can only ever say "external" about it
+                # — this is where its real state lives: configured, polling, and
+                # how many cards have actually reached the glass. A URL saved
+                # with nothing coming back is the failure this makes visible.
+                "home": _home_status(brain),
             })
 
         def _get_meetings(self, path, qs):
