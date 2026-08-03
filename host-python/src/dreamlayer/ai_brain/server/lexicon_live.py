@@ -323,6 +323,16 @@ class LexiconRead:
         survives across utterances — the same reason `world_lens` holds
         `off_barcode_fn` rather than rebuilding it per look.
         """
+        # The consent gate, at the last point before anything can leave. The
+        # feature's own `lexicon_enabled` switch is what the gate READS for this
+        # sink, so this is not a second opt-in — it is the same one, asked from
+        # the one place that also carries the Veil, counts what actually went
+        # out, and puts this lookup on `/dreamlayer/status` beside every other
+        # thing that can reach off-device. Checked HERE rather than only in
+        # `note_transcript` so a future second caller cannot route around it.
+        from .consent_gate import consent
+        if not consent(self.brain).check("lexicon"):
+            return {}
         if self._define is None:
             try:
                 from ...plugins.dictionaryapi import _default_fetch, define_fn
@@ -337,6 +347,7 @@ class LexiconRead:
             log.warning("[lexicon] lookup failed: %s",   # hostile body, anything
                         type(exc).__name__)
             return {}
+        consent(self.brain).note("lexicon")          # a word genuinely left
         return got if isinstance(got, dict) else {}
 
     def _remember(self, word: str) -> None:

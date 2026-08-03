@@ -103,7 +103,26 @@ class PiperTTS:
             except Exception as exc:                   # noqa: BLE001
                 log.error("[tts] synthesize_stream_raw failed: %s", exc)
                 return None
-        # piper >=1.2: synthesize() writes into a wave.Wave_write
+        # piper >=1.3 (piper1-gpl): `synthesize(text)` returns an iterable of
+        # AudioChunk and its SECOND positional argument is a SynthesisConfig,
+        # not a wave writer. Handing it `wf` there is not an error — it builds a
+        # generator nobody iterates, so the wave file is closed with zero frames
+        # and the caller reads back silence with nothing logged. Checked FIRST,
+        # by name, because that failure is invisible.
+        wav_writer = getattr(v, "synthesize_wav", None)
+        if callable(wav_writer):
+            try:
+                buf = io.BytesIO()
+                with wave.open(buf, "wb") as wf:
+                    wav_writer(text, wf)
+                buf.seek(0)
+                with wave.open(buf, "rb") as wf:
+                    self._rate = wf.getframerate() or self._rate
+                    return wf.readframes(wf.getnframes()) or None
+            except Exception as exc:                   # noqa: BLE001
+                log.error("[tts] synthesize_wav failed: %s", exc)
+                return None
+        # piper ==1.2: synthesize() writes into a wave.Wave_write
         try:
             buf = io.BytesIO()
             with wave.open(buf, "wb") as wf:

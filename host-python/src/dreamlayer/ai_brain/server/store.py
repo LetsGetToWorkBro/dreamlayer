@@ -558,6 +558,11 @@ class BrainConfig:
     # outlive the rows (see rem/nightly_mlx.py and decisions/0008).
     mlx_adapter_dir: str = ""
     nightly_train_enabled: bool = False
+    # Sinks the wearer has explicitly consented to, for the ones that have no
+    # switch of their own (`ai_brain/server/egress_consent.py`). Sinks that DO
+    # have a switch are read from it rather than duplicated here — one consent
+    # per thing, not two that can disagree.
+    egress_granted: list = field(default_factory=list)
     # A Meshtastic node reachable over TCP on the LAN. Blank means "look for a
     # radio on USB", which is the common case — this is for a node that lives
     # somewhere else on the network rather than plugged into this Mac.

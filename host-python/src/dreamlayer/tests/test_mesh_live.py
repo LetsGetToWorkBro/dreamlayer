@@ -23,7 +23,12 @@ from dreamlayer.ai_brain.server.server import Brain
 
 @pytest.fixture
 def brain():
-    return Brain(tempfile.mkdtemp())
+    b = Brain(tempfile.mkdtemp())
+    # The radio needs an explicit grant — see `consent_gate.SINKS["mesh"]`.
+    # Given here so these tests exercise the transport rather than the gate;
+    # the gate has its own class below and its own file.
+    b.config.egress_granted = ["mesh"]
+    return b
 
 
 def _pushes(brain):
