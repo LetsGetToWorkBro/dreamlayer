@@ -106,3 +106,49 @@ class TestTheConflictTableNamesRealThings:
                 assert not pair <= members, (
                     f"{name} contains the conflicting pair {sorted(pair)} — "
                     f"it cannot be installed")
+
+
+# --- bounds that encode a decision, not a compatibility guess ----------------
+#
+# Most version bounds are housekeeping and a bot may move them freely. A few
+# are the written form of a decision somebody made on purpose, and moving one
+# silently un-makes it. Both entries below were added the same day this class
+# was, because a bot proposed widening one of them within hours of it landing
+# and every CI gate passed.
+#
+# That is not a bot problem, it is a coverage problem. `dependency-review`
+# reads the dependency-graph DIFF, so a change to `pyproject.toml` that leaves
+# `uv.lock` alone presents no new package and there is nothing for it to fail
+# on — the offending version only materialises later, for whoever regenerates
+# the lock next. `pip-audit` installs `[privacy,llm]` and never sees `voice` at
+# all. Both gates were working; neither was being asked this question.
+#
+# Adding a row here is cheap. The test is not "never change this" — it is
+# "changing this is a deliberate act", and editing the table alongside the pin
+# is what makes it deliberate.
+DECIDED_BOUNDS = [
+    # (extra, distribution, bound, why)
+    ("voice", "piper-tts", "<1.3",
+     "piper relicensed at 1.3.0 — rhasspy/piper (MIT) became "
+     "OHF-voice/piper1-gpl (GPL-3.0-or-later, it links espeak-ng). DreamLayer "
+     "is Apache-2.0 and `voice` ships in profile-phone and profile-mac, so "
+     "widening this puts GPL-3.0 into a shipped extra. See #609."),
+    ("privacy", "cryptography", ">=50",
+     "GHSA-g6cj-pr64-35w5 (a Bleichenbacher oracle in PKCS#7 EnvelopedData "
+     "decryption) is fixed in 50.0.0. Lowering this reopens it, and the two "
+     "advisories fixed in 49.0.0 with it. See #614."),
+]
+
+
+class TestABoundThatEncodesADecisionStaysPut:
+    @pytest.mark.parametrize("extra,dist,bound,why", DECIDED_BOUNDS,
+                             ids=[f"{e}:{d}" for e, d, _, _ in DECIDED_BOUNDS])
+    def test_it_is_still_there(self, declared, extra, dist, bound, why):
+        reqs = [r for r in declared[extra] if _dist_name(r) == dist]
+        assert reqs, f"{dist} left the {extra!r} extra entirely — was that meant?"
+        assert bound in reqs[0], (
+            f"{dist} no longer carries {bound!r} in the {extra!r} extra "
+            f"({reqs[0]!r}).\n\n{why}\n\n"
+            f"If the decision genuinely changed, edit DECIDED_BOUNDS in this "
+            f"file in the same commit. If a bot brought you here, it did not "
+            f"read the comment above the pin.")
