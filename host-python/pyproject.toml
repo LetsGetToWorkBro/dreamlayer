@@ -106,11 +106,26 @@ soundlink = ["ggwave>=0.4,<1"]
 # serverless, conflict-free multi-device Vault sync (reality_compiler/v2/vault_sync.py)
 sync     = ["loro>=1.0,<2"]
 infra    = ["rich>=14,<16", "watchdog>=6,<7", "zeroconf>=0.150,<1", "datasette>=0.65,<1", "rerun-sdk>=0.34,<1"]
-# Security-critical: keep a floor below which known CVEs live (audit 2026-07-14).
-# cryptography>=48.0.1 clears GHSA-537c-gmf6-5ccf (the unconstrained resolver
-# otherwise settles on the vulnerable 46.0.7); presidio floors match the modern
-# analyzer API. pip-audit (dep-audit.yml) gates the rest.
-privacy  = ["cryptography>=48.0.1,<50", "presidio-analyzer>=2.2,<3", "presidio-anonymizer>=2.2,<3", "anyio>=4,<5", "c2pa-python>=0.36,<1", "keyring>=24,<26"]
+# Security-critical: keep a floor below which known CVEs live (audit 2026-08-03).
+# cryptography>=50 clears three advisories that landed against 48.0.1, and the
+# CAP had to move with the floor — `<50` would have kept the worst of them:
+#
+#   GHSA-g6cj-pr64-35w5 (CVE-2026-69247)  fixed 50.0.0  PKCS#7 EnvelopedData
+#       decryption leaks a Bleichenbacher oracle through distinguishable errors
+#       and timing. This is the one the old ceiling blocked.
+#   GHSA-m2h6-j472-rp4c (CVE-2026-69248)  fixed 49.0.0  the verifier accepts
+#       wildcard DNS names, escaping permittedSubtrees name constraints.
+#   GHSA-jwv3-5hgf-82ww (CVE-2026-69249)  fixed 49.0.0  duplicate self-signed
+#       intermediates drive exponential path-building.
+#
+# The previous floor (48.0.1, audit 2026-07-14) cleared GHSA-537c-gmf6-5ccf,
+# which the unconstrained resolver otherwise settled below at 46.0.7. Nothing
+# else in the tree caps cryptography — checked against uv.lock, where every
+# other consumer (c2pa-python, presidio-anonymizer, google-auth, secretstorage)
+# depends on it without a specifier — so `<51` is ours to move next time.
+# presidio floors match the modern analyzer API. pip-audit (dep-audit.yml)
+# gates the rest, and is what caught these.
+privacy  = ["cryptography>=50,<51", "presidio-analyzer>=2.2,<3", "presidio-anonymizer>=2.2,<3", "anyio>=4,<5", "c2pa-python>=0.36,<1", "keyring>=24,<26"]
 platform = ["pluggy>=1,<2", "pyee>=13,<14", "argostranslate>=1,<2", "fastapi>=0.139,<1", "uvicorn>=0.51,<1", "pylsl>=1,<2", "wasmtime>=46,<48", "cbor2>=6,<7", "mlx>=0.32,<1; sys_platform=='darwin' and platform_machine=='arm64'", "mlx-lm>=0.31,<1; sys_platform=='darwin' and platform_machine=='arm64'"]
 
 # --- Deployment profiles: one install per target, composed from the groups
