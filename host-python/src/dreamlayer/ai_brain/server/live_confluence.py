@@ -33,6 +33,7 @@ from typing import Optional
 from ...confluence.bond import BondManager
 from ...confluence.entangle import EntangledSky
 from ...confluence.gift import unwrap_gift, wrap_gift
+from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
 
 ROOM_MAX = 8              # sessions with live confluence state, per Brain
 SESSION_STALE_S = 60.0    # silent this long → the session is dropped
@@ -44,24 +45,6 @@ OFFER_TTL_S = 600.0       # an unaccepted code dies after 10 minutes
 _GiftSnap = namedtuple("_GiftSnap", ["colors", "ts"])
 
 
-class _PostureGate:
-    """The Brain's incognito posture, shaped like the privacy gate the real
-    BondManager/EntangledSky expect (capture gates the sender, recall gates
-    folding the peer's weather in). Fails closed on an unreadable posture."""
-
-    def __init__(self, brain) -> None:
-        self._brain = brain
-
-    def allow_capture(self) -> bool:
-        try:
-            return not bool(self._brain.incognito_now())
-        except Exception:
-            return False
-
-    def allow_recall(self) -> bool:
-        return self.allow_capture()
-
-
 class LiveConfluence:
     """The per-Brain confluence room. Thread-safe; every public method returns
     plain JSON-ready dicts for the live routes."""
@@ -70,7 +53,7 @@ class LiveConfluence:
         self._brain = brain
         self._now = now_fn
         self._lock = threading.Lock()
-        self._gate = _PostureGate(brain)
+        self._gate = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
         # sid -> {mgr, sky, seen, peer (sid|None), inbox (wire|None), bond_id}
         self._sessions: dict = {}
         # bond_id -> {sid, code, ts} — the code lives ONLY until accepted,

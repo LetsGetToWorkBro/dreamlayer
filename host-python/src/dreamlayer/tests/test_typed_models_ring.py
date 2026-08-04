@@ -154,7 +154,11 @@ class TestTheBrainWiresIt:
         from dreamlayer.ai_brain.server import lens_hosts
         src = inspect.getsource(lens_hosts.BrainLenses)
         assert "SemanticRingBuffer(RING_CAPACITY," in src
-        assert "privacy=_LensGate(self.brain)" in src
+        # The gate is `veil.VeilGate` now, not a hand-written `_LensGate` —
+        # twelve of those had drifted apart on `allow_recall` (decisions/0009).
+        # What this still guards is the same thing: the ring is built WITH a
+        # gate, so a lens ring can never quietly become an ungated one.
+        assert "privacy=self.privacy" in src or "privacy=VeilGate(" in src
 
     def test_the_world_lens_ring_carries_the_gate(self):
         import inspect

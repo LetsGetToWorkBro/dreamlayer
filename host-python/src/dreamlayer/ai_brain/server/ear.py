@@ -24,6 +24,8 @@ Consent + privacy, by construction:
 """
 from __future__ import annotations
 
+from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+
 import logging
 import threading
 
@@ -54,29 +56,6 @@ EAR_CAPS = ("voice_vad", "local_asr", "mic_capture", "asr_moonshine",
             "wake_word")
 
 
-class _EarGate:
-    """The privacy gate the CapturePipeline reads at its door (push_pcm →
-    _veiled → orch.privacy.allow_capture). Mirrors WorldLensHost._LookGate:
-    allow_capture() is False while the Brain is incognito / in quiet hours, so a
-    veiled stretch accumulates NO audio at all — not even in the ring. Fails
-    CLOSED (returns False) when the posture can't be read, so an unreadable trust
-    signal veils rather than opens the mic. WITHOUT this attribute the pipeline's
-    _veiled() raises AttributeError and (fail-closed) drops every window, so the
-    ear would open the mic yet capture nothing — this gate is load-bearing."""
-
-    def __init__(self, brain):
-        self._brain = brain
-
-    def allow_capture(self) -> bool:
-        try:
-            return not bool(self._brain.incognito_now())
-        except Exception:                        # noqa: BLE001 — unreadable → veiled
-            return False
-
-    def allow_recall(self) -> bool:
-        return self.allow_capture()
-
-
 class EarHost:
     """Drives a CapturePipeline over a microphone and remembers what it hears.
 
@@ -89,7 +68,7 @@ class EarHost:
         self.brain = brain
         # The CapturePipeline reads self.privacy at its door on every window —
         # this MUST exist or _veiled() fails closed and the ear captures nothing.
-        self.privacy = _EarGate(brain)
+        self.privacy = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
         self._pipe = None
         self._lock = threading.RLock()
         self._bird = None

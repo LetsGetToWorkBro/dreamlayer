@@ -32,6 +32,8 @@ merely empty.
 """
 from __future__ import annotations
 
+from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+
 import json
 import logging
 import math
@@ -86,22 +88,6 @@ MIN_SEGMENT_S = 1.0
 UNNAMED_TTL_DAYS_DEFAULT = 90.0
 
 
-class _VoiceGate:
-    """The Veil, read before any voiceprint is computed. Mirrors `_EarGate` /
-    `_FaceGate`: incognito or quiet hours means no capture, and an unreadable
-    posture FAILS CLOSED, because an unreadable trust signal must never resolve
-    to "take a biometric of whoever is talking"."""
-
-    def __init__(self, brain):
-        self._brain = brain
-
-    def allow_capture(self) -> bool:
-        try:
-            return not bool(self._brain.incognito_now())
-        except Exception:                            # noqa: BLE001
-            return False
-
-
 def _cosine(a, b) -> float:
     """Cosine similarity, computed here rather than via
     `ECAPASpeaker.similarity`.
@@ -125,7 +111,7 @@ class VoiceRecall:
 
     def __init__(self, brain):
         self.brain = brain
-        self.privacy = _VoiceGate(brain)
+        self.privacy = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
         self._lock = threading.RLock()
         self._embedder = None
         self._embedder_built = False

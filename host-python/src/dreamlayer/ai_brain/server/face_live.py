@@ -75,6 +75,8 @@ names in different places, and the shipped one cannot be turned on by accident.
 """
 from __future__ import annotations
 
+from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+
 import json
 import logging
 import os
@@ -139,22 +141,6 @@ def ambient_allowed() -> bool:
         "1", "true", "yes", "on")
 
 
-class _FaceGate:
-    """The Veil, read on every frame. Mirrors `ear._EarGate` and
-    `world_lens._LookGate`: incognito / quiet hours means no capture, and an
-    unreadable posture FAILS CLOSED (veiled), because an unreadable trust signal
-    must never resolve to "point the camera at someone's face"."""
-
-    def __init__(self, brain):
-        self._brain = brain
-
-    def allow_capture(self) -> bool:
-        try:
-            return not bool(self._brain.incognito_now())
-        except Exception:                            # noqa: BLE001
-            return False
-
-
 class FaceRecall:
     """The consented face index, and the one question it answers.
 
@@ -167,7 +153,7 @@ class FaceRecall:
 
     def __init__(self, brain):
         self.brain = brain
-        self.privacy = _FaceGate(brain)
+        self.privacy = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
         self._lock = threading.RLock()
         self._embedder = None
         self._index = None

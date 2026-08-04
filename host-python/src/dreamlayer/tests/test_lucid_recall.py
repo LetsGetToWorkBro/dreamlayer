@@ -12,8 +12,22 @@ gate, not a rewrite.
 from __future__ import annotations
 
 from dreamlayer.ai_brain.server.lucid_live import (
-    LucidLive, _Gate, _MemoryShim, _Result, _SocialShim,
+    LucidLive, _MemoryShim, _Result, _SocialShim,
 )
+from dreamlayer.ai_brain.server.veil import (
+    RECALL_SURVIVES_INCOGNITO, VeilGate)
+
+
+def _lucid_gate(brain):
+    """The gate this lens takes, built the way the lens builds it.
+
+    The posture is the assertion, not an incidental fixture detail: Lucid
+    Recall is the one Brain-side site that keeps recall open while veiled, and
+    `test_the_lens_declares_the_surviving_posture` below pins that the lens
+    really does ask for it. Without that pairing this helper would just be a
+    second opinion about what the lens ought to do.
+    """
+    return VeilGate(brain, recall=RECALL_SURVIVES_INCOGNITO)
 
 
 class _Brain:
@@ -56,17 +70,33 @@ class TestTheGateIsTheRightOne:
         would take away the wearer's own memory in exactly the session where
         they most likely want a quiet private lookup.
         """
-        assert _Gate(_Brain(veiled=True)).allow_recall() is True
+        assert _lucid_gate(_Brain(veiled=True)).allow_recall() is True
+
+    def test_the_lens_declares_the_surviving_posture(self):
+        """The pairing that makes the rest of this class mean something.
+
+        `_lucid_gate` asserts what the posture DOES; this asserts the lens
+        actually asks for it. Split apart, the first is a test of `veil.py` and
+        the second is a test of nothing — together they say "Lucid Recall keeps
+        recall open while veiled", which is the claim."""
+        import inspect
+
+        from dreamlayer.ai_brain.server import lucid_live
+        src = inspect.getsource(lucid_live)
+        assert "recall=RECALL_SURVIVES_INCOGNITO" in src, (
+            "Lucid Recall stopped declaring the posture its own docstring "
+            "argues for — recall now dies with capture and the lens goes "
+            "silent in exactly the private session it exists for")
 
     def test_capture_still_fails_closed(self):
-        assert _Gate(_Brain(veiled=True)).allow_capture() is False
-        assert _Gate(_Brain(veiled=False)).allow_capture() is True
+        assert _lucid_gate(_Brain(veiled=True)).allow_capture() is False
+        assert _lucid_gate(_Brain(veiled=False)).allow_capture() is True
 
     def test_an_unreadable_posture_refuses_capture(self):
         class _Boom:
             def incognito_now(self):
                 raise RuntimeError("unreadable")
-        assert _Gate(_Boom()).allow_capture() is False
+        assert _lucid_gate(_Boom()).allow_capture() is False
 
     def test_no_phantom_flag_is_read(self):
         """An earlier draft read `config.pause_capture`, which does not exist on
@@ -77,8 +107,8 @@ class TestTheGateIsTheRightOne:
         learn about it."""
         import inspect
 
-        from dreamlayer.ai_brain.server import lucid_live
-        src = inspect.getsource(lucid_live._Gate.allow_recall)
+        from dreamlayer.ai_brain.server import veil
+        src = inspect.getsource(veil.VeilGate.allow_recall)
         assert "pause_capture" not in src.split('"""')[-1], (
             "allow_recall is reading a config flag again — check it exists")
         from dreamlayer.ai_brain.server.store import BrainConfig

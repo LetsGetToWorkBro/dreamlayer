@@ -40,6 +40,8 @@ partial night.
 """
 from __future__ import annotations
 
+from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+
 import json
 import logging
 import os
@@ -74,22 +76,6 @@ class _Rows:
 
     def memories(self):
         return self._rows
-
-
-class _TrainGate:
-    """The Veil, fail-closed. Identical posture to every other host here."""
-
-    def __init__(self, brain):
-        self._brain = brain
-
-    def allow_capture(self) -> bool:
-        try:
-            return not bool(self._brain.incognito_now())
-        except Exception:                            # noqa: BLE001
-            return False
-
-    def allow_recall(self) -> bool:
-        return self.allow_capture()
 
 
 class NightlyTrain:
@@ -241,7 +227,7 @@ class NightlyTrain:
         self.runs += 1
         try:
             s = self.trainer().train_nightly(
-                _Rows(self.rows()), privacy=_TrainGate(self.brain))
+                _Rows(self.rows()), privacy=VeilGate(self.brain, recall=RECALL_FOLLOWS_CAPTURE))
         except Exception as exc:                     # noqa: BLE001 — never fail a night
             log.warning("[train] run failed: %s", type(exc).__name__)
             self.last_reason = f"error: {type(exc).__name__}"

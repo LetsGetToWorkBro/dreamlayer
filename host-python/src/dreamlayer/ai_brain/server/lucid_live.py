@@ -36,6 +36,8 @@ lens honours the wearer's posture without a second implementation of it.
 """
 from __future__ import annotations
 
+from .veil import RECALL_SURVIVES_INCOGNITO, VeilGate
+
 import logging
 from typing import Any, Optional
 
@@ -166,52 +168,6 @@ class _MemoryShim:
         return best if best_score >= self.MIN_OVERLAP else ""
 
 
-class _Gate:
-    """The wearer's posture, in the two senses this lens needs them.
-
-    `allow_recall` is deliberately NOT `allow_capture`: incognito stops keeping
-    new memories and does not stop you asking what you already know. Collapsing
-    them would make the lens go silent in exactly the session where a wearer is
-    most likely to want a quiet, private lookup.
-    """
-
-    def __init__(self, brain):
-        self._brain = brain
-
-    def allow_capture(self) -> bool:
-        try:
-            return not bool(self._brain.incognito_now())
-        except Exception:                            # noqa: BLE001
-            return False
-
-    def allow_recall(self) -> bool:
-        """Always True, and that is a mapping rather than a fail-open.
-
-        The router's gate was written against `memory.privacy.PrivacyGate`,
-        which has TWO inputs: an explicit pause (the wearer's veil gesture) and
-        the incognito session shield. `allow_recall` is blocked only by the
-        pause — its own docstring says incognito "stops keeping new memories,
-        not recalling old ones. You can still ask what you already know while
-        incognito."
-
-        **The Brain has no pause input.** Its whole posture is
-        `incognito_now()` — LAN-only, a quiet-hours window, a private zone —
-        and every one of those is a capture posture. So the honest mapping of
-        the pause term onto this Brain is "never set", and returning True is
-        the faithful answer, not a missing check.
-
-        An earlier draft read `config.pause_capture`. No such field exists on
-        `BrainConfig`, so it was a phantom flag: `getattr(..., False)` made it
-        return True anyway, with a check that looked like it did something.
-        Reading a setting nobody writes is worse than not reading one, because
-        the next person believes the control exists.
-
-        If a real pause is ever added Brain-side, THIS is the method that must
-        learn about it, and `test_lucid_recall.py` says so.
-        """
-        return True
-
-
 class LucidLive:
     """The Brain's one router, built on first use and held for the session."""
 
@@ -226,7 +182,7 @@ class LucidLive:
             from ...lucid_recall.router import LucidRecall
             self._router = LucidRecall(social_lens=_SocialShim(self.brain),
                                        memory_index=_MemoryShim(self.brain),
-                                       privacy=_Gate(self.brain))
+                                       privacy=VeilGate(self.brain, recall=RECALL_SURVIVES_INCOGNITO))
         return self._router
 
     def query(self, text: str = "", frame=None) -> dict:

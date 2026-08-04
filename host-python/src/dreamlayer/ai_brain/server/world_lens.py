@@ -23,6 +23,8 @@ blind, never a guess), identical to the on-device gate.
 """
 from __future__ import annotations
 
+from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+
 import re
 
 import logging
@@ -64,25 +66,6 @@ _TASTE_PROMPT = (
     "List the products or dishes in view for a shopping assistant, one per "
     "line: NAME | ingredients | price | rating(0-5). Use '?' for anything "
     "unknown. Nothing else.")
-
-
-class _LookGate:
-    """A privacy gate reflecting the Brain's incognito posture. ``allow_capture``
-    is False while incognito, so a deliberate look then returns blind — the same
-    honest "veiled = deliberately blind" contract the on-device gate gives. Fails
-    CLOSED when the posture can't be read (unknown trust signal → veiled)."""
-
-    def __init__(self, brain):
-        self._brain = brain
-
-    def allow_capture(self) -> bool:
-        try:
-            return not bool(self._brain.incognito_now())
-        except Exception:
-            return False
-
-    def allow_recall(self) -> bool:
-        return self.allow_capture()
 
 
 class _BrainVisionRouter:
@@ -201,7 +184,7 @@ class WorldLensHost:
         self.health = getattr(brain, "health", None)
         from ...orchestrator.capability_log import CapabilityLedger
         self.capability_log = CapabilityLedger()
-        self.privacy = _LookGate(brain)
+        self.privacy = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
         # The SAME hot-memory primitive the glasses run (orchestrator.py wires
         # SemanticRingBuffer(cfg.passive_ring_capacity)): typed MemoryEvents
         # only, in-memory only, never raw pixels and never disk. Deliberate
