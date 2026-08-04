@@ -97,7 +97,7 @@ dream-style = ["onnxruntime>=1.17,<2"]
 # does nothing until the wearer turns face_recognition on, and never matches
 # anyone who was not consensually enrolled — there is no stranger lookup and no
 # face database beyond your own contacts. See truth_lens/face_backends.py.
-face = ["insightface>=0.7,<1", "onnxruntime>=1.17,<2"]
+face = ["insightface>=0.7,<2", "onnxruntime>=1.17,<2"]
 # data-over-sound (ggwave — near-ultrasonic audio chirps, from the llama.cpp
 # author) — transmit small payloads between devices as sound. A QR-free pairing
 # fallback: the Brain sings a code, the phone catches it out of the air. Opt-in,
