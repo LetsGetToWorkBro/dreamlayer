@@ -150,6 +150,12 @@ def test_disabled_service_reports_off_not_external():
 # capability WITHOUT such a test kept claiming a file that no longer existed,
 # and the report — which is a promise to the wearer about what their glasses
 # can do — went on citing it. These ask the question of all 67 at once.
+#
+# "every extra a capability names is declared" is NOT here: it already exists
+# above as test_every_cap_extra_exists_in_pyproject. A second copy was written
+# and deleted — this repo's own worked example is twelve hand-written Veil
+# gates whose docstrings each promised they mirrored the others, so a duplicate
+# assertion is not free even when both copies happen to be right.
 
 def _dists(extra: str) -> set:
     return {re.split(r"[<>=!~;\[\s]", r.strip(), maxsplit=1)[0].lower().replace("_", "-")
@@ -210,17 +216,6 @@ class TestEveryCapabilityPointsAtSomethingReal:
             "capabilities naming a seam file that does not exist; the report "
             "promises the wearer a feature and cites a deleted file:\n  "
             + "\n  ".join(missing))
-
-    def test_every_extra_a_capability_names_is_declared(self):
-        """A capability whose extra was renamed in pyproject can never be
-        installed by the instruction the panel gives — `pip install
-        dreamlayer[<extra>]` simply errors."""
-        declared = set(_optional_deps())
-        orphans = [f"{c.key} -> [{c.extra}]" for c in C.CAPABILITIES
-                   if c.extra is not None and c.extra not in declared]
-        assert not orphans, (
-            "capabilities naming an extras group pyproject does not "
-            "declare:\n  " + "\n  ".join(orphans))
 
     def test_every_capability_is_installable_by_its_own_extra(self):
         """The project's own recurring question, one layer down: importable is
