@@ -32,8 +32,14 @@ import pytest
 from dreamlayer.ai_brain.server.veil import (
     POSTURES, RECALL_FOLLOWS_CAPTURE, RECALL_SURVIVES_INCOGNITO, VeilGate)
 
-SERVER = pathlib.Path(
-    __import__("dreamlayer.ai_brain.server", fromlist=["x"]).__file__).parent
+#: Resolved from THIS file rather than from a module's `__file__`, which is
+#: `str | None` and would need silencing. The path matters more than the
+#: silencing: both structural tests below scan `SERVER.glob("*.py")`, so a
+#: SERVER that resolves anywhere wrong makes them iterate nothing and pass
+#: vacuously — a green check answering a narrower question than it appears to,
+#: which is the exact shape of bug this file exists to prevent.
+#: `test_the_scan_actually_reaches_the_gates` is the guard on that.
+SERVER = pathlib.Path(__file__).resolve().parents[1] / "ai_brain" / "server"
 
 
 class _Brain:
@@ -120,6 +126,25 @@ class TestAPostureMustBeChosen:
 class TestItCannotQuietlyBecomeTwelveAgain:
     """The two structural assertions. Everything above tests four lines of
     arithmetic; these test the thing that actually went wrong."""
+
+    def test_the_scan_actually_reaches_the_gates(self):
+        """The two tests below are only as good as the path they walk.
+
+        A wrong `SERVER` does not error — `glob` on a missing directory yields
+        nothing, both assertions get an empty list, and both go green while
+        checking no code at all. So this pins that the scan sees the real
+        directory, and specifically that it can see the sites the other two are
+        about.
+        """
+        assert SERVER.is_dir(), f"the gate scan points nowhere: {SERVER}"
+        files = {p.name for p in SERVER.glob("*.py")}
+        assert "veil.py" in files
+        # the twelve that were migrated — if the scan cannot see these, it
+        # cannot see a thirteenth either
+        for expected in ("lens_hosts.py", "lucid_live.py", "ear.py",
+                         "world_lens.py", "face_live.py", "dream_reactors.py"):
+            assert expected in files, f"{expected} is outside the scan"
+        assert len(files) > 20, f"only {len(files)} modules in scan — too few"
 
     def test_the_predicate_is_written_once(self):
         """No `ai_brain/server/` module may define `allow_capture` again.
