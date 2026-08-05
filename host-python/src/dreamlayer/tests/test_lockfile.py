@@ -193,3 +193,81 @@ class TestTheLintRulesThatCatchDefectsStayOn:
         bugbear = {r for r in selected if r.startswith("B")}
         assert bugbear == {r for r, _ in DECIDED_LINT_RULES}, (
             "the bugbear rules in pyproject and DECIDED_LINT_RULES disagree")
+
+
+#: Modules excused from type checking (`ignore_errors = true`), each with the
+#: reason it is not a one-liner. Same shape as the two tables above: a
+#: written-down decision, asserted, with the reason in the failure message.
+#:
+#: This one is a table specifically BECAUSE the prose above it had already
+#: drifted — the comment in pyproject said "Four leaf/subsystem modules" over a
+#: list of five, and nothing in the suite could tell. That is the failure mode
+#: this repo keeps meeting: a sentence promising something about a list, with
+#: no way to know when it stops being true.
+#:
+#: An excused module is a hole in a gate that CI otherwise enforces over the
+#: whole tree, so the cost of adding one should be a visible line in a diff and
+#: a sentence saying why, not a module path appended to an array.
+DECIDED_TYPE_BACKLOG = [
+    ("dreamlayer.ai_brain.server.qr",
+     "the QR bit-matrix is built as list[list[int|None]] and filled in place; "
+     "annotating the None->int transitions carries no correctness"),
+    ("dreamlayer.reality_compiler.v2.choreographer",
+     "the beat->scene compiler threads several Optionals through a dynamic "
+     "walk — a real typing task, not a one-liner"),
+    ("dreamlayer.reality_compiler.intent_parser",
+     "emits runtime-validated strings mypy cannot narrow to the Intent "
+     "dataclasses' Literal fields"),
+    ("dreamlayer.bridge.real_bridge",
+     "its client comes from the optional brilliant-ble dependency and is None "
+     "until a device connects; hardware-gated and device-free CI never runs it"),
+    ("dreamlayer.reality_compiler.v2.vault_sync",
+     "every value read out of a LoroDoc is loro's deep LoroValue union, so "
+     "each .get(...) is a union-attr storm — CRDT plumbing, not the proof"),
+]
+
+
+def _excused_modules() -> set[str]:
+    return {m
+            for ov in _pyproject()["tool"]["mypy"].get("overrides", [])
+            if ov.get("ignore_errors")
+            for m in ov["module"]}
+
+
+class TestTheTypeCheckingBacklogDoesNotGrowQuietly:
+    @pytest.mark.parametrize("module,why", DECIDED_TYPE_BACKLOG,
+                             ids=[m.rsplit(".", 1)[-1]
+                                  for m, _ in DECIDED_TYPE_BACKLOG])
+    def test_it_is_still_the_excused_set(self, module, why):
+        assert module in _excused_modules(), (
+            f"{module} came off the mypy backlog.\n\n{why}\n\n"
+            f"That is good news if its types were actually written — delete "
+            f"the row here in the same commit. This fails so the removal is "
+            f"deliberate rather than a merge losing the override.")
+
+    def test_nothing_was_added_without_a_reason(self):
+        """The direction that matters. A module appended to `ignore_errors`
+        turns the gate off for it silently — the diff is one array entry and
+        every check stays green, which is how a file stops being checked
+        without anybody deciding that it should.
+        """
+        assert _excused_modules() == {m for m, _ in DECIDED_TYPE_BACKLOG}, (
+            "the mypy ignore_errors modules and DECIDED_TYPE_BACKLOG "
+            "disagree — a module was excused from type checking (or excused "
+            "twice) without a row saying why")
+
+    def test_the_safety_core_is_never_excused(self):
+        """The four files the audit calls the safety core, plus the Veil gate
+        every capability asks. Excusing one of these is not a gradual-typing
+        trade-off, and it should not be reachable by editing an array.
+        """
+        core = {
+            "dreamlayer.ai_brain.server.veil",
+            "dreamlayer.ai_brain.server.consent_gate",
+            "dreamlayer.ai_brain.server.server",
+            "dreamlayer.plugins.base",
+        }
+        excused = _excused_modules()
+        assert not (core & excused), (
+            f"{sorted(core & excused)} is excused from type checking — these "
+            f"are the modules the Veil and the consent gate live in")

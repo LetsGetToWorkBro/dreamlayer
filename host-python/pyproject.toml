@@ -258,9 +258,15 @@ ignore_missing_imports = true
 follow_imports = "silent"
 
 # --- Gradual-typing backlog (ignore_errors) ---------------------------------
-# Four leaf/subsystem modules whose types come from dynamic dispatch, an
-# untyped optional dependency, or lazy plumbing. Each is documented; the rest
-# of the tree (incl. the four safety-core files) is clean and enforced.
+# Leaf/subsystem modules whose types come from dynamic dispatch, an untyped
+# optional dependency, or lazy plumbing. Each is documented; the rest of the
+# tree (incl. the four safety-core files) is clean and enforced.
+#
+# This list is mirrored by DECIDED_TYPE_BACKLOG in tests/test_lockfile.py,
+# which asserts it in both directions — the count used to be stated here in
+# prose ("Four") and had already drifted to five with nothing able to tell.
+# Adding a module here without a row there fails the suite, on purpose:
+# switching the type gate off for a file should cost a sentence.
 [[tool.mypy.overrides]]
 module = [
     # QR bit-matrix built as list[list[int|None]] and filled in place — pure
