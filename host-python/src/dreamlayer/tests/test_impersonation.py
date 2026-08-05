@@ -50,6 +50,7 @@ def test_word_boundary_avoids_false_positives():
 
 
 def test_every_lexicon_category_is_reachable():
+    assert LEXICON, "the lexicon is empty — this loop would check nothing"
     for cat, phrases in LEXICON.items():
         got = screen(_fig(phrases[0]))
         assert any(f.category == cat for f in got), cat

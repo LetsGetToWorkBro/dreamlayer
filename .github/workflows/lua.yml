@@ -35,4 +35,25 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y lua-check
       - name: Lint the device Lua
         working-directory: halo-lua
-        run: luacheck . --no-color
+        shell: bash          # -eo pipefail, so a failure through `tee` is kept
+        run: |
+          luacheck . --no-color | tee "$RUNNER_TEMP/luacheck.log"
+          # …and assert it had something to check. `.luacheckrc` already
+          # excludes display/cinema_v2_prototypes/, and a widened exclude, a
+          # config that stops parsing, or a moved tree all end the same way:
+          # "0 warnings / 0 errors in 0 files", exit 0, a green gate over an
+          # empty set. 50 files today; the floor is a collapse detector, not a
+          # size policy.
+          #
+          # A wrong working-directory is NOT the case this catches — from the
+          # repository root luacheck finds no .luacheckrc, reports 341 warnings
+          # and fails loudly. It is the quiet one that needs the guard.
+          files=$(grep -oE 'in [0-9]+ files?' "$RUNNER_TEMP/luacheck.log" \
+                  | tail -1 | grep -oE '[0-9]+' || true)
+          if [ -z "$files" ] || [ "$files" -lt 40 ]; then
+            echo "::error::luacheck checked ${files:-no} files (expected ~50)."
+            echo "The lint gate passed over almost nothing — check"
+            echo "halo-lua/.luacheckrc's exclude_files and that the tree moved."
+            exit 1
+          fi
+          echo "luacheck checked $files files"

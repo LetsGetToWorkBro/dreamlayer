@@ -1083,8 +1083,23 @@ def test_the_alts_row_exists_in_the_page_and_is_wired(brain):
     assert "showAlts(j.alts, j.scene)" in page          # called on a fired glance
     assert ".altbtn{" in page and "#alts.show{" in page  # and actually styled
     # it must never be on screen at the same time as the chooser, and the veil
-    # must tear it down like every other live surface
-    assert page.count("hideAlts()") >= 4
+    # must tear it down like every other live surface.
+    #
+    # The DEFINITION is excluded from the count. `function hideAlts(){`
+    # contains the substring `hideAlts()`, so a bare `count(...) >= 4` was
+    # satisfied by three real calls plus the definition — it tolerated losing
+    # one teardown silently. Same shape as the `loadConsent()` count in
+    # test_consent_routes (CLAUDE.md #1).
+    calls = page.count("hideAlts()") - page.count("function hideAlts()")
+    assert calls >= 4, (
+        f"only {calls} real hideAlts() call sites — a teardown was dropped")
+    # …and the two that carry the claims above, named rather than counted, so
+    # losing one of THESE cannot be masked by another site being added.
+    assert "hideChooser(); hideAlts();" in page, (
+        "the veil no longer tears the alternatives down with everything else")
+    assert 'hideAlts();                               /* never both at once */' in page, (
+        "the chooser no longer hides the alternatives — they can now be on "
+        "screen together")
 
 
 def test_a_sub_floor_bid_is_never_lifted_over_the_floor_by_DWELL():

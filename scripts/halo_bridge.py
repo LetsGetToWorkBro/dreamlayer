@@ -25,11 +25,10 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 # halo_lab pure helpers — safe to import without emulator
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from halo_lab import ble_frame, validate_scenario, step_label, VALID_ACTIONS
+from halo_lab import ble_frame, validate_scenario, step_label
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCENARIOS = REPO_ROOT / "scripts" / "scenarios"
@@ -49,7 +48,6 @@ MTU                = 240   # safe BLE MTU for Halo
 async def scan_devices(timeout: float = 5.0) -> list[dict]:
     """Return list of {address, name, rssi} for nearby Halo devices."""
     try:
-        import bleak
         from bleak import BleakScanner
     except ImportError:
         print("ERROR: bleak not installed. Run: pip install bleak")

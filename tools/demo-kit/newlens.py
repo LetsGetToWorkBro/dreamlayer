@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "host-python/src"))
 from PIL import Image
-from dreamlayer.hud.renderer import CardRenderer, _font, CX, CY, SIZE, _ellipsize
+from dreamlayer.hud.renderer import CardRenderer, CX
 from dreamlayer.hud import themes as T
 from dreamlayer.hud import cards as C
 

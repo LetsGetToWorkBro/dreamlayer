@@ -208,7 +208,28 @@ target-version = "py311"
 # unused imports/vars, redefinitions, undefined names, f-strings with no
 # placeholder — plus E9 (syntax/IO errors). A clean tree here means a
 # contributor can't quietly land dead code.
-select = ["F", "E9"]
+#
+# The six bugbear rules below are here on the SAME test — each catches a
+# defect, none is a style opinion — and every one of them was already at zero
+# findings when it was added, so they cost no churn and only ever fire on
+# something new. The rest of bugbear is deliberately out: B905 (zip strict)
+# alone is 50 hits of house style, and B017/B018/B023 flag patterns this tree
+# uses on purpose (a lambda consumed synchronously inside its own loop
+# iteration; a `pytest.raises(Exception)` that predates narrower types).
+#
+#   B006  a mutable default argument, shared across every call — the shape
+#         that leaks state between tests and looks like somebody else's bug
+#   B012  break/return/continue inside `finally`, which SWALLOWS the in-flight
+#         exception. This tree is full of fail-closed try/except; one of these
+#         would turn a refusal into a silent success
+#   B019  lru_cache on a method, pinning instances alive
+#   B026  star-arg unpacking after a keyword argument
+#   B032  `x: y` where `x = y` was meant — an annotation that assigns nothing
+#         and reads exactly like a statement that does
+#   B035  a dict comprehension with a static key, collapsing every entry to one
+#   B018  a bare expression statement — `x == y` where `x = y` was meant, a
+#         no-op that reads exactly like an assignment
+select = ["F", "E9", "B006", "B012", "B018", "B019", "B026", "B032", "B035"]
 
 [tool.ruff.lint.per-file-ignores]
 # Package __init__.py files re-export their public surface; those imports are
@@ -237,9 +258,15 @@ ignore_missing_imports = true
 follow_imports = "silent"
 
 # --- Gradual-typing backlog (ignore_errors) ---------------------------------
-# Four leaf/subsystem modules whose types come from dynamic dispatch, an
-# untyped optional dependency, or lazy plumbing. Each is documented; the rest
-# of the tree (incl. the four safety-core files) is clean and enforced.
+# Leaf/subsystem modules whose types come from dynamic dispatch, an untyped
+# optional dependency, or lazy plumbing. Each is documented; the rest of the
+# tree (incl. the four safety-core files) is clean and enforced.
+#
+# This list is mirrored by DECIDED_TYPE_BACKLOG in tests/test_lockfile.py,
+# which asserts it in both directions — the count used to be stated here in
+# prose ("Four") and had already drifted to five with nothing able to tell.
+# Adding a module here without a row there fails the suite, on purpose:
+# switching the type gate off for a file should cost a sentence.
 [[tool.mypy.overrides]]
 module = [
     # QR bit-matrix built as list[list[int|None]] and filled in place — pure

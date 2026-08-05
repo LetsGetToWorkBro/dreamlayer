@@ -48,6 +48,13 @@ jobs:
           # security-extended adds the higher-signal security queries on top of
           # the default set (more coverage, still curated for low false positives).
           queries: security-extended
+          # One paths-ignore entry, for the Semgrep rule fixture — a file whose
+          # PURPOSE is to contain the patterns a scanner should flag. The test
+          # trees are NOT excluded and must not be: a hard-coded token in a test
+          # file is a real alert here. Read the config's header before adding to
+          # it; the entry is pinned by test_lockfile.py so a widening is not a
+          # one-line diff that quietly stops analysing shipped code.
+          config-file: .github/codeql/config.yml
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         with:

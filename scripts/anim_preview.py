@@ -21,11 +21,8 @@ from __future__ import annotations
 
 import argparse
 import math
-import os
-import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -178,10 +175,8 @@ def _render_frame(
 
     bright = _brightness(opacity)
     dim    = _brightness(opacity * 0.45)
-    ghost  = _brightness(opacity * 0.18)
     col    = (bright, bright, bright)
     col_d  = (dim, dim, dim)
-    col_g  = (ghost, ghost, ghost)
 
     cx, cy = w // 2, h // 2
     r_base = int(56 * scale * sc)
@@ -281,7 +276,6 @@ def _render_frame(
         draw.ellipse([jx-jr*2, jy-jr*2, jx+jr*2, jy+jr*2], outline=col_d)
 
     # ----- staggered text -----
-    text_start_ms = STAGGER_PRIMARY_MS
     eyebrow_t = max(0.0, min(1.0, (now_ms - STAGGER_EYEBROW_MS) / ENTER_DURATION_MS)) if phase == "enter" else opacity
     detail_t  = max(0.0, min(1.0, (now_ms - STAGGER_DETAIL_MS)  / ENTER_DURATION_MS)) if phase == "enter" else opacity
     footer_t  = max(0.0, min(1.0, (now_ms - STAGGER_FOOTER_MS)  / ENTER_DURATION_MS)) if phase == "enter" else opacity

@@ -41,6 +41,13 @@ the invariant the whole optional-capability system rests on. Device-needing
 tests are marked `hardware`; latency budgets are marked `benchmark`;
 heavy-model tests are marked `real_model`.
 
+### Verification traps this codebase has actually hit
+
+[`CLAUDE.md`](CLAUDE.md) collects the specific ways work here has gone wrong —
+mostly checks that passed because they examined nothing, and seams that were
+importable but unreachable. Worth five minutes before a first PR, and worth
+re-reading before trusting a green run on something subtle.
+
 ## Good first contributions
 
 - A new **lens or plugin** — start from the ten-minute tutorial in

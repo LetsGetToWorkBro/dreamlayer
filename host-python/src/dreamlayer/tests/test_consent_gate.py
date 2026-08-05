@@ -192,6 +192,7 @@ class TestTheRegistryStaysHonest:
     def test_every_named_switch_is_a_real_config_field(self, brain):
         """A typo here fails OPEN in the worst way — `getattr` returns None,
         the sink reads as never-consented, and the feature silently stops."""
+        assert SINKS, "empty registry — this loop would check nothing"
         for s in SINKS.values():
             if s.switch is not None:
                 assert hasattr(brain.config, s.switch), (
@@ -199,12 +200,14 @@ class TestTheRegistryStaysHonest:
                     f"{s.switch}")
 
     def test_a_sink_has_a_switch_or_a_predicate_or_needs_a_grant(self):
+        assert SINKS, "empty registry — this loop would check nothing"
         for s in SINKS.values():
             assert not (s.switch and s.predicate), (
                 f"{s.key} has two sources of truth for one decision")
 
     def test_the_scopes_are_the_declared_ones(self):
         from dreamlayer.ai_brain.server.consent_gate import LAN, RADIO
+        assert SINKS, "empty registry — this loop would check nothing"
         for s in SINKS.values():
             assert s.scope in (ON_DEVICE, LAN, RADIO, INTERNET), s
 

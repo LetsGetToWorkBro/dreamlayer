@@ -16,8 +16,6 @@ from halo_lab import (
     make_contact_sheet,
     make_gif,
     CARD_REQUIRED,
-    VALID_ACTIONS,
-    BUTTON_VALUES,
 )
 
 SCENARIO_DIR = Path(__file__).resolve().parent.parent / "scenarios"

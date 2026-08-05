@@ -18,13 +18,10 @@ Requirements:
 import argparse
 import asyncio
 import hashlib
-import struct
 import sys
-import time
 from pathlib import Path
 
 try:
-    import frame_sdk
     from frame_sdk import Frame
 except ImportError:
     print("ERROR: frame_sdk not found.")
@@ -163,7 +160,7 @@ async def main():
             print(f"  {device}  ({human_size(local.stat().st_size)})")
         return
 
-    print(f"Connecting to Halo...")
+    print("Connecting to Halo...")
     try:
         async with Frame() as frame:
             print(f"Connected: {await frame.get_battery_level()}% battery")
@@ -189,8 +186,8 @@ async def main():
             if args.run:
                 await run_main(frame)
             else:
-                print(f"Done. To run on device:")
-                print(f"  uv run --extra hardware python scripts/upload.py --run")
+                print("Done. To run on device:")
+                print("  uv run --extra hardware python scripts/upload.py --run")
 
     except Exception as e:
         print(f"Connection failed: {e}")

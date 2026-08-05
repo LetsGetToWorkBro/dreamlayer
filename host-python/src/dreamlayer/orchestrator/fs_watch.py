@@ -26,20 +26,41 @@ class FolderWatcher:
         self.path = path
         self._on_change = on_change
         self._observer: Any = None       # watchdog Observer (untyped optional dep)
+        #: Why the last start() returned False, or "" after a successful one.
+        #: `start()` catches its own failure, so a caller sees only the bool and
+        #: cannot tell "watchdog is not installed" (the designed fallback) from
+        #: "the OS refused the watch" (a machine that has run out of inotify
+        #: watches, an NFS mount, a vanished path). Both mean the same thing to
+        #: the caller — keep polling — but they mean very different things to
+        #: somebody reading a failure, and the only record of the difference was
+        #: a log line nothing reads back.
+        #:
+        #: An exception TYPE and errno only, never the message and never the
+        #: path. A watched folder is a detail of the wearer's filesystem layout;
+        #: `fs_watch_live` already logs the folder COUNT and never the path for
+        #: exactly that reason, and this module was contradicting it — an
+        #: OSError from inotify carries the offending path in its message, and
+        #: that message was going straight into log.error.
+        self.last_error: str = ""
 
     def start(self) -> bool:
         """Begin watching. Returns True if a real watcher started, False when the
-        dep is absent (caller falls back to polling)."""
+        dep is absent (caller falls back to polling). See `last_error` for why."""
         if not _HAS_WATCHDOG:
+            self.last_error = "watchdog not installed"
             return False
         try:
             handler = _Handler(self._on_change)
             self._observer = Observer()
             self._observer.schedule(handler, self.path, recursive=True)
             self._observer.start()
+            self.last_error = ""
             return True
         except Exception as exc:
-            log.error("[fs_watch] start failed: %s", exc)
+            errno = getattr(exc, "errno", None)
+            self.last_error = (f"{type(exc).__name__}"
+                               + (f" (errno {errno})" if errno else ""))
+            log.error("[fs_watch] start failed: %s", self.last_error)
             self._observer = None
             return False
 

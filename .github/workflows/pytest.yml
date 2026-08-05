@@ -38,12 +38,52 @@ jobs:
           # `importorskip`-gated, so without it they were never executed by ANY
           # run: a green suite that had not tested the primary path.
           pip install "networkx>=3,<4"
+          # The same argument, and the same shape of hole it closes. These five
+          # gate ~90 `importorskip` tests that consequently ran in NO
+          # environment: the memory spine's real vector stores (usearch,
+          # sqlite-vec — recall at scale, purge/eviction, lifecycle, spine
+          # coherence), the transport codec (cbor2), and the two infra seams
+          # (watchdog, zeroconf). A memory product whose spine tests only ever
+          # skipped is the vacuous-check problem at workflow scale.
+          #
+          # Listed individually rather than via `[memory,infra]`, which is the
+          # whole point: those extras also declare chromadb,
+          # sentence-transformers and lancedb — minutes of CI and hundreds of
+          # megabytes. These five are 5.1 MB of wheels between them, so the
+          # coverage is close to free. Anything heavy stays skipped on purpose.
+          # Bounds copied from the extras that declare them (memory, infra,
+          # platform), so this line cannot quietly install a version the project
+          # does not accept. watchdog>=6 is the infra bound: `birds` pins
+          # watchdog==2.1.9 and is a declared [tool.uv] conflict with infra, so
+          # birdnetlib can never join this install — see the conflicts table.
+          pip install "usearch>=2,<3" "sqlite-vec>=0.1,<1" "cbor2>=6,<7" \
+                      "watchdog>=6,<7" "zeroconf>=0.150,<1"
 
       - name: "Lint — ruff (pyflakes: dead imports/vars, undefined names)"
         # The high-signal static-analysis gate. Config in pyproject
         # [tool.ruff.lint]: pyflakes + syntax, house-style rules off. A
         # contributor can't quietly land dead code or an undefined name.
         run: ruff check src/dreamlayer
+
+      - name: "Lint — ruff over the repo's other Python"
+        # The same ruleset, over the 61 files outside the package: dev scripts,
+        # the demo kit, the examples, the companion. This ran nowhere. `ruff
+        # check src/dreamlayer` is scoped to the package, so a syntax error or
+        # an undefined name in scripts/ was found by running the script, and
+        # the demo kit had accumulated 47 findings unseen.
+        #
+        # Brought to zero in the same commit, which is the only reason this can
+        # be a gate rather than a backlog. Same rules as above, deliberately:
+        # two ruff configurations drift, and the second one loses.
+        #
+        # `--config` is explicit because these paths are outside host-python/
+        # where pyproject.toml lives; without it ruff falls back to its own
+        # defaults and silently checks a different ruleset than the name of
+        # this step claims.
+        working-directory: .
+        run: |
+          ruff check --config host-python/pyproject.toml \
+            scripts tools examples web laptop-companion
 
       - name: Typecheck — mypy over the whole dreamlayer package
         # Was 4 of 323 files behind --follow-imports=skip; the repo-wide typing
@@ -52,10 +92,12 @@ jobs:
         # (ignore_missing_imports + follow_imports=silent, a pragmatic non-strict
         # baseline). The formal-methods safety core — contracts, budgets,
         # flash_safety, signer — stays fully typed and is covered by this run.
-        # Four leaf/subsystem modules (qr bit-matrix, the RC-v2 choreographer,
-        # the NL intent_parser's Literal fields, the hardware-gated BLE bridge)
-        # are a documented ignore_errors backlog in [[tool.mypy.overrides]];
-        # everything else, incl. the mixin<->host contract, is enforced.
+        # A documented ignore_errors backlog lives in [[tool.mypy.overrides]];
+        # everything else, incl. the mixin<->host contract, is enforced. The
+        # membership is asserted by DECIDED_TYPE_BACKLOG in test_lockfile.py
+        # rather than listed here — this comment used to name the modules and
+        # had already drifted (it said four and omitted vault_sync), which is
+        # why the list is now somewhere a test can read it.
         # `python -m mypy` (not the bare `mypy` entrypoint) guarantees the type
         # checker runs under the same interpreter that installed the deps, so it
         # sees the packages it should — the entrypoint can resolve to a different

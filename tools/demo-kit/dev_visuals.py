@@ -14,8 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "host-python/src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import devices as D
-from dreamlayer.hud.renderer import CardRenderer, CX, CY
+from dreamlayer.hud.renderer import CardRenderer, CX
 from dreamlayer.hud import themes as T
 
 OUT = Path(sys.argv[1]); OUT.mkdir(parents=True, exist_ok=True)
@@ -132,8 +131,6 @@ R = CardRenderer(); R.register("HelloCard", draw_hello)
 
 def device_preview(S=560):
     face = R.render({"type": "HelloCard", "text": "hi"}).convert("RGB")
-    ov = D.__dict__  # not used; compose via emissive path
-    import numpy as np
     from dreamlayer.demo.scene import Beat, _compose_frame
     import gen
     o = gen._overlay_from_image(face, int(S*0.7))

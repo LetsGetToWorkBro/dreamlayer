@@ -5,12 +5,12 @@ a ribbon/bookmark holding a verbatim, dash-ended thought for Stasis. Renders 256
 faces; gen.render_lens applies the glass treatment.
 """
 from __future__ import annotations
-import sys, math
+import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "host-python/src"))
 from PIL import Image, ImageDraw
-from dreamlayer.hud.renderer import CardRenderer, CX, CY, SIZE
+from dreamlayer.hud.renderer import CardRenderer, CX
 from dreamlayer.hud import themes as T
 
 R = CardRenderer()

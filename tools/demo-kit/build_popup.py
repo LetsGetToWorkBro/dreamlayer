@@ -4,7 +4,6 @@ Reuses the real terminal reveal frames and the real device-card render."""
 from __future__ import annotations
 import sys
 from pathlib import Path
-import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import devices as D

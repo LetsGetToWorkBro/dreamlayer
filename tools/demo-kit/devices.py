@@ -4,7 +4,7 @@ Everything is the ACTUAL current UI — we only add the device chrome around it.
 Outputs to <outdir>/ . No GitHub writes.
 """
 from __future__ import annotations
-import sys, math
+import sys
 from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter

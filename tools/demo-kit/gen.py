@@ -5,7 +5,7 @@ the site). No fisheye. Upscaled for gitbook quality. The interface is the real
 renderer; the environment behind it is illustrative.
 """
 from __future__ import annotations
-import sys, math
+import sys
 from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter
@@ -18,8 +18,8 @@ HELP = Path(__file__).resolve().parent / "docimg"
 from dreamlayer.hud import renderer as R          # noqa: E402
 from dreamlayer.hud.cards import ALL_SAMPLES       # noqa: E402
 from dreamlayer.demo.emissive import emissive, glow  # noqa: E402
-from dreamlayer.demo.scene import _compose_frame, Beat, _overlay_for, _ease  # noqa: E402
-from dreamlayer.demo.catalog import feature_scenes, master_scene, FEATURES   # noqa: E402
+from dreamlayer.demo.scene import _compose_frame, Beat, _overlay_for  # noqa: E402
+from dreamlayer.demo.catalog import feature_scenes, master_scene   # noqa: E402
 
 LENS = {"world": SIM/"lens_world.webp", "face": SIM/"lens_face.webp",
         "park": SIM/"lens_park.webp", "answer": SIM/"lens_answer.webp",

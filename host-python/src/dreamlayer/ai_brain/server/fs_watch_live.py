@@ -89,11 +89,20 @@ class FolderWatchers:
             except Exception as exc:                 # noqa: BLE001
                 log.info("[fs_watch] unavailable: %s", type(exc).__name__)
                 return 0
+            refused = ""
             for folder in self._folders():
                 try:
                     w = FolderWatcher(folder, self._changed)
                     if w.start():
                         self._watchers.append(w)
+                    else:
+                        # start() catches its own failure and returns False, so
+                        # the `except` below never sees an OS refusal. Without
+                        # this, a Brain where EVERY folder failed logged nothing
+                        # whatsoever and returned 0 — indistinguishable from a
+                        # Brain with no folders configured. Same discipline as
+                        # the rest of this module: the reason, never the path.
+                        refused = w.last_error or "unknown"
                 except Exception as exc:             # noqa: BLE001
                     # A single unwatchable folder — a vanished path, a mount
                     # that refuses inotify — must not cost the others their
@@ -104,6 +113,9 @@ class FolderWatchers:
                              type(exc).__name__)
             if self._watchers:
                 log.info("[fs_watch] watching %d folder(s)", len(self._watchers))
+            elif refused:
+                log.info("[fs_watch] no folder could be watched (%s) — the "
+                         "periodic scan keeps its cadence", refused)
             return len(self._watchers)
 
     def _folders(self) -> list:

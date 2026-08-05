@@ -25,6 +25,7 @@ def test_the_tour_shows_breadth():
 
 
 def test_every_beat_is_a_real_card_with_sane_timing():
+    assert SCENES, "no scenes declared — this loop would check nothing"
     for name, scene in SCENES.items():
         assert scene.beats, name
         for b in scene.beats:
@@ -41,6 +42,7 @@ def test_veritas_lands_on_the_fused_fact_check():
 
 
 def test_each_scene_renders_a_full_bundle(tmp_path):
+    assert SCENES, "no scenes declared — this loop would check nothing"
     for name, scene in SCENES.items():
         out = tmp_path / name
         # smaller + slow fps to keep the test light
