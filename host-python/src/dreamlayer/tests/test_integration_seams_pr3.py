@@ -8,12 +8,28 @@ def test_dashboard_rich_plain_fallback():
     assert "pairing: ready" in text and "model: mock" in text
 
 
-def test_fs_watch_fallback_returns_false():
-    from dreamlayer.orchestrator.fs_watch import FolderWatcher
+def test_fs_watch_fallback_returns_false(monkeypatch):
+    """Without watchdog, start() declines and the caller keeps polling.
+
+    Simulated, not inherited from the environment. This read
+    `assert w.start() is False` with no gate on watchdog being absent, so it
+    asserted the fallback contract ONLY in an environment that happened not to
+    have the dep — and where it did, it went one of two ways, both wrong: it
+    failed on a healthy machine, or it passed for an unrelated reason (it
+    passed here on OSError errno 28, the OS out of inotify watches, while
+    claiming to have proved something about a missing import).
+
+    Flipping the flag tests the branch that actually ships, in every
+    environment, which is the only way this says anything on a CI runner that
+    installs the extras.
+    """
+    from dreamlayer.orchestrator import fs_watch as F
+    monkeypatch.setattr(F, "_HAS_WATCHDOG", False)
     seen = []
-    w = FolderWatcher("/tmp", on_change=seen.append)
-    assert w.start() is False   # no watchdog → caller polls
-    w.stop()                     # safe no-op
+    w = F.FolderWatcher("/tmp", on_change=seen.append)
+    assert w.start() is False       # no watchdog → caller polls
+    assert w.last_error == "watchdog not installed"
+    w.stop()                        # safe no-op
 
 
 def test_fs_watch_real_fires_on_change(tmp_path):
@@ -23,7 +39,16 @@ def test_fs_watch_real_fires_on_change(tmp_path):
     from dreamlayer.orchestrator.fs_watch import FolderWatcher
     seen = []
     w = FolderWatcher(str(tmp_path), on_change=seen.append)
-    assert w.start() is True
+    if not w.start():
+        # The seam is fine; the machine is out of inotify watches (errno 28) or
+        # the tmp filesystem refuses them. Reported as `assert False is True`
+        # before `last_error` existed, with the real cause only in a log line —
+        # a container limit that reads exactly like somebody's broken commit.
+        # Anything else still fails: this skips on a KNOWN environment refusal,
+        # not on any failure at all.
+        if "OSError" in w.last_error:
+            pytest.skip(f"the OS refused the watch ({w.last_error})")
+        raise AssertionError(f"watcher would not start: {w.last_error}")
     try:
         target = tmp_path / "note.txt"
         # Poll with a deadline, re-writing each step: fs events are async AND
