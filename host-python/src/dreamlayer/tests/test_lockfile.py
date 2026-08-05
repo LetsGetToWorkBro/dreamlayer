@@ -419,10 +419,18 @@ class TestCodeQLStillLooksAtTheProduct:
         everything — which would be safe here, but the reverse edit (a config
         that stops being read while its guard still passes) is not.
         """
+        import re as _re
         wf = CODEQL_WORKFLOW.read_text(encoding="utf-8")
-        assert "config-file: .github/codeql/config.yml" in wf, (
-            "codeql.yml no longer passes config-file, so .github/codeql/"
-            "config.yml is read by nothing")
+        # Anchored to a LIVE line, not a substring. The first draft was
+        # `"config-file: ..." in wf` and survived commenting the line out —
+        # the `#` prefix leaves the substring exactly where it was. Same
+        # defect as the `loadConsent()` count that survived deleting the
+        # call it was supposed to prove (test_consent_routes.py).
+        live = _re.search(r"^\s*config-file:\s*\.github/codeql/config\.yml\s*$",
+                          wf, _re.M)
+        assert live, (
+            "codeql.yml no longer passes config-file on a live line, so "
+            ".github/codeql/config.yml is read by nothing")
 
     def test_the_config_is_actually_being_parsed(self):
         """Without this the three above pass on a file that was renamed or
