@@ -14,6 +14,7 @@ than on an observer having started.
 """
 from __future__ import annotations
 
+import logging
 import tempfile
 import time
 
@@ -290,3 +291,62 @@ class TestThePromotionFollowsADeliveredEvent:
         fake.made[0].on_change("/notes/a.md")
         assert w.status()["live"] is w.driving()
         assert w.status()["changes"] == 1
+
+
+class TestAFailedWatchDoesNotNameTheFolder:
+    """A watched folder is the wearer's filesystem layout, and a refusal is
+    exactly when it would get written down.
+
+    `fs_watch_live` logs the folder COUNT and never the path, deliberately.
+    `fs_watch.start()` was contradicting it one module along: an inotify
+    OSError carries the offending path in its message —
+    `[Errno 28] inotify watch limit reached: '/home/user/Documents/…'` — and
+    that message went straight into `log.error("… %s", exc)`.
+
+    A comment saying "never the path" is a comment (CLAUDE.md #7). This drives
+    a real refusal carrying a real path and asserts it appears nowhere.
+    """
+
+    FOLDER = "/home/user/Documents/Divorce Papers"
+
+    def _refuse(self, monkeypatch, caplog):
+        from dreamlayer.orchestrator import fs_watch as F
+
+        class _Refusing:
+            def schedule(self, *a, **k):
+                raise OSError(28, "inotify watch limit reached", self.path)
+            path = "/home/user/Documents/Divorce Papers"
+
+            def start(self):                          # pragma: no cover
+                raise AssertionError("schedule() should have refused first")
+
+        monkeypatch.setattr(F, "_HAS_WATCHDOG", True)
+        monkeypatch.setattr(F, "Observer", _Refusing, raising=False)
+        monkeypatch.setattr(F, "_Handler", lambda cb: object(), raising=False)
+        w = F.FolderWatcher(self.FOLDER, on_change=lambda *_: None)
+        with caplog.at_level(logging.DEBUG, logger="dreamlayer.fs_watch"):
+            started = w.start()
+        return w, started, caplog.text
+
+    def test_the_path_reaches_neither_the_log_nor_last_error(self, monkeypatch,
+                                                             caplog):
+        w, started, text = self._refuse(monkeypatch, caplog)
+        assert started is False
+        assert self.FOLDER not in text, "the refusal named the watched folder"
+        assert self.FOLDER not in w.last_error
+        assert "Divorce" not in text and "Divorce" not in w.last_error
+
+    def test_it_still_says_enough_to_diagnose(self, monkeypatch, caplog):
+        """Redaction that removes the reason is not a win — the whole point of
+        `last_error` is telling an OS refusal from an absent dependency."""
+        w, _, text = self._refuse(monkeypatch, caplog)
+        assert "OSError" in w.last_error and "28" in w.last_error
+        assert "OSError" in text
+
+    def test_the_refusal_actually_happened(self, monkeypatch, caplog):
+        """Without this the two above pass on a watcher that never ran: no log
+        output and an empty last_error contain no path either."""
+        w, started, text = self._refuse(monkeypatch, caplog)
+        assert started is False
+        assert w.last_error, "start() recorded no reason — it did not refuse"
+        assert text.strip(), "nothing was logged — the assertions read nothing"
