@@ -49,6 +49,8 @@ constant, not from anything about the person.
 """
 from __future__ import annotations
 
+from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+
 import logging
 import time
 from typing import Optional
@@ -99,22 +101,6 @@ class _Baselines:
         return None
 
 
-class _Gate:
-    """The Veil, fail-closed — the same posture every lens host here takes."""
-
-    def __init__(self, brain):
-        self._brain = brain
-
-    def allow_capture(self) -> bool:
-        try:
-            return not bool(self._brain.incognito_now())
-        except Exception:                            # noqa: BLE001
-            return False
-
-    def allow_recall(self) -> bool:
-        return self.allow_capture()
-
-
 class DreamReactors:
     """Both reactors, built once and held for the session."""
 
@@ -138,7 +124,7 @@ class DreamReactors:
         if self._timbre is None:
             from ...dream_mode.timbre_reactor import TimbreReactor
             self._timbre = TimbreReactor(baselines=_Baselines(self.brain),
-                                         privacy=_Gate(self.brain),
+                                         privacy=VeilGate(self.brain, recall=RECALL_FOLLOWS_CAPTURE),
                                          now_fn=self._now)
         return self._timbre
 
@@ -175,7 +161,7 @@ class DreamReactors:
     def mic(self):
         if self._mic is None:
             from ...dream_mode.mic_reactor import MicReactor
-            self._mic = MicReactor(privacy=_Gate(self.brain))
+            self._mic = MicReactor(privacy=VeilGate(self.brain, recall=RECALL_FOLLOWS_CAPTURE))
         return self._mic
 
     def note_mic(self, fft, amplitude: float = 0.0, place: str = "") -> dict:
@@ -242,7 +228,7 @@ class DreamReactors:
             # room you have been in, kept across restarts, is a movement history
             # with better manners — and Yesterlight is a thing you do in the
             # moment, not an archive you consult.
-            self._ledger = WeatherLedger(privacy=_Gate(self.brain))
+            self._ledger = WeatherLedger(privacy=VeilGate(self.brain, recall=RECALL_FOLLOWS_CAPTURE))
         return self._ledger
 
     def yesterlight(self):

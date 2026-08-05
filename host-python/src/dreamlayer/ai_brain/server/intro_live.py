@@ -45,27 +45,11 @@ neighbourhood.
 """
 from __future__ import annotations
 
+from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+
 import logging
 
 log = logging.getLogger("dreamlayer.intro_live")
-
-
-class _IntroGate:
-    """The Veil, as Name Capture sees it. Fails CLOSED — an unreadable posture
-    is a veiled one, and a name is exactly the thing the veil exists to keep
-    out of the record."""
-
-    def __init__(self, brain):
-        self._brain = brain
-
-    def allow_capture(self) -> bool:
-        try:
-            return not bool(self._brain.incognito_now())
-        except Exception:                            # noqa: BLE001
-            return False
-
-    def allow_recall(self) -> bool:
-        return self.allow_capture()
 
 
 class IntroHost:
@@ -74,7 +58,7 @@ class IntroHost:
 
     def __init__(self, brain):
         self.brain = brain
-        self.privacy = _IntroGate(brain)
+        self.privacy = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
         self._capture = None
         # Honesty bits, on the pattern the ear and the dream lens use: a switch
         # being on proves nothing. `offered` counts names actually recognised by

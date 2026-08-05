@@ -49,6 +49,8 @@ letting it into the ring.
 """
 from __future__ import annotations
 
+from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+
 import json
 import logging
 import os
@@ -85,24 +87,6 @@ def _due_text(due_ts) -> str:
     return f"in {int(left // 86400)} d"
 
 
-class _LensGate:
-    """The Veil, fail-closed — identical posture to `ear._EarGate`,
-    `world_lens._LookGate` and `face_live._FaceGate`. An unreadable trust signal
-    resolves to veiled, never to 'record it'."""
-
-    def __init__(self, brain):
-        self._brain = brain
-
-    def allow_capture(self) -> bool:
-        try:
-            return not bool(self._brain.incognito_now())
-        except Exception:                            # noqa: BLE001
-            return False
-
-    def allow_recall(self) -> bool:
-        return self.allow_capture()
-
-
 class BrainLenses:
     """The lens set, built once and cached on the Brain.
 
@@ -113,7 +97,7 @@ class BrainLenses:
 
     def __init__(self, brain):
         self.brain = brain
-        self.privacy = _LensGate(brain)
+        self.privacy = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
         self._lock = threading.RLock()
         self._ring = None
         self._seeded = False
@@ -139,7 +123,7 @@ class BrainLenses:
                 # the ring refuse a veiled keep whether or not the NEXT caller
                 # remembers to. `_seed` uses `restore()` and is unaffected.
                 self._ring = SemanticRingBuffer(RING_CAPACITY,
-                                                privacy=_LensGate(self.brain))
+                                                privacy=VeilGate(self.brain, recall=RECALL_FOLLOWS_CAPTURE))
             if not self._seeded:
                 self._seeded = True                  # set FIRST: a failing seed
                 self._seed()                         # must not retry every call

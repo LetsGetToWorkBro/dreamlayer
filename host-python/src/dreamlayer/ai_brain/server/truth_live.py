@@ -54,6 +54,8 @@ transcript is never logged — only ever drawn (`test_logging_discipline`).
 """
 from __future__ import annotations
 
+from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+
 import logging
 
 log = logging.getLogger("dreamlayer.truth_live")
@@ -75,24 +77,6 @@ FFT_SIZE = 512
 MAX_FRAMES = 400
 
 
-class _TruthGate:
-    """The Veil, as the Truth Lens sees it. Fails CLOSED: an unreadable posture
-    is a veiled one, so a broken trust signal can never resolve to "read the
-    person in front of you". Mirrors `_EarGate` / `_LookGate` exactly."""
-
-    def __init__(self, brain):
-        self._brain = brain
-
-    def allow_capture(self) -> bool:
-        try:
-            return not bool(self._brain.incognito_now())
-        except Exception:                            # noqa: BLE001
-            return False
-
-    def allow_recall(self) -> bool:
-        return self.allow_capture()
-
-
 class TruthRead:
     """One conversation's credibility read, hanging off one `EarHost`.
 
@@ -105,7 +89,7 @@ class TruthRead:
 
     def __init__(self, brain):
         self.brain = brain
-        self.privacy = _TruthGate(brain)
+        self.privacy = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
         self._on = False
         self._lens = None
         # The honesty bit, and the whole point of the pattern: `_proved` flips
