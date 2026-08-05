@@ -153,3 +153,43 @@ class TestABoundThatEncodesADecisionStaysPut:
             f"If the decision genuinely changed, edit DECIDED_BOUNDS in this "
             f"file in the same commit. If a bot brought you here, it did not "
             f"read the comment above the pin.")
+
+
+#: Lint rules enabled because each catches a DEFECT, not a style preference,
+#: and each was at zero findings when it was added — so it costs no churn and
+#: only ever fires on something new. Same shape as DECIDED_BOUNDS above: a
+#: written-down decision, asserted, with the reason in the failure message.
+#: Removing one to silence a finding should be a deliberate act.
+DECIDED_LINT_RULES = [
+    ("B006", "a mutable default argument, shared across every call — the shape "
+             "that leaks state between tests and reads as somebody else's bug"),
+    ("B012", "break/return/continue inside `finally`, which SWALLOWS the "
+             "in-flight exception. This tree is full of fail-closed try/except; "
+             "one of these turns a refusal into a silent success"),
+    ("B018", "a bare expression statement — `x == y` where `x = y` was meant"),
+    ("B019", "lru_cache on a method, pinning instances alive"),
+    ("B026", "star-arg unpacking after a keyword argument"),
+    ("B032", "`x: y` where `x = y` was meant — an annotation that assigns "
+             "nothing and reads exactly like a statement that does"),
+    ("B035", "a dict comprehension with a static key, collapsing every entry"),
+]
+
+
+class TestTheLintRulesThatCatchDefectsStayOn:
+    @pytest.mark.parametrize("rule,why", DECIDED_LINT_RULES,
+                             ids=[r for r, _ in DECIDED_LINT_RULES])
+    def test_it_is_still_selected(self, rule, why):
+        selected = _pyproject()["tool"]["ruff"]["lint"]["select"]
+        assert rule in selected, (
+            f"{rule} was dropped from [tool.ruff.lint] select.\n\n{why}\n\n"
+            f"If it started firing on something legitimate, prefer a targeted "
+            f"per-file-ignore over removing the rule for the whole tree — and "
+            f"edit this table in the same commit either way.")
+
+    def test_the_table_matches_what_is_actually_on(self):
+        """The other direction: a rule enabled in pyproject and missing here
+        is an undocumented decision, which is how the reason gets lost."""
+        selected = set(_pyproject()["tool"]["ruff"]["lint"]["select"])
+        bugbear = {r for r in selected if r.startswith("B")}
+        assert bugbear == {r for r, _ in DECIDED_LINT_RULES}, (
+            "the bugbear rules in pyproject and DECIDED_LINT_RULES disagree")

@@ -102,7 +102,12 @@ class TestTheRing:
         ls._seed = _count            # type: ignore[method-assign]
         ls._seeded = False
         for _ in range(5):
-            ls.ring
+            # Touching the property IS the test — `ring` seeds on first access
+            # and must not on the next four. Bound to `_` so it reads as a
+            # deliberate probe rather than a stray expression somebody should
+            # tidy away; ruff's B018 flags the bare form for exactly that
+            # reason, and it would be right about every other occurrence.
+            _ = ls.ring
         assert calls["n"] == 1
 
     def test_observe_is_veil_gated(self, tmp_path, monkeypatch):
