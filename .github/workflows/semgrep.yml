@@ -55,6 +55,31 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install semgrep
+      - name: Test the custom rules still fire (BLOCKING)
+        # The scan below is deliberately non-blocking. This step is not, and the
+        # asymmetry is the point: "no findings" and "the rule stopped matching"
+        # produce identical output from a scan, so nothing downstream can tell a
+        # clean repository from a switched-off contract. A metavariable rename, a
+        # typo in pii-in-log-message's $VAL regex, or a semgrep syntax change
+        # would each silently retire a privacy rule with every check green.
+        #
+        # .semgrep/tests/dreamlayer.py asserts both directions per rule — the
+        # canonical leaks still flag, and the words _is_sensitive deliberately
+        # excludes (rescue, queryset, context, session_id, and the allowlisted
+        # type(exc).__name__) still do not. A rule that fires on everything gets
+        # switched off, so the negative cases are load-bearing too.
+        #
+        # Not part of the scan target (which is `host-python phone-app`), so the
+        # fixture's deliberate eval()/pickle.loads()/verify=False never reach the
+        # Security tab as real findings.
+        env:
+          SEMGREP_SEND_METRICS: "off"
+        run: |
+          semgrep --test \
+            --config .semgrep/dreamlayer.yml \
+            .semgrep/tests/dreamlayer.py \
+            --metrics=off
+
       - name: Run Semgrep (SARIF, non-blocking at introduction)
         # continue-on-error keeps a fresh backlog of findings from red-blocking
         # PRs: the SARIF still uploads below and the alerts still surface in the
