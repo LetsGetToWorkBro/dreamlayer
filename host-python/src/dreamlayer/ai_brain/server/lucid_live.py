@@ -36,7 +36,7 @@ lens honours the wearer's posture without a second implementation of it.
 """
 from __future__ import annotations
 
-from .veil import RECALL_SURVIVES_INCOGNITO, VeilGate
+from .veil import VeilGate
 
 import logging
 from typing import Any, Optional
@@ -182,7 +182,7 @@ class LucidLive:
             from ...lucid_recall.router import LucidRecall
             self._router = LucidRecall(social_lens=_SocialShim(self.brain),
                                        memory_index=_MemoryShim(self.brain),
-                                       privacy=VeilGate(self.brain, recall=RECALL_SURVIVES_INCOGNITO))
+                                       privacy=VeilGate(self.brain))
         return self._router
 
     def query(self, text: str = "", frame=None) -> dict:

@@ -24,7 +24,7 @@ Consent + privacy, by construction:
 """
 from __future__ import annotations
 
-from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+from .veil import VeilGate
 
 import logging
 import threading
@@ -68,7 +68,7 @@ class EarHost:
         self.brain = brain
         # The CapturePipeline reads self.privacy at its door on every window —
         # this MUST exist or _veiled() fails closed and the ear captures nothing.
-        self.privacy = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
+        self.privacy = VeilGate(brain)
         self._pipe = None
         self._lock = threading.RLock()
         self._bird = None

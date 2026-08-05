@@ -14,20 +14,19 @@ from __future__ import annotations
 from dreamlayer.ai_brain.server.lucid_live import (
     LucidLive, _MemoryShim, _Result, _SocialShim,
 )
-from dreamlayer.ai_brain.server.veil import (
-    RECALL_SURVIVES_INCOGNITO, VeilGate)
+from dreamlayer.ai_brain.server.veil import VeilGate
 
 
 def _lucid_gate(brain):
-    """The gate this lens takes, built the way the lens builds it.
+    """The gate this lens takes — now the only gate there is.
 
-    The posture is the assertion, not an incidental fixture detail: Lucid
-    Recall is the one Brain-side site that keeps recall open while veiled, and
-    `test_the_lens_declares_the_surviving_posture` below pins that the lens
-    really does ask for it. Without that pairing this helper would just be a
-    second opinion about what the lens ought to do.
+    Lucid Recall used to be the ONE Brain-side site that kept recall open while
+    veiled, and this helper existed to pin that it asked for that posture. The
+    argument it was making won: recall is unrestricted everywhere
+    (decisions/0009), so there is no posture left to declare and the helper is
+    just the shared gate.
     """
-    return VeilGate(brain, recall=RECALL_SURVIVES_INCOGNITO)
+    return VeilGate(brain)
 
 
 class _Brain:
@@ -72,21 +71,22 @@ class TestTheGateIsTheRightOne:
         """
         assert _lucid_gate(_Brain(veiled=True)).allow_recall() is True
 
-    def test_the_lens_declares_the_surviving_posture(self):
-        """The pairing that makes the rest of this class mean something.
+    def test_the_argument_this_lens_made_is_now_the_whole_rule(self):
+        """This lens was the dissenter, and it was right.
 
-        `_lucid_gate` asserts what the posture DOES; this asserts the lens
-        actually asks for it. Split apart, the first is a test of `veil.py` and
-        the second is a test of nothing — together they say "Lucid Recall keeps
-        recall open while veiled", which is the claim."""
+        Eleven other Brain-side gates tied recall to capture; this one did not,
+        citing `PrivacyGate`'s own semantics. That reading is now the only one
+        (decisions/0009), so what used to be a per-lens declaration is a
+        property of the gate itself — and the thing worth pinning is that no
+        caller can reintroduce a posture argument to opt back out.
+        """
         import inspect
 
-        from dreamlayer.ai_brain.server import lucid_live
-        src = inspect.getsource(lucid_live)
-        assert "recall=RECALL_SURVIVES_INCOGNITO" in src, (
-            "Lucid Recall stopped declaring the posture its own docstring "
-            "argues for — recall now dies with capture and the lens goes "
-            "silent in exactly the private session it exists for")
+        from dreamlayer.ai_brain.server.veil import VeilGate
+        params = inspect.signature(VeilGate.__init__).parameters
+        assert list(params) == ["self", "brain"], (
+            "VeilGate grew a knob again — recall is unrestricted for every "
+            f"lens, not a per-site choice: {list(params)}")
 
     def test_capture_still_fails_closed(self):
         assert _lucid_gate(_Brain(veiled=True)).allow_capture() is False

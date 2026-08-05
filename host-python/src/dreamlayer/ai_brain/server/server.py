@@ -2531,12 +2531,16 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         it — the shape of half-wiring this project keeps finding. The second
         half is `forget_memory`, and it requires the id this returns.
 
-        Veil-gated as RECALL, not as capture: naming the last thing you said
-        back to you is a read of the timeline, and under the shield the Brain
-        does not answer reads.
+        Not veil-gated. Naming the last thing you said back to you is a READ of
+        your own timeline, and recall is unrestricted (decisions/0009).
+
+        This used to refuse while veiled, and that refusal was doing double
+        duty: `forget_memory` has no gate of its own and relied on never being
+        handed an id. Opening this without fixing that would have opened the
+        DELETE too, so `forget_memory` gates itself now — which is where the
+        check belonged anyway. A destructive step guarded only by its caller is
+        the same shape of fragility as a gate that lives in a route handler.
         """
-        if self.incognito_now():
-            return {"ok": False, "reason": "veiled"}
         try:
             _r, db = self._retriever_for_purge()
             if db is None:
@@ -2578,7 +2582,15 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         alone — the row, the ANN vector, any alternate vector store and the REM
         consolidation bias have to move together, or "forget that" leaves a
         memory that is gone from the list and still findable by search.
+
+        CAPTURE-gated, and gated HERE rather than relying on
+        `forget_last_preview` to withhold the id. Erasing a memory is a write,
+        and nothing writes while the Veil is up (decisions/0009). Before this
+        the only thing standing between a veiled session and a deletion was
+        that the preview refused to name a target.
         """
+        if self.incognito_now():
+            return {"ok": False, "reason": "veiled"}
         try:
             mid = int(memory_id)
         except (TypeError, ValueError):

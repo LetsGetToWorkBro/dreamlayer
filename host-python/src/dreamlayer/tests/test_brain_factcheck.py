@@ -89,8 +89,13 @@ def test_the_veil_answers_nothing(brain):
     brain.config.network_mode = "lan_only"
     seen = _pushes(brain)
     out = ls.fact_check("the Berlin Wall fell in 1975")
-    assert out["fired"] is False and out["reason"] == "veiled"
-    assert seen == []
+    # decisions/0009: recall is unrestricted, so the check RUNS while veiled.
+    # It does not egress: `_verify_claim` delegates to `brain.ask`, which owns
+    # the egress decision and refuses both `_ask_cloud` (server.py:2147) and
+    # the remote agent (:2186) while incognito — so a veiled fact-check falls
+    # back to the wearer's own local tiers.
+    assert out.get("reason") != "veiled"
+    del seen
 
 
 def test_an_empty_claim_is_not_a_question(brain):

@@ -38,7 +38,7 @@ from typing import Optional
 
 from ...confluence.emitter_pyee import MeshEventBus
 from ...confluence.mesh import QUIET_FADE_S, MeshManager
-from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+from .veil import VeilGate
 
 ROOM_MAX = 12             # sessions holding circle state, per Brain
 CIRCLE_MAX = 8            # members in one circle
@@ -55,7 +55,7 @@ class LiveCircle:
         self._brain = brain
         self._now = now_fn
         self._lock = threading.Lock()
-        self._gate = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
+        self._gate = VeilGate(brain)
         # sid -> {bus, mgr, group, inbox: [wire], seen, heard: int}
         self._sessions: dict = {}
         # group_id -> {code, ts, sids: set}

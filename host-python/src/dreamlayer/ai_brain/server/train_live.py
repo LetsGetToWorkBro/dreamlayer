@@ -40,7 +40,7 @@ partial night.
 """
 from __future__ import annotations
 
-from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+from .veil import VeilGate
 
 import json
 import logging
@@ -227,7 +227,7 @@ class NightlyTrain:
         self.runs += 1
         try:
             s = self.trainer().train_nightly(
-                _Rows(self.rows()), privacy=VeilGate(self.brain, recall=RECALL_FOLLOWS_CAPTURE))
+                _Rows(self.rows()), privacy=VeilGate(self.brain))
         except Exception as exc:                     # noqa: BLE001 — never fail a night
             log.warning("[train] run failed: %s", type(exc).__name__)
             self.last_reason = f"error: {type(exc).__name__}"
