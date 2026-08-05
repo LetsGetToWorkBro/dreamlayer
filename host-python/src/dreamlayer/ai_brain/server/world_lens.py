@@ -23,7 +23,7 @@ blind, never a guess), identical to the on-device gate.
 """
 from __future__ import annotations
 
-from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+from .veil import VeilGate
 
 import re
 
@@ -184,7 +184,7 @@ class WorldLensHost:
         self.health = getattr(brain, "health", None)
         from ...orchestrator.capability_log import CapabilityLedger
         self.capability_log = CapabilityLedger()
-        self.privacy = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
+        self.privacy = VeilGate(brain)
         # The SAME hot-memory primitive the glasses run (orchestrator.py wires
         # SemanticRingBuffer(cfg.passive_ring_capacity)): typed MemoryEvents
         # only, in-memory only, never raw pixels and never disk. Deliberate

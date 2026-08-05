@@ -2531,12 +2531,16 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         it — the shape of half-wiring this project keeps finding. The second
         half is `forget_memory`, and it requires the id this returns.
 
-        Veil-gated as RECALL, not as capture: naming the last thing you said
-        back to you is a read of the timeline, and under the shield the Brain
-        does not answer reads.
+        Not veil-gated. Naming the last thing you said back to you is a READ of
+        your own timeline, and recall is unrestricted (decisions/0009).
+
+        This used to refuse while veiled, and that refusal was doing double
+        duty: `forget_memory` has no gate of its own and relied on never being
+        handed an id. Opening this without fixing that would have opened the
+        DELETE too, so `forget_memory` gates itself now — which is where the
+        check belonged anyway. A destructive step guarded only by its caller is
+        the same shape of fragility as a gate that lives in a route handler.
         """
-        if self.incognito_now():
-            return {"ok": False, "reason": "veiled"}
         try:
             _r, db = self._retriever_for_purge()
             if db is None:
@@ -2578,7 +2582,15 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         alone — the row, the ANN vector, any alternate vector store and the REM
         consolidation bias have to move together, or "forget that" leaves a
         memory that is gone from the list and still findable by search.
+
+        CAPTURE-gated, and gated HERE rather than relying on
+        `forget_last_preview` to withhold the id. Erasing a memory is a write,
+        and nothing writes while the Veil is up (decisions/0009). Before this
+        the only thing standing between a veiled session and a deletion was
+        that the preview refused to name a target.
         """
+        if self.incognito_now():
+            return {"ok": False, "reason": "veiled"}
         try:
             mid = int(memory_id)
         except (TypeError, ValueError):
@@ -5081,6 +5093,21 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             """The Brain ceremony (3.1): tier ladder + measured latency."""
             self._json(200, _brain_view_payload(brain))
 
+        def _get_consent(self, path, qs):
+            """Everything that can reach past this device, and whether it may.
+
+            The same rows `/dreamlayer/status` carries, on their own route so a
+            surface can poll consent without pulling the whole status payload.
+            `anything_left` deliberately excludes the on-device sinks — a face
+            matched locally is consequential and is not egress, and folding the
+            two together would make "has my device talked to anything?"
+            useless.
+            """
+            from .consent_gate import EgressConsent
+            got = getattr(brain, "_egress_consent", None) or EgressConsent(brain)
+            self._json(200, {"ok": True, "sinks": got.report(),
+                             "anything_left": got.anything_left()})
+
         def _get_status(self, path, qs):
             """Live Brain status: model, cloud posture, freshness, folders,
             and the per-source permission state (macOS TCC).
@@ -5500,6 +5527,53 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             out["people"] = vr.people()
             out["listening"] = bool(getattr(brain.config, "listen_enabled", False))
             self._json(200, out)
+
+        def _post_consent(self, path, qs):
+            """Grant or revoke a sink that has no switch of its own.
+
+            Body: `{"key": "mesh", "granted": true}`.
+
+            Two refusals are deliberate, and both are 400s rather than quiet
+            successes:
+
+              * an unregistered key — the gate fails closed on anything it does
+                not recognise, so accepting a typo here would let a surface
+                report a grant that can never take effect;
+              * a sink that HAS a switch or a predicate. Those already have one
+                source of truth (the feature's own toggle, or whether the API
+                endpoint is remote), and writing a second one here is how the
+                two drift apart and the panel starts disagreeing with the
+                behaviour. The error names the switch so the caller can go and
+                flip the right thing.
+
+            `mesh` is the one this exists for: plugging a LoRa radio in is not
+            consent to transmit on an unauthenticated broadcast, so it takes an
+            explicit yes — and until this route existed there was no way for a
+            wearer to give it.
+            """
+            from .consent_gate import SINKS, consent as _consent
+            b = self._body()
+            key = str(b.get("key", "") or "").strip()
+            sink = SINKS.get(key)
+            if sink is None:
+                # The caller's own string is NOT echoed back. It is unvalidated
+                # input and reflecting it buys nothing — the client knows what
+                # it sent. `known` is from our registry, so it is safe to name
+                # and is the useful half anyway.
+                self._json(400, {"ok": False, "error": "unknown sink",
+                                 "known": sorted(SINKS)})
+                return
+            if sink.switch is not None or sink.predicate is not None:
+                self._json(400, {
+                    "ok": False, "error": "this sink follows its own setting",
+                    "key": key, "switch": sink.switch,
+                    "predicate": sink.predicate})
+                return
+            g = _consent(brain)
+            granted = bool(b.get("granted", True))
+            ok = g.grant(key) if granted else g.revoke(key)
+            self._json(200, {"ok": bool(ok), "key": key, "granted": granted,
+                             "allowed": g.allowed(key)})
 
         def _post_voice_consent(self, path, qs):
             """Accept or revoke voice-recall consent. `{"accept": false}` also
@@ -6111,6 +6185,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/config": _get_config,
             "/dreamlayer/brain/tiers": _get_brain_tiers,
             "/dreamlayer/status": _get_status,
+            "/dreamlayer/consent": _get_consent,
             "/dreamlayer/mesh": _get_mesh,
             "/dreamlayer/token": _get_token,
             "/dreamlayer/backup": _get_backup,
@@ -7339,6 +7414,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/face/forget": _post_face_forget,
             "/dreamlayer/face/consent": _post_face_consent,
             "/dreamlayer/face/name": _post_face_name,
+            "/dreamlayer/consent": _post_consent,
             "/dreamlayer/voice/consent": _post_voice_consent,
             "/dreamlayer/voice/name": _post_voice_name,
             "/dreamlayer/voice/forget": _post_voice_forget,

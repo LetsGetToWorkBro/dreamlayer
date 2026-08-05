@@ -33,7 +33,7 @@ from typing import Optional
 from ...confluence.bond import BondManager
 from ...confluence.entangle import EntangledSky
 from ...confluence.gift import unwrap_gift, wrap_gift
-from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+from .veil import VeilGate
 
 ROOM_MAX = 8              # sessions with live confluence state, per Brain
 SESSION_STALE_S = 60.0    # silent this long → the session is dropped
@@ -53,7 +53,7 @@ class LiveConfluence:
         self._brain = brain
         self._now = now_fn
         self._lock = threading.Lock()
-        self._gate = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
+        self._gate = VeilGate(brain)
         # sid -> {mgr, sky, seen, peer (sid|None), inbox (wire|None), bond_id}
         self._sessions: dict = {}
         # bond_id -> {sid, code, ts} — the code lives ONLY until accepted,

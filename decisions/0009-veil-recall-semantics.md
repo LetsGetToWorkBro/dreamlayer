@@ -1,8 +1,8 @@
 ---
 id: 0009
-title: The Veil's recall semantics genuinely differ across lenses, and the split is now declared rather than accidental
-status: confirmed-deferred
-date: 2026-08-04
+title: Recall is unrestricted; capture fails closed — and two writes filed under recall had to move
+status: fixed
+date: 2026-08-05
 area: ai_brain/server/veil.py
 ---
 
@@ -16,7 +16,9 @@ The strong form, and the reason this is not merely tidiness: **`allow_recall` di
 
 ## Verdict
 
-Confirmed — two defensible, contradictory readings of "may I read back what I already know while veiled?" were live simultaneously; the duplication is now removed and the disagreement preserved verbatim and made explicit, because choosing between them is a product decision about what the Veil covers, not a refactor.
+**Settled by the owner on 2026-08-05: recall is unrestricted.** The dissenting lens was right — incognito is about not KEEPING, so nothing blocks a read. Getting there safely required moving two writes that had been filed under recall. What follows is the original finding, kept because the reasoning is what makes the fix safe.
+
+Originally: two defensible, contradictory readings of "may I read back what I already know while veiled?" were live simultaneously; the duplication is now removed and the disagreement preserved verbatim and made explicit, because choosing between them is a product decision about what the Veil covers, not a refactor.
 
 ## Evidence
 
@@ -89,14 +91,20 @@ Both paths run. If a future change removes one side, re-check before treating th
 
 ## Consequences
 
-**Done.** `ai_brain/server/veil.py` holds the single `VeilGate`. `recall` is keyword-only with **no default** — the divergence came from two careful people answering locally a question nobody had written down globally, and a default would re-create that at gate thirteen. All twelve sites migrated with behaviour preserved exactly; `test_veil_gate.py` asserts no `ai_brain/server/` module defines `allow_capture`/`allow_recall` again, that every construction names its posture as a literal, and that `lucid_live.py` is still the only site taking the surviving posture.
+**The decision.** Recall is unrestricted for every lens. `VeilGate.allow_recall()` returns `True`, and the posture parameter is gone — it existed only to hold the disagreement, so keeping a two-valued knob with one value in use would be dead scaffolding. `allow_capture` is unchanged and still fails closed.
 
-**Deferred, and it is the owner's call.** Which reading is right. Both are defensible:
+**What made it unsafe, and what had to move with it.** Opening recall is only safe while recall means *reading*. Two `lens_hosts` methods were gated on `allow_recall` and did no reading at all:
 
-- *Recall follows capture* — a timeline of what was said in front of the wearer is what the shield exists to stop, and "veiled" reading as one thing is easier to trust.
-- *Recall survives incognito* — the reference says so in as many words, and quiet hours is a nightly window, so the strict reading means the Brain refuses to answer "what did we decide about the lease?" every night.
+```
+resume()          stasis.replace_frame(fresh); save_stasis()
+quest_complete()  saga.complete() pays XP; _saga_profile_record() writes badges
+```
 
-Nothing here picks. Changing the split now means editing one literal and one test, and the test failure names this file.
+They were filed under recall because that is what `_LensGate` happened to offer. While recall was closed the miscategorisation was invisible — nothing could fire either way. Open recall and both persist a record of what the wearer did *during* a veiled stretch, which is exactly what the capture gate exists to stop. Both ask `allow_capture` now, because they were never recall questions.
+
+The other fifteen recall-gated methods were checked and are reads. Two heuristic hits were false positives worth naming so nobody re-raises them: `all_records` is a read, and `their_word`'s `append` is to a local list.
+
+**The guard.** `test_veil_gate.py::TestNothingWritesWhileVeiled` drives the real methods against a veiled Brain and spies on the persistence call. Behavioural on purpose: a source scan for write-shaped names produces both false positives and false negatives, and neither tells you whether anything was actually written. Without it, the next action accidentally filed under recall becomes a silent write-while-veiled.
 
 **Watch: `plugins/base.py:110-112`** is a third semantics and the only fail-**open** one —
 
@@ -105,6 +113,6 @@ Nothing here picks. Changing the split now means editing one literal and one tes
             return True
 ```
 
-A supplied gate lacking the method is treated as permissive. Two of the twelve (`_FaceGate`, `_VoiceGate`) lacked it. **Not reachable today** — `world_lens.plugin_context` passes `self.privacy`, which had it, and after this change every gate has it — so this is a latent hazard, not a live defect. The `v is None` arm is deliberate and correct (the SDK/preview/unit case with no veil wired). The `hasattr` arm is the one worth inverting: if somebody hands you a gate, honour it or refuse it, but do not read a missing method as consent.
+A supplied gate lacking the method reads as permissive. Now moot in practice — every gate is `VeilGate` and has it — so this stays a latent hazard rather than a live defect. The `v is None` arm is deliberate and correct (the SDK/preview/unit case with no veil wired). The `hasattr` arm is the one worth inverting: if somebody hands you a gate, honour it or refuse it, but do not read a missing method as consent.
 
-**The checker's annotation stays.** `lens_reachability.py` was not wrong to flag this, and its `_brain_side_constructions` docstring already says it is "a signal for a human, not a gate". It found a real thing by a heuristic that could not describe what it found — which is worth leaving in place rather than tuning until it goes quiet.
+**The checker's annotation stays.** `lens_reachability.py` was not wrong to flag this, and its `_brain_side_constructions` docstring already says it is "a signal for a human, not a gate". It found a real thing by a heuristic that could not describe what it found — worth leaving in place rather than tuning until it goes quiet.

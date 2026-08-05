@@ -54,7 +54,7 @@ transcript is never logged — only ever drawn (`test_logging_discipline`).
 """
 from __future__ import annotations
 
-from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+from .veil import VeilGate
 
 import logging
 
@@ -89,7 +89,7 @@ class TruthRead:
 
     def __init__(self, brain):
         self.brain = brain
-        self.privacy = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
+        self.privacy = VeilGate(brain)
         self._on = False
         self._lens = None
         # The honesty bit, and the whole point of the pattern: `_proved` flips

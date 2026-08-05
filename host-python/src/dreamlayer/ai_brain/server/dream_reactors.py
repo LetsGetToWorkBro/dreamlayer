@@ -49,7 +49,7 @@ constant, not from anything about the person.
 """
 from __future__ import annotations
 
-from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+from .veil import VeilGate
 
 import logging
 import time
@@ -124,7 +124,7 @@ class DreamReactors:
         if self._timbre is None:
             from ...dream_mode.timbre_reactor import TimbreReactor
             self._timbre = TimbreReactor(baselines=_Baselines(self.brain),
-                                         privacy=VeilGate(self.brain, recall=RECALL_FOLLOWS_CAPTURE),
+                                         privacy=VeilGate(self.brain),
                                          now_fn=self._now)
         return self._timbre
 
@@ -161,7 +161,7 @@ class DreamReactors:
     def mic(self):
         if self._mic is None:
             from ...dream_mode.mic_reactor import MicReactor
-            self._mic = MicReactor(privacy=VeilGate(self.brain, recall=RECALL_FOLLOWS_CAPTURE))
+            self._mic = MicReactor(privacy=VeilGate(self.brain))
         return self._mic
 
     def note_mic(self, fft, amplitude: float = 0.0, place: str = "") -> dict:
@@ -228,7 +228,7 @@ class DreamReactors:
             # room you have been in, kept across restarts, is a movement history
             # with better manners — and Yesterlight is a thing you do in the
             # moment, not an archive you consult.
-            self._ledger = WeatherLedger(privacy=VeilGate(self.brain, recall=RECALL_FOLLOWS_CAPTURE))
+            self._ledger = WeatherLedger(privacy=VeilGate(self.brain))
         return self._ledger
 
     def yesterlight(self):

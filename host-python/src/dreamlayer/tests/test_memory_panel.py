@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 import shutil
 import subprocess
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
@@ -340,3 +342,76 @@ def test_panel_islocalurl_transliteration_matches_served_js_when_node_present():
         assert _js_islocalurl_py(u) == jr, (
             f"transliteration drift on {u!r}: python={_js_islocalurl_py(u)!r} "
             f"served-js={jr!r} — update _js_islocalurl_py to match panel.py")
+
+
+class _ScriptBodies(HTMLParser):
+    """Every <script> body in a page, via the stdlib parser.
+
+    NOT a regex. `re.findall(r"<script[^>]*>(.*?)</script>", ...)` was the
+    first draft and CodeQL flagged it py/bad-tag-filter (high): it misses
+    `<SCRIPT>`. The query is aimed at regexes used as sanitizers and this one
+    only reads our own generated page — but it is genuinely incomplete, and
+    slapping re.I on it would leave the next hole (attributes containing `>`,
+    a `</script >` with a space) for somebody else to find. HTMLParser puts
+    script content in CDATA mode and hands it over whole, which is the thing
+    the regex was approximating.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.bodies: list[str] = []
+        self._buf: list[str] | None = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            self._buf = []
+
+    def handle_endtag(self, tag):
+        if tag == "script" and self._buf is not None:
+            self.bodies.append("".join(self._buf))
+            self._buf = None
+
+    def handle_data(self, data):
+        if self._buf is not None:
+            self._buf.append(data)
+
+
+def _script_bodies(html: str) -> list[str]:
+    p = _ScriptBodies()
+    p.feed(html)
+    p.close()
+    return p.bodies
+
+
+def test_the_served_panel_javascript_parses():
+    """The whole panel is one 170k-character JS blob assembled in a Python
+    string, and a syntax error anywhere in it takes out EVERY control — not
+    the section that introduced it. Nothing in the suite noticed that class of
+    break: `render_panel` returns a string, so Python is happy, and the only
+    symptom is a dead page.
+
+    Added after hand-editing that blob to add the consent section (#610), which
+    is exactly the edit that could have done it. Parses the real served page
+    with `node --check`, so it covers every block rather than the one function
+    the classifier test extracts. Skipped when node is unavailable — same rule
+    as the tests above.
+    """
+    node = _find_node()
+    if not node:
+        pytest.skip("no node runtime to parse the served panel JS")
+    # A generated token, not a literal. The value is irrelevant here — the page
+    # renders either way — and a new `token="..."` literal is a fresh
+    # py/hardcoded-credentials location for CodeQL, which is a real cost for
+    # nothing gained.
+    html = render_panel(token=secrets.token_hex(8))
+    bodies = _script_bodies(html)
+    assert bodies, "no <script> in the served panel — has it moved?"
+    assert sum(len(b) for b in bodies) > 50_000, (
+        "the panel JS shrank by more than half — this test is probably "
+        "parsing the wrong thing rather than the page getting smaller")
+    out = subprocess.run([node, "--check", "-"],
+                         input="\n".join(bodies), capture_output=True,
+                         text=True, timeout=30)
+    assert out.returncode == 0, (
+        "the served panel JS does not parse — every control on the page is "
+        f"dead, not just the newest one:\n{out.stderr}")

@@ -32,7 +32,7 @@ merely empty.
 """
 from __future__ import annotations
 
-from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+from .veil import VeilGate
 
 import json
 import logging
@@ -111,7 +111,7 @@ class VoiceRecall:
 
     def __init__(self, brain):
         self.brain = brain
-        self.privacy = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
+        self.privacy = VeilGate(brain)
         self._lock = threading.RLock()
         self._embedder = None
         self._embedder_built = False

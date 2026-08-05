@@ -84,4 +84,4 @@ between this directory and a pile of free text.
 | [0006](0006-causal-fusion-was-a-fixed-heuristic.md) | accepted-risk | `causal_fusion` inferred nothing causally and returned None either way — dropped |
 | [0007](0007-the-twenty-one-dormant-capabilities.md) | confirmed-deferred | Each of the 21 dormant capabilities, and what is actually blocking it |
 | [0008](0008-mlx-train-is-unbuilt-not-unhosted.md) | confirmed-deferred | mlx_train's trainer was never written, so it needed building rather than wiring |
-| [0009](0009-veil-recall-semantics.md) | confirmed-deferred | The Veil's recall semantics genuinely differ across lenses, and the split is now declared rather than accidental |
+| [0009](0009-veil-recall-semantics.md) | fixed | Recall is unrestricted; capture fails closed — and two writes filed under recall had to move |

@@ -265,14 +265,24 @@ class TestCandorRunsOnWhatYouSay:
 
     def test_candor_answers_null_under_the_veil_never_all_clear(self, tmp_path,
                                                                 monkeypatch):
-        """`None` and `{"fired": False}` are different answers. A veiled lens
-        that returns "no contradiction" is telling the wearer their story hangs
-        together when it was never allowed to look."""
+        """INVERTED by decisions/0009 — recall is unrestricted now.
+
+        This used to assert `None` while veiled, on the reasoning that a lens
+        answering "no contradiction" would be claiming it had looked when it
+        had not. That reasoning was sound and the premise changed: the lens IS
+        allowed to look now, because incognito stops KEEPING, not reading. So
+        the honest assertion is the opposite one — a veiled wearer still gets
+        their own story checked, and the `None`-vs-`fired:False` distinction
+        stays meaningful for the cases that really cannot answer.
+
+        What must NOT happen while veiled is the ingest that feeds it, and
+        that is asserted separately (`test_the_veil_keeps_it_out_of_the_ring`).
+        """
         b = _brain(tmp_path)
         ls = b.lenses()
         ls.ingest_utterance("the venue is booked", via="said")
         monkeypatch.setattr(b, "incognito_now", lambda: True)
-        assert ls.candor_check("the venue is not booked") is None
+        assert ls.candor_check("the venue is not booked") is not None
 
 
 # ---------------------------------------------------------------------------
@@ -307,10 +317,13 @@ class TestProvenanceAnswersAboutRealInput:
         assert body["result"]["found"] is False
 
     def test_the_veil_is_null_not_not_found(self, tmp_path, monkeypatch):
+        """INVERTED by decisions/0009: a trace is a READ of what the wearer
+        already told this device, and recall is unrestricted. `None` is now
+        reserved for a genuine refusal, of which there are none on this path."""
         b = _brain(tmp_path)
         b.lenses().ingest_utterance("the venue is booked", via="said")
         monkeypatch.setattr(b, "incognito_now", lambda: True)
-        assert b.lenses().trace("the venue is booked") is None
+        assert b.lenses().trace("the venue is booked") is not None
 
 
 # ---------------------------------------------------------------------------

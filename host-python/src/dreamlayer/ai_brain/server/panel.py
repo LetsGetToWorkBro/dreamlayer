@@ -1156,6 +1156,21 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   </section>
 
   <section>
+    <div class="eyebrow">Trust &amp; data</div><h2>What can reach past this device</h2>
+    <p class="lead">Every path that can send something somewhere, what it sends, and where it goes —
+      listed furthest-reaching first. Most follow a switch you have already set; the ones that need a
+      yes of their own are marked. The Veil always wins: while Incognito or in quiet hours, none of
+      these send anything.</p>
+    <div class="conn" id="consentBanner" style="align-items:center;gap:12px">
+      <div style="flex:1;min-width:0">
+        <div class="conn-t" id="consentHead">Loading…</div>
+        <div class="conn-s" id="consentSub">&nbsp;</div>
+      </div>
+    </div>
+    <div id="consentRows"></div>
+  </section>
+
+  <section>
     <div class="eyebrow">Proof</div><h2>Privacy receipt</h2>
     <p class="lead">A signed, tamper-evident record of what the Brain did — each entry sealed to
       the one before it and signed by this device's key. Verify it right here, offline; export a
@@ -1784,6 +1799,101 @@ function renderCaps(r){
   });
   $("caprows").innerHTML=html;
 }
+
+/* --- what can reach past this device -------------------------------------
+   The registry (ai_brain/server/consent_gate.py) was computed on every status
+   poll and drawn by nothing (#610). `what` and `where` are rendered VERBATIM:
+   they are written for a person deciding, and re-wording them here would put
+   the panel and the gate's own account of itself out of step. */
+const SCOPEWORD={internet:"the internet",radio:"radio, in the open",
+                 lan:"your own network",on_device:"stays here"};
+/* Built with DOM calls, not an HTML string.
+
+   `esc()` above is a correct escaper, but CodeQL cannot see it as a sanitizer,
+   so any new `innerHTML = <string built from a response>` is a high-severity
+   js/xss alert. The objection is sound beyond satisfying the tool: that
+   pattern is safe only while every future edit remembers to wrap every field,
+   and `textContent` cannot be got wrong. Same reason the button binds a
+   listener instead of carrying an interpolated onclick= attribute, which puts
+   a response value inside executable markup where escaping does not help.
+
+   Named mkEl, NOT el: about twenty functions in this file already use `el` as
+   a local const for "the element I just looked up". A global `el` would work
+   only because each of those shadows it, and the first person to call el(...)
+   inside one of them gets "el is not a function". */
+function mkEl(tag, cls, text){
+  const n=document.createElement(tag);
+  if(cls)n.className=cls;
+  if(text!=null)n.textContent=text;
+  return n;
+}
+async function loadConsent(){
+  let r; try{r=await api("/dreamlayer/consent");}catch(e){return;}
+  const rows=r.sinks||[];
+  const out=rows.filter(x=>x.sent>0&&x.scope!=="on_device").length;
+  $("consentHead").textContent = r.anything_left
+    ? `Something has left this device (${out} ${out===1?"path":"paths"} used)`
+    : "Nothing has left this device";
+  $("consentSub").textContent = rows.filter(x=>x.allowed).length
+    + " of " + rows.length + " paths are currently allowed";
+  const box=$("consentRows");
+  box.textContent="";
+  let scope="";
+  rows.forEach(it=>{
+    if(it.scope!==scope){
+      scope=it.scope;
+      const h=mkEl("div","navlabel",SCOPEWORD[scope]||scope);
+      h.style.padding="14px 0 2px";
+      box.appendChild(h);
+    }
+    const row=mkEl("div","conn"); row.style.padding="8px 0";
+    const dot=mkEl("span");
+    dot.style.cssText="width:8px;height:8px;border-radius:50%;flex:none";
+    dot.style.background=it.allowed?"var(--success)":"var(--ghost)";
+    row.appendChild(dot);
+
+    const mid=mkEl("div"); mid.style.cssText="flex:1;min-width:0";
+    const title=mkEl("div","conn-t",it.key);
+    /* A refusal is worth SHOWING. A feature that quietly does nothing reads as
+       broken; "it asked, and you have not said yes" is a different sentence.
+       Counts are `int(...)` server-side, so Number() is the exact type. */
+    const sent=Number(it.sent)||0, refused=Number(it.refused)||0;
+    if(sent>0||refused>0){
+      const tag=mkEl("span","tag",
+        sent>0?`used ${sent}\u00d7`:`asked ${refused}\u00d7 \u2014 not allowed`);
+      tag.style.marginLeft="6px";
+      title.appendChild(tag);
+    }
+    mid.appendChild(title);
+    const sub=mkEl("div","conn-s",`${it.what} \u2192 ${it.where}`);
+    sub.style.marginTop="2px";
+    mid.appendChild(sub);
+    row.appendChild(mid);
+
+    const right=mkEl("div","row"); right.style.cssText="gap:8px;flex:none";
+    right.appendChild(consentControl(it));
+    row.appendChild(right);
+    box.appendChild(row);
+  });
+}
+function consentControl(it){
+  /* Only the no-switch sinks get a control. The rest already have one source of
+     truth — the feature's own toggle — and a second one on this row is how the
+     two drift apart and the panel starts lying. The route refuses them with a
+     400 for the same reason. */
+  if(!it.needs_grant)
+    return mkEl("span","sstate",it.allowed?"on":"follows its own setting");
+  const b=mkEl("button", it.allowed?"sm ghost danger":"sm",
+               it.allowed?"Withdraw":"Allow");
+  b.addEventListener("click",()=>setConsent(it.key,!it.allowed));
+  return b;
+}
+async function setConsent(key,granted){
+  try{await api("/dreamlayer/consent",{method:"POST",
+    body:JSON.stringify({key:key,granted:granted})});}
+  catch(e){toast("Could not change that");return;}
+  loadConsent();
+}
 /* --- packs: curated upgrades so single capabilities are never overlooked --- */
 const PACKSTATE={installed:"installed",partial:"partially installed",available:""};
 function packCard(p){
@@ -2090,6 +2200,7 @@ async function load(){
   renderPlan(c.plan);
   refreshStatus(); loadHistory(); loadHealth(); loadAgenda(); loadPeople(); loadCalendars();
   loadContactsSync(); loadReminders(); loadCaps(); loadReceipt(); refreshVoice();
+  loadConsent();
 }
 
 function fmtWhen(ts){if(!ts)return "";const d=new Date(ts*1000);

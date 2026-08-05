@@ -1,43 +1,47 @@
-"""One Veil gate — and the two tests that stop it becoming twelve again.
+"""One Veil gate, two different questions, and the guard that keeps them apart.
 
-The Brain had TWELVE hand-written privacy gates. `allow_capture` was identical
-in all of them, which is why the duplication looked like tidiness rather than
-risk. `allow_recall` was not identical, and neither diverging site knew:
+    allow_capture()   may we KEEP what we perceive?   fails CLOSED
+    allow_recall()    may we READ what we know?       always open
 
-  * `lens_hosts` made recall the same predicate as capture, on the argument
-    that reading a timeline of what was said in front of the wearer is exactly
-    what the shield exists to stop. 17 call sites.
-  * `lucid_live` kept recall open, on the argument that `PrivacyGate`'s own
-    docstring says incognito stops KEEPING, not asking.
+The Brain had TWELVE hand-written gates. `allow_capture` was byte-identical in
+all of them, which is why the duplication looked like tidiness. `allow_recall`
+was not: most tied it to capture, `lucid_live` did not, and both sides had
+argued their case in a docstring without knowing the other existed
+(decisions/0009). Several of the twelve promised in prose to "mirror" the
+others — true of one predicate, false of the pair, invisible to the suite.
 
-Several of the twelve carried a docstring claiming to "mirror" the others. By
-the end that claim was false, and nothing in the suite could tell.
+That is settled now: **recall is unrestricted**, because incognito is about not
+KEEPING, which is `PrivacyGate`'s own reading. Under the strict alternative a
+wearer lost their own memory every night, quiet hours being a nightly window.
 
-So the assertions that matter here are not about `VeilGate`'s arithmetic — that
-part is four lines. They are:
+So the arithmetic here is trivial and the structural tests are the point:
 
-  * there is ONE implementation (`test_the_predicate_is_written_once`), and
-  * every site SAYS which posture it takes (`test_every_gate_declares_a_posture`).
-
-Together those turn a divergence that happened by accident into one that can
-only happen on purpose.
+  * `TestNothingWritesWhileVeiled` — the one that makes open recall SAFE. Two
+    `lens_hosts` methods were gated on `allow_recall` and did not read at all.
+    Asserted by DRIVING them against a veiled Brain, not by reading source: a
+    grep for write-shaped names gives false positives (`all_records` is a read,
+    `append` was to a local list) and false negatives, and neither tells you
+    whether anything was actually persisted.
+  * `TestItCannotQuietlyBecomeTwelveAgain` — no module may hand-write the
+    predicate again, and the scan that checks that must actually reach the code.
 """
 from __future__ import annotations
 
 import ast
 import pathlib
+import tempfile
 
 import pytest
 
-from dreamlayer.ai_brain.server.veil import (
-    POSTURES, RECALL_FOLLOWS_CAPTURE, RECALL_SURVIVES_INCOGNITO, VeilGate)
+from dreamlayer.ai_brain.server.server import Brain
+from dreamlayer.ai_brain.server.veil import VeilGate
 
 #: Resolved from THIS file rather than from a module's `__file__`, which is
 #: `str | None` and would need silencing. The path matters more than the
-#: silencing: both structural tests below scan `SERVER.glob("*.py")`, so a
-#: SERVER that resolves anywhere wrong makes them iterate nothing and pass
-#: vacuously — a green check answering a narrower question than it appears to,
-#: which is the exact shape of bug this file exists to prevent.
+#: silencing: the structural tests scan `SERVER.glob("*.py")`, so a SERVER that
+#: resolves anywhere wrong makes them iterate nothing and pass vacuously — a
+#: green check answering a narrower question than it appears to, which is the
+#: exact shape of bug this file exists to prevent.
 #: `test_the_scan_actually_reaches_the_gates` is the guard on that.
 SERVER = pathlib.Path(__file__).resolve().parents[1] / "ai_brain" / "server"
 
@@ -55,99 +59,134 @@ class _Unreadable:
         raise RuntimeError("trust store unreadable")
 
 
-class TestCaptureIsTheSameEverywhere:
-    """The half all twelve already agreed on. Kept exact — this is the one
-    predicate a reader of any lens is entitled to assume without checking."""
+@pytest.fixture
+def brain():
+    return Brain(tempfile.mkdtemp())
 
-    @pytest.mark.parametrize("posture", POSTURES)
-    def test_veiled_means_no_capture(self, posture):
-        assert VeilGate(_Brain(True), recall=posture).allow_capture() is False
-        assert VeilGate(_Brain(False), recall=posture).allow_capture() is True
 
-    @pytest.mark.parametrize("posture", POSTURES)
-    def test_an_unreadable_posture_fails_closed(self, posture):
-        """A broken trust signal must never resolve to "record it". This is the
-        one behaviour that must not depend on the posture, because a gate that
+class TestCaptureFailsClosed:
+    def test_veiled_means_no_capture(self):
+        assert VeilGate(_Brain(True)).allow_capture() is False
+        assert VeilGate(_Brain(False)).allow_capture() is True
+
+    def test_an_unreadable_posture_is_treated_as_veiled(self):
+        """A broken trust signal must never resolve to "record it". A gate that
         fails open on an exception is worse than no gate — it looks present."""
-        assert VeilGate(_Unreadable(), recall=posture).allow_capture() is False
+        assert VeilGate(_Unreadable()).allow_capture() is False
 
 
-class TestRecallIsTheQuestionThatDiffered:
-    def test_the_strict_posture_ties_recall_to_capture(self):
-        g = VeilGate(_Brain(True), recall=RECALL_FOLLOWS_CAPTURE)
-        assert g.allow_recall() is False
-        assert VeilGate(_Brain(False),
-                        recall=RECALL_FOLLOWS_CAPTURE).allow_recall() is True
+class TestRecallIsUnrestricted:
+    def test_recall_survives_the_veil(self):
+        """Not a fail-open and not a stub.
 
-    def test_the_surviving_posture_keeps_recall_open(self):
-        """Not a fail-open. `PrivacyGate.allow_recall` is blocked only by an
-        explicit pause, and this Brain has no pause input — every term of
-        `incognito_now()` is about capture. True is the mapping of a term that
-        can never be set, which is a different thing from a hole."""
-        assert VeilGate(_Brain(True),
-                        recall=RECALL_SURVIVES_INCOGNITO).allow_recall() is True
+        `PrivacyGate.allow_recall` is blocked only by an explicit pause, and
+        this Brain has no pause input — every term of `incognito_now()` is a
+        capture posture. True is the honest mapping of a term that can never be
+        set, which is a different thing from a hole.
+        """
+        assert VeilGate(_Brain(True)).allow_recall() is True
+        assert VeilGate(_Brain(False)).allow_recall() is True
 
-    def test_an_unreadable_posture_still_does_not_open_capture(self):
-        """The surviving posture must not leak into the capture answer — that
-        would turn a recall decision into a recording one."""
-        g = VeilGate(_Unreadable(), recall=RECALL_SURVIVES_INCOGNITO)
+    def test_an_unreadable_posture_does_not_leak_into_capture(self):
+        """Recall being unconditional must not soften the other answer."""
+        g = VeilGate(_Unreadable())
         assert g.allow_recall() is True
         assert g.allow_capture() is False
 
-    def test_the_two_postures_differ_only_while_veiled(self):
-        """Unveiled they must be indistinguishable. If they ever differed with
-        the Veil down, the posture would be a general behaviour switch rather
-        than a statement about what the Veil covers."""
-        for veiled in (False,):
-            a = VeilGate(_Brain(veiled), recall=RECALL_FOLLOWS_CAPTURE)
-            b = VeilGate(_Brain(veiled), recall=RECALL_SURVIVES_INCOGNITO)
-            assert a.allow_recall() == b.allow_recall() is True
-            assert a.allow_capture() == b.allow_capture() is True
 
+class TestNothingWritesWhileVeiled:
+    """The guard that makes open recall safe, and the reason it is behavioural.
 
-class TestAPostureMustBeChosen:
-    def test_there_is_no_default(self):
-        """The original bug was not carelessness — it was two careful people
-        answering locally a question nobody had written down globally. A
-        default would re-create that the first time somebody adds a thirteenth
-        gate without thinking about it."""
-        with pytest.raises(TypeError):
-            VeilGate(_Brain(False))                  # type: ignore[call-arg]
+    `resume()` and `quest_complete()` were gated on `allow_recall` while doing
+    no reading at all — `resume` stamps a frame and calls `save_stasis()`,
+    `quest_complete` pays XP and writes badge unlocks. While recall was closed
+    that miscategorisation was invisible, because nothing could fire either
+    way. Open recall and both would persist a record of what the wearer did
+    DURING a veiled stretch, which is exactly what the capture gate stops.
 
-    def test_an_unknown_posture_is_refused_not_guessed(self):
-        with pytest.raises(ValueError):
-            VeilGate(_Brain(False), recall="whatever")
+    Both are capture-gated now. These spy on the persistence call and assert it
+    never happens, rather than on a return value a mis-gated method would still
+    produce.
+    """
 
-    def test_it_reports_which_one_it_took(self):
-        g = VeilGate(_Brain(False), recall=RECALL_SURVIVES_INCOGNITO)
-        assert g.recall_posture == RECALL_SURVIVES_INCOGNITO
+    @staticmethod
+    def _veil(monkeypatch, brain, up: bool):
+        """Via monkeypatch, NOT `type(brain).incognito_now = ...`.
+
+        The direct assignment patches the `Brain` CLASS for the rest of the
+        session. It cost 5 unrelated failures in `test_wire_w6_rehearsal` and
+        `test_world_lens` that passed in isolation — a leak that looks like a
+        regression in someone else's feature.
+        """
+        monkeypatch.setattr(type(brain), "incognito_now",
+                            lambda self, _up=up: _up)
+
+    def test_resume_persists_nothing_while_veiled(self, brain, monkeypatch):
+        ls = brain.lenses()
+        wrote = []
+        ls.save_stasis = lambda *a, **k: wrote.append(1)
+        self._veil(monkeypatch, brain, True)
+        assert ls.resume() is None
+        assert wrote == [], "a held thought was re-stamped and saved while veiled"
+
+    def test_quest_complete_pays_nothing_while_veiled(self, brain, monkeypatch):
+        ls = brain.lenses()
+        paid = []
+
+        class _Saga:
+            def complete(self, subject):
+                paid.append(subject)
+                return None
+        ls._saga = _Saga()
+        self._veil(monkeypatch, brain, True)
+        assert ls.quest_complete("water the plants") is None
+        assert paid == [], "XP was paid and badges written while veiled"
+
+    def test_they_still_work_with_the_veil_down(self, brain, monkeypatch):
+        """The other half — a capture gate that never opens is not a gate, it
+        is a broken feature, and these two tests are worth nothing apart."""
+        self._veil(monkeypatch, brain, False)
+        ls = brain.lenses()
+        paid = []
+
+        class _Saga:
+            def complete(self, subject):
+                paid.append(subject)
+                return None
+        ls._saga = _Saga()
+        ls.quest_complete("water the plants")
+        assert paid == ["water the plants"], (
+            "quest_complete refuses even with the Veil down")
+
+    def test_a_read_still_answers_while_veiled(self, brain, monkeypatch):
+        """The decision itself, end to end: recall is open, so a veiled wearer
+        can still ask what they already know. `trace` returns None specifically
+        when refused, so anything else IS the answer."""
+        self._veil(monkeypatch, brain, True)
+        out = brain.lenses().trace("the lease is due Friday")
+        assert out is not None, (
+            "a read was refused while veiled — recall is supposed to be "
+            "unrestricted (decisions/0009)")
 
 
 class TestItCannotQuietlyBecomeTwelveAgain:
-    """The two structural assertions. Everything above tests four lines of
-    arithmetic; these test the thing that actually went wrong."""
-
     def test_the_scan_actually_reaches_the_gates(self):
-        """The two tests below are only as good as the path they walk.
+        """The test below is only as good as the path it walks.
 
         A wrong `SERVER` does not error — `glob` on a missing directory yields
-        nothing, both assertions get an empty list, and both go green while
-        checking no code at all. So this pins that the scan sees the real
-        directory, and specifically that it can see the sites the other two are
-        about.
+        nothing, the assertion gets an empty list, and it goes green while
+        checking no code at all.
         """
         assert SERVER.is_dir(), f"the gate scan points nowhere: {SERVER}"
         files = {p.name for p in SERVER.glob("*.py")}
         assert "veil.py" in files
-        # the twelve that were migrated — if the scan cannot see these, it
-        # cannot see a thirteenth either
         for expected in ("lens_hosts.py", "lucid_live.py", "ear.py",
                          "world_lens.py", "face_live.py", "dream_reactors.py"):
             assert expected in files, f"{expected} is outside the scan"
         assert len(files) > 20, f"only {len(files)} modules in scan — too few"
 
     def test_the_predicate_is_written_once(self):
-        """No `ai_brain/server/` module may define `allow_capture` again.
+        """No `ai_brain/server/` module may define the predicate again.
 
         Asserted over the AST rather than by grepping for a class name, because
         the twelve had twelve different names — `_LensGate`, `_EarGate`,
@@ -169,44 +208,3 @@ class TestItCannotQuietlyBecomeTwelveAgain:
         assert not offenders, (
             "the Veil predicate is hand-written again outside veil.py — this is "
             f"how it became twelve implementations: {offenders}")
-
-    def test_every_gate_declares_a_posture(self):
-        """A `VeilGate(...)` with no `recall=` would be a TypeError at runtime,
-        so this is not about crashes — it is about the keyword being visible in
-        the source a reviewer reads. A site that passes the posture through a
-        variable is legal Python and defeats the point, so the literal is what
-        is asserted."""
-        undeclared = []
-        for path in sorted(SERVER.glob("*.py")):
-            if path.name == "veil.py":
-                continue
-            src = path.read_text(encoding="utf-8")
-            tree = ast.parse(src)
-            for node in ast.walk(tree):
-                if (isinstance(node, ast.Call)
-                        and getattr(node.func, "id", "") == "VeilGate"):
-                    named = {k.arg: k.value for k in node.keywords}
-                    v = named.get("recall")
-                    if not (isinstance(v, ast.Name) and v.id in (
-                            "RECALL_FOLLOWS_CAPTURE",
-                            "RECALL_SURVIVES_INCOGNITO")):
-                        undeclared.append(f"{path.name}:{node.lineno}")
-        assert not undeclared, (
-            "a VeilGate is built without naming its recall posture in the "
-            f"source — the split has to stay readable: {undeclared}")
-
-    def test_the_split_is_still_the_documented_one(self):
-        """Exactly one site takes the surviving posture, and it is Lucid
-        Recall. Not a style rule: if a second lens quietly adopts it, the
-        wearer's answer to "is recall veiled?" starts depending on which lens
-        they asked, which is the state this module was written to end.
-        """
-        survivors = [
-            p.name for p in sorted(SERVER.glob("*.py"))
-            if p.name != "veil.py"
-            and "recall=RECALL_SURVIVES_INCOGNITO" in p.read_text(encoding="utf-8")
-        ]
-        assert survivors == ["lucid_live.py"], (
-            "the set of lenses that keep recall open while veiled changed. "
-            "That is a product decision about what the Veil covers, not a "
-            f"refactor — see decisions/0009: {survivors}")

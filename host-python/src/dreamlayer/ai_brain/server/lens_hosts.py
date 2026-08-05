@@ -49,7 +49,7 @@ letting it into the ring.
 """
 from __future__ import annotations
 
-from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+from .veil import VeilGate
 
 import json
 import logging
@@ -97,7 +97,7 @@ class BrainLenses:
 
     def __init__(self, brain):
         self.brain = brain
-        self.privacy = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
+        self.privacy = VeilGate(brain)
         self._lock = threading.RLock()
         self._ring = None
         self._seeded = False
@@ -123,7 +123,7 @@ class BrainLenses:
                 # the ring refuse a veiled keep whether or not the NEXT caller
                 # remembers to. `_seed` uses `restore()` and is unaffected.
                 self._ring = SemanticRingBuffer(RING_CAPACITY,
-                                                privacy=VeilGate(self.brain, recall=RECALL_FOLLOWS_CAPTURE))
+                                                privacy=VeilGate(self.brain))
             if not self._seeded:
                 self._seeded = True                  # set FIRST: a failing seed
                 self._seed()                         # must not retry every call
@@ -602,8 +602,13 @@ class BrainLenses:
         the phone actually reads, using absolute `count=` for the streak so a
         streak of 5 unlocks Unbroken rather than incrementing a counter five
         separate times.
+
+        CAPTURE-gated for the same reason as `resume`: this WRITES. It pays XP
+        through `saga.complete()` and mirrors badge unlocks into the Saga
+        profile. Completing a quest while the Veil is up would leave a durable
+        trace of what the wearer did during it (decisions/0009).
         """
-        if not self.privacy.allow_recall():
+        if not self.privacy.allow_capture():
             return None
         try:
             reward = self.saga.complete(subject)
@@ -716,8 +721,17 @@ class BrainLenses:
     def resume(self, frame_id=None):
         """Pick a held thought back up. Without an id, the top of the stack —
         "where was I" means the most recent one, which is what a wearer saying
-        it out loud means too."""
-        if not self.privacy.allow_recall():
+        it out loud means too.
+
+        CAPTURE-gated, not recall-gated, because this WRITES: it stamps the
+        frame with a resume time and count (`replace_frame`) and persists it
+        (`save_stasis`). It was filed under recall because that is what the
+        gate happened to offer, and while recall was closed the miscategorising
+        was invisible — nothing could fire either way. Now that recall is open
+        (decisions/0009), the difference is a record of what the wearer did
+        during a veiled stretch.
+        """
+        if not self.privacy.allow_capture():
             return None
         import time as _t
         now = _t.time()
@@ -1171,7 +1185,12 @@ class BrainLenses:
         status read never opens the memory store."""
         n = len(self._ring) if self._ring is not None else 0
         return {"ok": True, "ring": n, "seeded": self._seeded,
-                "veiled": not self.privacy.allow_recall(),
+                # From CAPTURE, not recall. "Veiled" is a statement about the
+                # wearer's posture, and recall is unrestricted now
+                # (decisions/0009) — deriving it from `allow_recall` would make
+                # this report the Veil DOWN while it is up, on the one surface
+                # whose whole job is to say which it is.
+                "veiled": not self.privacy.allow_capture(),
                 "held": len(self._stasis) if self._stasis is not None else 0,
                 "lenses": ["provenance", "candor", "drift", "saga", "stasis",
                            "premonition", "weather"]}

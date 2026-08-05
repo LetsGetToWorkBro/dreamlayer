@@ -45,7 +45,7 @@ neighbourhood.
 """
 from __future__ import annotations
 
-from .veil import RECALL_FOLLOWS_CAPTURE, VeilGate
+from .veil import VeilGate
 
 import logging
 
@@ -58,7 +58,7 @@ class IntroHost:
 
     def __init__(self, brain):
         self.brain = brain
-        self.privacy = VeilGate(brain, recall=RECALL_FOLLOWS_CAPTURE)
+        self.privacy = VeilGate(brain)
         self._capture = None
         # Honesty bits, on the pattern the ear and the dream lens use: a switch
         # being on proves nothing. `offered` counts names actually recognised by

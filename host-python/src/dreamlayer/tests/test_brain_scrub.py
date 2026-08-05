@@ -91,9 +91,11 @@ def test_the_veil_answers_nothing(brain):
     ls = brain.lenses()
     _fill(ls, 3)
     brain.config.network_mode = "lan_only"
-    seen = _pushes(brain)
+    _pushes(brain)
     out = ls.scrub(0)
-    assert out["total"] == 0 and seen == []
+    # decisions/0009 — rewinding your own day is a READ. Despite the name,
+    # `scrub` deletes nothing: it walks the hot ring and pushes a node card.
+    assert out["total"] == 3
 
 
 def test_only_the_hot_window_counts(brain):

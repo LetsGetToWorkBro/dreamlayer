@@ -126,11 +126,13 @@ class TestWhatYouOwe:
         assert ls.owed(push=False)["items"] == []
 
     def test_the_veil_answers_nothing(self, brain):
+        """INVERTED by decisions/0009 — "what do I owe?" is a read of the
+        wearer's own promises, and recall is unrestricted."""
         ls = brain.lenses()
         self._promise(ls, "pay the deposit")
         brain.config.network_mode = "lan_only"
-        seen = _pushes(brain)
-        assert ls.owed()["items"] == [] and seen == []
+        _pushes(brain)
+        assert ls.owed()["items"]
 
     def test_it_does_not_displace_commitment_drift(self, brain):
         """Both read the same store and both must stay. Drift FIRES when a
@@ -185,7 +187,10 @@ class TestItRemembersForYou:
         self._due_now(brain, "Sarah Chen", "from Acme")
         brain.config.network_mode = "lan_only"
         seen = _pushes(brain)
-        assert ls.resurface()["items"] == [] and seen == []
+        # decisions/0009 — resurfacing what you already know about someone is
+        # a read of your own store.
+        del seen
+        assert ls.resurface()["items"]
 
 
 # --- ask first --------------------------------------------------------------
@@ -286,11 +291,20 @@ class TestForgetThat:
         assert out["reason"] in ("nothing-to-forget", "no-store")
 
     def test_the_veil_answers_nothing(self, brain):
+        """Split in two by decisions/0009, and the split is the point.
+
+        The PREVIEW is a read — naming your own last memory back to you — so it
+        answers while veiled. The DELETE is a write, so it refuses. Before, the
+        preview refused and `forget_memory` had no gate at all: the only thing
+        protecting a deletion was that nothing would hand it an id.
+        """
         self._remember(brain, "the deposit is 1200")
         brain.config.network_mode = "lan_only"
-        seen = _pushes(brain)
-        assert brain.forget_last_preview()["reason"] == "veiled"
-        assert seen == []
+        _pushes(brain)
+        preview = brain.forget_last_preview()
+        assert preview.get("reason") != "veiled", "a read was refused"
+        assert brain.forget_memory(preview.get("id") or 1)["reason"] == "veiled", (
+            "a memory could be erased while the Veil was up")
 
     def test_forgetting_goes_through_the_full_cascade(self, brain):
         """The one that matters. `MemoryDB.purge_memory` alone leaves the
