@@ -346,3 +346,89 @@ class TestTheSecretScannerIsNotQuietlyWidened:
             "the VALUE pins are what defend everything outside the two exempt "
             "trees; finding almost none means this file is not being read")
         assert len(al.get("stopwords", [])) >= 8
+
+
+# --- CodeQL's scope ----------------------------------------------------------
+CODEQL_CONFIG = ROOT.parent / ".github" / "codeql" / "config.yml"
+CODEQL_WORKFLOW = ROOT.parent / ".github" / "workflows" / "codeql.yml"
+
+
+def _codeql_config() -> dict:
+    import re as _re
+    #: Deliberately not `import yaml`. PyYAML is not a dependency of this
+    #: project — it arrives only through optional extras — so importing it here
+    #: would make this test SKIP on a plain install, and a security-scope guard
+    #: that silently skips is worse than no guard. The file's shape is fixed and
+    #: one list is all that needs reading.
+    text = CODEQL_CONFIG.read_text(encoding="utf-8")
+    body = text.split("paths-ignore:", 1)
+    if len(body) == 1:
+        return {"paths-ignore": []}
+    entries = _re.findall(r'^\s*-\s*"([^"]+)"\s*$', body[1], _re.M)
+    return {"paths-ignore": entries}
+
+
+#: The ONE path CodeQL does not analyse, and why it is defensible.
+#:
+#: `paths-ignore` turns security analysis off for everything it matches and
+#: reports the same clean result afterwards. That is the failure this repo keeps
+#: meeting, applied to the strongest gate it has.
+DECIDED_CODEQL_IGNORED = [
+    (".semgrep/tests/**",
+     "the Semgrep rule fixture — a corpus that exists to CONTAIN eval(), "
+     "pickle.loads(), shell=True and verify=False so `semgrep --test` can prove "
+     "the custom rules still match them. Nothing imports it, nothing runs it, "
+     "and it ships in no wheel. CodeQL raised two high-severity "
+     "py/request-without-cert-validation alerts on its two verify=False lines; "
+     "neither can be rewritten without deleting the test for that rule, since "
+     "Semgrep matches the literal keyword and not a constant"),
+]
+
+
+class TestCodeQLStillLooksAtTheProduct:
+    def test_the_ignore_list_is_exactly_the_rule_fixture(self):
+        got = _codeql_config()["paths-ignore"]
+        want = [p for p, _ in DECIDED_CODEQL_IGNORED]
+        assert got == want, (
+            "CodeQL's paths-ignore changed.\n\n"
+            + "\n".join(f"  {p} — {why}" for p, why in DECIDED_CODEQL_IGNORED)
+            + "\n\nEvery entry switches security analysis off for what it "
+              "matches and leaves the check green, so this is not a list to "
+              "extend for convenience. If an alert is wrong, the answer is "
+              "usually to fix the code or to dismiss that one alert — not to "
+              "stop scanning the file.")
+
+    def test_the_test_trees_are_still_scanned(self):
+        """The one thing this must never become. CI has always scanned the test
+        trees, and a hard-coded token or an injection sink in a test file is a
+        real alert here — the repo has already had one.
+        """
+        for entry in _codeql_config()["paths-ignore"]:
+            for shipped in ("host-python/src/dreamlayer", "phone-app/src",
+                            "landing", "registry-api", "halo-lua", "scripts"):
+                assert not entry.startswith(shipped), (
+                    f"paths-ignore entry {entry!r} covers {shipped} — that is "
+                    f"shipped code or a scanned test tree")
+        assert not any(e in ("**", "**/*", "/") for e in
+                       _codeql_config()["paths-ignore"])
+
+    def test_the_workflow_actually_loads_this_config(self):
+        """A config file nothing points at is the project's own recurring
+        defect: complete, correct, and wired to no consumer. If the
+        `config-file:` line goes, CodeQL silently reverts to scanning
+        everything — which would be safe here, but the reverse edit (a config
+        that stops being read while its guard still passes) is not.
+        """
+        wf = CODEQL_WORKFLOW.read_text(encoding="utf-8")
+        assert "config-file: .github/codeql/config.yml" in wf, (
+            "codeql.yml no longer passes config-file, so .github/codeql/"
+            "config.yml is read by nothing")
+
+    def test_the_config_is_actually_being_parsed(self):
+        """Without this the three above pass on a file that was renamed or
+        restructured: the parser returns an empty list, `got == want` fails
+        loudly — but the two loop-based assertions would sail through."""
+        assert CODEQL_CONFIG.is_file(), f"no CodeQL config at {CODEQL_CONFIG}"
+        assert _codeql_config()["paths-ignore"], (
+            "the paths-ignore list parsed empty — the config's shape changed "
+            "and this guard is reading nothing")

@@ -1,0 +1,33 @@
+# CodeQL scope. Read the paths-ignore note before adding to it.
+name: "DreamLayer CodeQL config"
+
+# A `paths-ignore` entry switches security analysis off for everything it
+# matches, and reports the same clean result afterwards — the exact shape of
+# check this repository keeps finding (CLAUDE.md #1). So there is one entry, it
+# is as narrow as it can be, and test_lockfile.py asserts it stays that way.
+#
+# WHAT IS **NOT** IGNORED, deliberately: the test trees. CI has always scanned
+# host-python/src/dreamlayer/tests and phone-app's tests, and a hard-coded
+# token or an injection sink in a test file is a real alert here. That stays
+# true; this is not a step toward excluding tests.
+#
+# .semgrep/tests/ is not test code. It is the fixture corpus for the custom
+# Semgrep rules in .semgrep/dreamlayer.yml, and it exists to CONTAIN the
+# patterns a scanner should flag: eval(), pickle.loads(), subprocess with
+# shell=True, yaml.load without a SafeLoader, and requests/httpx with
+# verify=False. `semgrep --test` reads the annotations beside those lines and
+# fails the build when a rule stops matching them, which is the only thing that
+# can tell a clean repository from a switched-off rule.
+#
+# CodeQL was right about the file and wrong about the product: it raised two
+# high-severity py/request-without-cert-validation alerts on the fixture's two
+# verify=False lines (dreamlayer.py:156 and :158, read from the check
+# annotations, not guessed). Neither line is reachable — nothing imports this
+# file and nothing runs it — and neither can be removed or rewritten without
+# deleting the test for the requests-verify-false rule, since Semgrep matches
+# the literal `verify=False` keyword and would not match a constant.
+#
+# Nothing under .semgrep/ ships: it is not in the package, not on sys.path, and
+# not in any wheel.
+paths-ignore:
+  - ".semgrep/tests/**"
