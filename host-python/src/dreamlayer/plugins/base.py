@@ -107,13 +107,24 @@ class MemoryFacade:
                 "plugin memory access requires the declared 'memory' capability")
 
     def _recall_ok(self) -> bool:
+        """May this plugin read kept memories?
+
+        The permissive arms here are NOT the oversight they look like next to
+        `veiled()` above. Recall is unrestricted (decisions/0009): incognito
+        stops KEEPING, not asking, so a gate that cannot answer the recall
+        question lands on the same answer the Brain's own gate gives. Capture
+        is the asymmetric one and fails closed.
+
+        A gate that RAISES still refuses, because an exception is a broken
+        gate rather than a gate saying yes.
+        """
         v = self._veil
         if v is None or not hasattr(v, "allow_recall"):
             return True
         try:
             return bool(v.allow_recall())
-        except Exception:
-            return False                      # gate raised → fail closed (veiled)
+        except Exception:                      # noqa: BLE001
+            return False                       # broken gate → refuse
 
     def memories(self, kind: str | None = None) -> list:
         """Kept memories (optionally filtered by kind). ``[]`` while veiled."""
@@ -209,9 +220,27 @@ class PluginContext:
         return self._mesh
 
     def veiled(self) -> bool:
+        """Is the wearer's Veil up right now?
+
+        Fails CLOSED on a gate that cannot answer. Two arms, and the
+        difference between them is deliberate:
+
+        * ``v is None`` — no veil was wired at all. That is the documented
+          SDK / preview / unit-test shape, and permissive is correct there;
+          the plugin is not running next to a wearer.
+        * a veil WAS supplied but has no ``allow_capture``, or raises — it
+          reads as veiled. If somebody hands you a gate, honour it or refuse
+          it; a missing method is not consent. Previously both of these read
+          as "not veiled", so a partial gate silently disabled the shield
+          (decisions/0009).
+        """
         v = self._veil
-        return bool(v is not None and hasattr(v, "allow_capture")
-                    and not v.allow_capture())
+        if v is None:
+            return False
+        try:
+            return not bool(v.allow_capture())
+        except Exception:                      # noqa: BLE001 — unusable → veiled
+            return True
 
     @property
     def memory(self) -> "MemoryFacade":

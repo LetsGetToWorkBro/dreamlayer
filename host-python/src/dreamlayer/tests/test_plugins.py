@@ -126,3 +126,69 @@ def test_orchestrator_capability_gate_reflects_state():
     res = orc.load_plugins([make_plugin(
         "needs-mesh", lambda c: None, requires=("mesh",))])
     assert res.skipped and res.skipped[0][0] == "needs-mesh"
+
+
+class TestAPartialVeilIsNotConsent:
+    """`PluginContext` takes whatever veil it is handed, including from a
+    third-party embedder. The two questions answer differently on purpose, and
+    the asymmetry is easy to misread as a bug later — so it is pinned.
+
+    CAPTURE fails closed: a gate that cannot say "yes" must not be read as
+    having said it. RECALL does not, because recall is unrestricted
+    (decisions/0009) — incognito stops keeping, not asking — so an unanswerable
+    recall question lands on the same answer the Brain's own gate gives.
+    """
+
+    class _NoCapture:
+        """A gate that answers recall and not capture. Not hypothetical: two of
+        the Brain's twelve hand-written gates lacked `allow_recall` before they
+        were unified, so the mirror-image shape really did ship."""
+
+        def allow_recall(self) -> bool:
+            return True
+
+    class _Raises:
+        def allow_capture(self):
+            raise RuntimeError("trust store unreadable")
+
+        def allow_recall(self):
+            raise RuntimeError("trust store unreadable")
+
+    def test_no_veil_at_all_is_permissive_and_that_is_deliberate(self):
+        """The SDK / preview / unit shape. The plugin is not next to a wearer,
+        and refusing here would make every example refuse."""
+        assert PluginContext().veiled() is False
+
+    def test_a_gate_that_cannot_answer_capture_reads_as_veiled(self):
+        ctx = PluginContext(veil=self._NoCapture())
+        assert ctx.veiled() is True, (
+            "a supplied gate with no allow_capture silently disabled the "
+            "shield — a missing method is not consent")
+
+    def test_a_gate_that_raises_reads_as_veiled(self):
+        assert PluginContext(veil=self._Raises()).veiled() is True
+
+    @staticmethod
+    def _facade(veil):
+        """The recall half lives on `MemoryFacade`, which is what a plugin
+        actually touches — `ctx.memory`. Driven through `memories()` rather
+        than the private predicate, so this asserts what a plugin experiences.
+        """
+        from dreamlayer.memory.db import MemoryDB
+        from dreamlayer.plugins.base import MemoryFacade
+        db = MemoryDB(":memory:")
+        db.add_memory("note", "the lease is due Friday", confidence=1.0)
+        return MemoryFacade(db, caps=frozenset({"memory"}), veil=veil)
+
+    def test_recall_stays_open_where_capture_closes(self):
+        """The asymmetry itself, asserted in one place so the next reader sees
+        it is a decision rather than an oversight."""
+        gate = self._NoCapture()
+        assert PluginContext(veil=gate).veiled() is True
+        assert self._facade(gate).memories(), (
+            "recall is unrestricted (decisions/0009) — a plugin should still "
+            "read what the wearer already knows")
+
+    def test_but_a_broken_gate_still_refuses_recall(self):
+        """An exception is a broken gate, not a gate saying yes."""
+        assert self._facade(self._Raises()).memories() == []
