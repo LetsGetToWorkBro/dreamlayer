@@ -271,3 +271,78 @@ class TestTheTypeCheckingBacklogDoesNotGrowQuietly:
         assert not (core & excused), (
             f"{sorted(core & excused)} is excused from type checking — these "
             f"are the modules the Veil and the consent gate live in")
+
+
+# --- the secret scanner's allowlist ------------------------------------------
+GITLEAKS = ROOT.parent / ".gitleaks.toml"
+
+
+def _gitleaks() -> dict:
+    return tomllib.loads(GITLEAKS.read_text(encoding="utf-8"))
+
+
+#: The ONLY two paths where a gitleaks finding is suppressed wholesale, with
+#: what makes each defensible. A `paths` entry silences EVERY finding in a
+#: matching file regardless of value, so each one is a hole the size of the
+#: glob — which is why the list was cut down once already: it used to carry
+#: `(^|/)tests?/`, `__tests__/`, `test_*.py` and `*.test.*`, exempting every
+#: test path anywhere in the repository, so a real key committed to
+#: `deploy/tests/prod.env` sailed through (refute 2026-07-18).
+#:
+#: That reasoning lives in a comment in .gitleaks.toml, and a comment cannot
+#: tell when it stops being true. Re-widening the globs is a one-line diff that
+#: turns secret scanning off for whole subtrees with every check still green.
+DECIDED_SCANNER_EXEMPT_PATHS = [
+    ('''^host-python/src/dreamlayer/tests/''',
+     "the Python fixture tree the fake tokens were grepped from and pinned by "
+     "value below"),
+    ('''^phone-app/src/__tests__/''',
+     "the phone-app Jest fixture tree, same audit"),
+]
+
+
+class TestTheSecretScannerIsNotQuietlyWidened:
+    def test_the_exempt_paths_are_exactly_the_two_audited_trees(self):
+        got = list(_gitleaks()["allowlist"]["paths"])
+        want = [p for p, _ in DECIDED_SCANNER_EXEMPT_PATHS]
+        assert got == want, (
+            "the gitleaks path allowlist changed.\n\n"
+            + "\n".join(f"  {p} — {why}" for p, why in DECIDED_SCANNER_EXEMPT_PATHS)
+            + "\n\nA `paths` entry suppresses EVERY finding in a matching file "
+              "whatever its value, so a new or broadened glob switches secret "
+              "scanning off for that subtree. It was already too wide once. If "
+              "something outside these trees is genuinely fixture-shaped, pin "
+              "its VALUE in `regexes`/`stopwords` — those fire wherever the "
+              "string appears — and edit this table only for a real decision.")
+
+    def test_no_exemption_reaches_outside_a_test_tree(self):
+        """The property the list is trying to have, asserted directly rather
+        than by matching strings: an exemption that does not name a test
+        directory is exempting shipped code."""
+        for p in _gitleaks()["allowlist"]["paths"]:
+            assert "test" in p.lower(), (
+                f"{p!r} exempts a path that is not a test tree — shipped code "
+                f"must be scanned")
+            assert p.startswith("^"), (
+                f"{p!r} is unanchored, so it matches that segment ANYWHERE in "
+                f"the repository rather than at the root — which is exactly "
+                f"how the previous list became a blanket hole")
+
+    def test_the_env_example_is_still_scanned(self):
+        """Called out in .gitleaks.toml as deliberately NOT exempt: it holds
+        placeholders that never trip, and a real value pasted into it is
+        precisely the accident that should fail."""
+        for p in _gitleaks()["allowlist"]["paths"]:
+            assert "env" not in p.lower(), f"{p!r} exempts .env.example"
+
+    def test_the_allowlist_is_actually_being_read(self):
+        """Without this the three above pass on a parse that found nothing:
+        a renamed file or a restructured table gives empty lists, and every
+        loop and comparison over them succeeds."""
+        al = _gitleaks()["allowlist"]
+        assert GITLEAKS.is_file(), f"no .gitleaks.toml at {GITLEAKS}"
+        assert al["paths"], "the path allowlist parsed empty"
+        assert len(al.get("regexes", [])) >= 8, (
+            "the VALUE pins are what defend everything outside the two exempt "
+            "trees; finding almost none means this file is not being read")
+        assert len(al.get("stopwords", [])) >= 8
