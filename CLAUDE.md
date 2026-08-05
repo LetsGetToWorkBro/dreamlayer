@@ -23,6 +23,12 @@ these was green:
 | `src.count("loadConsent()") >= 2` | the definition line `async function loadConsent(){` contains the substring, so deleting the real call still left two hits |
 | `git diff … -- host-python/src/...` | run from `host-python/` with a repo-root-relative pathspec: matched no files, printed nothing, read exactly like "clean" |
 | a mutation test | the `sed` anchor never matched (`IntroHost`, not `IntroLive`), so the "surviving" mutation was measured against unmutated code |
+| `luacheck .` in CI | `.luacheckrc`'s `exclude_files` decides what it reads. Widen it and you get `0 warnings / 0 errors in 0 files` and **exit 0** — a green lint gate over nothing |
+| `"config-file: …" in workflow_yaml` | a guard against "a config nothing loads", which passed with the line **commented out** — `#` leaves the substring exactly where it was |
+| a Semgrep rule fixture | it pinned four hand-picked leaks against a 30-entry regex. Dropping `reply` from the pattern changed nothing: that case interpolated `juno_text`, still caught by the `_text$` key. It named one thing and proved another |
+| `body.count("confirm(") >= 3` | there are five, so two destructive actions could lose their guard and it still passed — and it could not say which |
+| 52 skipped tests | every one an `importorskip`. Legitimate locally, but CI installed none of those extras either, so the memory spine's tests ran in **no environment at all** |
+| `assert w.start() is False` | asserted the no-dependency fallback with nothing gating it on the dependency being absent. With watchdog installed it passed anyway — on `OSError` errno 28, the OS out of inotify watches |
 
 **The habit:** before trusting a pass, ask *what did this actually look at?*
 and make the test say so. `test_served_js_parses.py` pins this explicitly —
@@ -34,6 +40,20 @@ The same shape appears in production code, not only tests. Three CI gates read
 `uv.lock`; `piper-tts` had never been *in* the lock, so all three ran clean on
 an input that did not contain the problem — a GPL-3.0 dependency sat in a
 shipped extra for weeks. See `decisions/`.
+
+**Two corollaries worth stating separately, because they do not look like
+tests:**
+
+*A skip is a pass that examined nothing.* Ask where each `importorskip` runs,
+not just whether skipping is reasonable here. The answer for five small wheels
+was "nowhere" — `pytest.yml` already carried that argument for `networkx` and
+nobody had asked it of the rest.
+
+*A scanner with no findings and a scanner that stopped working produce the same
+output.* Six Semgrep rules, `luacheck`, and CodeQL's `paths-ignore` all report
+success over an empty set. Each now has something asserting it still looks at
+something: `semgrep --test` against a fixture, a file-count floor, and a pinned
+ignore list.
 
 ## 2. Mutation testing has three preconditions
 
@@ -48,6 +68,20 @@ produces confident nonsense when done loosely.
 3. **Restore from the repository root.** `git checkout -- host-python/x.py`
    from inside `host-python/` fails with *pathspec did not match*, and if you
    are not reading the output you carry the mutation into the next step.
+4. **Verify the mutation's EFFECT, not its text.** `SINKS = {} or {...}`
+   evaluates to the original dict: the file changed and the program did not.
+   Assert the thing you meant to break is broken (`len(SINKS) == 0`).
+
+**Do it to the test you just wrote, not only to old code.** Every guard added
+in the CLAUDE.md-#1 sweep was mutated immediately, and three failed:
+
+- a Semgrep fixture that covered 4 of a 30-entry regex,
+- a `config-file` check that a `#` satisfied,
+- a duplicate assertion — renaming an extra failed *two* tests, one more than
+  it should have, which is how the accidental copy was found.
+
+None of the three would have been visible from reading the test. A guard that
+has not been mutated is a guard nobody has checked.
 
 ## 3. Read the error before fixing it
 
@@ -61,6 +95,20 @@ file.
 If the alert body is not visible from the tooling you have, **ask for it**.
 One round of asking beats three of guessing, and guesses land real changes for
 false reasons.
+
+**You can usually fetch it yourself.** The check-run summary gives only a count
+("2 new alerts including 2 high severity"), but the annotations carry the file,
+line and rule:
+
+```
+curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
+  https://api.github.com/repos/<owner>/<repo>/check-runs/<id>/annotations
+```
+
+That is how the second CodeQL failure here was diagnosed in one step —
+`py/request-without-cert-validation` at two exact lines. The
+`/code-scanning/alerts` endpoint returns *Resource not accessible by
+integration* for the CI token; the check-run annotations endpoint works.
 
 ## 4. Run the whole thing, not the part you touched
 
