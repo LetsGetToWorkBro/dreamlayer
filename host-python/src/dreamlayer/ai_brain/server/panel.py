@@ -1822,8 +1822,14 @@ async function loadConsent(){
       html+=`<div class="navlabel" style="padding:14px 0 2px">${esc(SCOPEWORD[scope]||scope)}</div>`;}
     /* A refusal is worth SHOWING. A feature that quietly does nothing reads as
        broken; "it asked, and you have not said yes" is a different sentence. */
-    const tail = it.sent>0 ? `<span class="tag" style="margin-left:6px">used ${it.sent}×</span>`
-      : (it.refused>0 ? `<span class="tag" style="margin-left:6px">asked ${it.refused}× — not allowed</span>` : "");
+    /* Coerced to Number, not esc()'d. These are counts — `int(...)` server-side
+       in EgressConsent.report — so a number is the exact type, and taking one
+       leaves no path from the response body into innerHTML at all. Everything
+       else on this row goes through esc(); these two were the only holes, and
+       CodeQL was right to say so on #623. */
+    const sent = Number(it.sent) || 0, refused = Number(it.refused) || 0;
+    const tail = sent>0 ? `<span class="tag" style="margin-left:6px">used ${sent}×</span>`
+      : (refused>0 ? `<span class="tag" style="margin-left:6px">asked ${refused}× — not allowed</span>` : "");
     html+=`<div class="conn" style="padding:8px 0">
       <span style="width:8px;height:8px;border-radius:50%;flex:none;background:${it.allowed?"var(--success)":"var(--ghost)"}"></span>
       <div style="flex:1;min-width:0">

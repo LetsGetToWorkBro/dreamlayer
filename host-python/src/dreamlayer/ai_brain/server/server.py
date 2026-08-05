@@ -5556,8 +5556,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             key = str(b.get("key", "") or "").strip()
             sink = SINKS.get(key)
             if sink is None:
+                # The caller's own string is NOT echoed back. It is unvalidated
+                # input and reflecting it buys nothing — the client knows what
+                # it sent. `known` is from our registry, so it is safe to name
+                # and is the useful half anyway.
                 self._json(400, {"ok": False, "error": "unknown sink",
-                                 "key": key})
+                                 "known": sorted(SINKS)})
                 return
             if sink.switch is not None or sink.predicate is not None:
                 self._json(400, {
