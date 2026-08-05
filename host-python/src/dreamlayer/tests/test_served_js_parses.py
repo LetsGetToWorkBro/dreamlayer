@@ -7,6 +7,13 @@ on that page, not the section that introduced it, and nothing noticed: the
 render function returns a string either way, so Python is happy and the page is
 dead.
 
+The nine landing pages are here for the same reason and were found by asking
+the same question of the rest of the repository: they carry ~208k characters of
+JavaScript inline in their HTML — more than the control panel — and no workflow
+read any of it. The two landing modules that are real .js files are at least
+named in registry.yml's path filter; the inline blocks were checked by nothing
+at all, on the public site.
+
 The card-parity tests read `live._PAGE` and search it for renderer names. Those
 searches pass just as well on JavaScript that cannot parse, which is the shape
 of check this repo keeps finding: green, and answering a narrower question than
@@ -66,18 +73,39 @@ class _ScriptBodies(HTMLParser):
     swap.
     """
 
+    #: Script types whose body is JavaScript. A `type` naming anything else —
+    #: application/ld+json, importmap, text/template — is data or markup that a
+    #: JS parser is right to reject, so feeding it to `node --check` would fail
+    #: the build on correct pages. Empty means "no type attribute".
+    JS_TYPES = {"", "text/javascript", "application/javascript",
+                "text/ecmascript", "application/ecmascript", "module"}
+
     def __init__(self):
         super().__init__()
         self.bodies: list[str] = []
+        self.modules: list[bool] = []
         self._buf: list[str] | None = None
+        self._is_module = False
 
     def handle_starttag(self, tag, attrs):
-        if tag == "script":
-            self._buf = []
+        if tag != "script":
+            return
+        a = {k.lower(): (v or "") for k, v in attrs}
+        # An external script has no body to check — including it added an empty
+        # string to `bodies`, which inflates a count that is used as evidence
+        # the scan found something.
+        if "src" in a:
+            return
+        kind = a.get("type", "").strip().lower()
+        if kind not in self.JS_TYPES:
+            return
+        self._buf = []
+        self._is_module = kind == "module"
 
     def handle_endtag(self, tag):
         if tag == "script" and self._buf is not None:
             self.bodies.append("".join(self._buf))
+            self.modules.append(self._is_module)
             self._buf = None
 
     def handle_data(self, data):
@@ -90,6 +118,20 @@ def _extract(html: str) -> list[str]:
     p.feed(html)
     p.close()
     return p.bodies
+
+
+def _extract_typed(html: str) -> list[tuple[str, bool]]:
+    """As `_extract`, but keeping whether each body is an ES module.
+
+    `node --check` picks a goal symbol from --input-type, and `import`/`export`
+    at the top level is a syntax error under `commonjs`. Checking a module as a
+    script would fail a correct page, which is the way a parse gate gets turned
+    off rather than fixed.
+    """
+    p = _ScriptBodies()
+    p.feed(html)
+    p.close()
+    return list(zip(p.bodies, p.modules))
 
 
 #: (name, rendered html, floor). The floor is a non-vacuity guard, not a size
@@ -145,3 +187,55 @@ def test_the_nonce_does_not_change_the_code():
     here uses would stop representing what a browser actually runs under CSP.
     """
     assert _extract(render_live()) == _extract(render_live("test-nonce"))
+
+
+# --- the public site, which is served too ------------------------------------
+#: The landing pages carry ~208k characters of JavaScript INLINE in their HTML —
+#: more than the control panel above — and nothing parsed any of it. The two
+#: landing modules that are real .js files (figment.js, search.js) are at least
+#: named in registry.yml's path filter; the inline blocks are in nine .html
+#: files that no workflow reads. A syntax error in one takes out every control
+#: on that page, exactly as it would on the panel, and the page still serves.
+LANDING = Path(__file__).parents[4] / "landing"
+
+
+def _landing_pages() -> list[Path]:
+    return sorted(p for p in LANDING.rglob("*.html")
+                  if _extract_typed(p.read_text(encoding="utf-8", errors="replace")))
+
+
+class TestThePublicSiteParsesToo:
+    def test_the_scan_actually_reaches_the_landing_pages(self):
+        """The floor, again, for the reason it is always here: `rglob` on a
+        missing directory yields nothing, the parametrised test below collapses
+        to zero cases, and pytest reports success over a site it never opened.
+        """
+        assert LANDING.is_dir(), f"the landing site is not at {LANDING}"
+        pages = _landing_pages()
+        assert len(pages) >= 8, (
+            f"only {len(pages)} landing pages carry inline script — the "
+            f"extractor has probably stopped matching rather than the site "
+            f"having been rewritten")
+        total = sum(len(b) for p in pages
+                    for b, _ in _extract_typed(p.read_text(encoding="utf-8")))
+        assert total > 100_000, (
+            f"only {total} characters of inline JavaScript found across the "
+            f"landing site — it was ~208k when this was written")
+
+    @pytest.mark.parametrize("page", _landing_pages(),
+                             ids=[p.name for p in _landing_pages()])
+    def test_a_landing_page_javascript_parses(self, page):
+        node = _find_node()
+        if not node:
+            pytest.skip("no node runtime to parse the landing JS")
+        for i, (body, is_module) in enumerate(
+                _extract_typed(page.read_text(encoding="utf-8"))):
+            if len(body.strip()) < 5:
+                continue
+            out = subprocess.run(
+                [node, "--input-type=module" if is_module else
+                 "--input-type=commonjs", "--check", "-"],
+                input=body, capture_output=True, text=True, timeout=60)
+            assert out.returncode == 0, (
+                f"{page.name} script block {i} does not parse — every control "
+                f"on that page is dead, not just the newest one:\n{out.stderr}")
