@@ -160,11 +160,18 @@ class TestWhereItIsWiredAndWhereItIsNot:
         from dreamlayer.ai_brain.server import retention_live, lens_hosts
         for mod in (retention_live, lens_hosts):
             src = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
-            for line in src.splitlines():
-                if "MemoryDB(" in line:
-                    assert "privacy" not in line, (
-                        f"{mod.__name__} now gates a store the Brain only reads "
-                        "from — check the ember tombstone still writes while veiled")
+            sites = [ln for ln in src.splitlines() if "MemoryDB(" in ln]
+            # Without this the test passes when the construction is RENAMED or
+            # moved: no line matches, the loop body never runs, and "the store
+            # is ungated" is asserted about nothing.
+            assert sites, (
+                f"{mod.__name__} no longer constructs MemoryDB( — this check "
+                "has stopped looking at anything; find where the store is "
+                "built now")
+            for line in sites:
+                assert "privacy" not in line, (
+                    f"{mod.__name__} now gates a store the Brain only reads "
+                    "from — check the ember tombstone still writes while veiled")
 
     def test_a_tombstone_still_writes_while_veiled(self):
         """The behavioural half of the above, not just the source check."""

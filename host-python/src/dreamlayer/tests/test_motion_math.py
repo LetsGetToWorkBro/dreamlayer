@@ -154,6 +154,7 @@ def test_lua_constants_match_python_mirror(lua):
         "PRISM_RING_R_A": mm.PRISM_RING_R_A,
         "PRISM_RING_R_B": mm.PRISM_RING_R_B,
     }
+    assert pairs, "no constant pairs found — this loop would check nothing"
     for name, expect in pairs.items():
         got = lua.eval(f"A.{name}")
         assert float(got) == pytest.approx(float(expect)), name

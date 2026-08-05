@@ -98,6 +98,7 @@ def test_profile_groups_match_pyproject_exactly():
 
 def test_profile_extras_only_reference_adapter_groups():
     non_profile = {k for k in _optional_deps() if not k.startswith("profile-")}
+    assert C.PROFILES, "no profiles declared — this loop would check nothing"
     for extras in C.PROFILES.values():
         assert set(extras) <= non_profile
 

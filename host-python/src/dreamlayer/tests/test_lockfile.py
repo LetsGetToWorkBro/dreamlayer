@@ -97,6 +97,7 @@ class TestTheConflictTableNamesRealThings:
             frozenset(i["extra"] for i in pair)
             for pair in _pyproject()["tool"]["uv"]["conflicts"]
         }
+        assert declared, "no extras declared — this loop would check nothing"
         for name, entries in declared.items():
             if not name.startswith("profile-"):
                 continue

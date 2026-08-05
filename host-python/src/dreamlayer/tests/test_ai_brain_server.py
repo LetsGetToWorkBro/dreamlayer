@@ -591,7 +591,17 @@ class TestDarkModeCoverage:
         html = render_panel(token="t")
         import re
         exempt = {"input,select,textarea", ".qrbox", ".diritem:hover:before"}
-        for m in re.finditer(r"([^\n{]+?)\{background:#[fF]{3}(?:[fF]{3}|[eE]8)[^}]*\}", html):
+        found = list(re.finditer(
+            r"([^\n{]+?)\{background:#[fF]{3}(?:[fF]{3}|[eE]8)[^}]*\}", html))
+        # The regex is the whole test. A CSS refactor that writes
+        # `background: #fff` with a space, or `#ffffff` in another form, drops
+        # this to zero matches and the loop below then asserts nothing at all
+        # while staying green. Floor, not a count: new white cards are fine.
+        assert len(found) >= 3, (
+            f"the hardcoded-white scan found only {len(found)} rules — the "
+            "pattern has probably stopped matching rather than the panel "
+            "having lost its white cards")
+        for m in found:
             selector = m.group(1).strip()
             if selector in exempt:
                 continue

@@ -66,6 +66,7 @@ class TestValidatorGate:
 
 class TestRegistrySummaries:
     def test_every_capability_has_a_summary(self):
+        assert CAPABILITIES, "no capabilities declared — this loop would check nothing"
         for name, cap in CAPABILITIES.items():
             assert cap.name == name
             assert cap.summary and isinstance(cap.summary, str)
