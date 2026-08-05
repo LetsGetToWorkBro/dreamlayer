@@ -13,6 +13,8 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import pytest
+
 from dreamlayer.ai_brain.server import Brain, BrainConfig
 import dreamlayer.ai_brain.server.server as srv
 from dreamlayer.capabilities import CAPABILITIES, report
@@ -307,13 +309,32 @@ class TestPanelContract:
         for needle in ("capInfo", "packInfo", "meterPair", 'class="imodal"', "ibtn"):
             assert needle in body, f"info-bubble piece missing: {needle}"
 
-    def test_destructive_actions_still_confirm(self):
-        """Rotate/erase/restore keep their confirm() — the WKUIDelegate makes
-        those real dialogs in the native window now; they must not lose the
-        guard just because installs dropped theirs."""
+    @pytest.mark.parametrize("fn,what", [
+        ("rotateToken", "every paired phone has to pair again"),
+        ("clearData", "stored history/settings/agenda are erased"),
+        ("restore", "a backup replaces the current settings and history"),
+        ("voiceConsent", "withdrawing consent erases every voiceprint"),
+        ("voiceForgetAll", "every voiceprint and the names given them go"),
+    ])
+    def test_a_destructive_action_still_confirms(self, fn, what):
+        """Each one, named — the WKUIDelegate makes these real dialogs in the
+        native window; they must not lose the guard just because installs
+        dropped theirs.
+
+        This was `body.count("confirm(") >= 3` over the whole page. There are
+        five, so it passed with two of them deleted, and it could not say which
+        — a count answering a narrower question than it appears to, the shape
+        that already survived deleting a real call here once (see
+        test_consent_routes.py). Asserted inside each function instead, so the
+        failure names the action that lost its guard.
+        """
         from dreamlayer.ai_brain.server.panel import render_panel
         body = render_panel("")
-        assert body.count("confirm(") >= 3
+        i = body.find(f"function {fn}(")
+        assert i != -1, f"{fn} is gone from the panel — re-anchor this test"
+        block = body[i:i + 700]
+        assert "confirm(" in block, (
+            f"{fn} no longer asks before it acts: {what}")
 
 
 class TestWebviewDelegate:
