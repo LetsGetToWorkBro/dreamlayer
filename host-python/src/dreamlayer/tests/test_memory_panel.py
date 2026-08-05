@@ -340,3 +340,33 @@ def test_panel_islocalurl_transliteration_matches_served_js_when_node_present():
         assert _js_islocalurl_py(u) == jr, (
             f"transliteration drift on {u!r}: python={_js_islocalurl_py(u)!r} "
             f"served-js={jr!r} — update _js_islocalurl_py to match panel.py")
+
+
+def test_the_served_panel_javascript_parses():
+    """The whole panel is one 170k-character JS blob assembled in a Python
+    string, and a syntax error anywhere in it takes out EVERY control — not
+    the section that introduced it. Nothing in the suite noticed that class of
+    break: `render_panel` returns a string, so Python is happy, and the only
+    symptom is a dead page.
+
+    Added after hand-editing that blob to add the consent section (#610), which
+    is exactly the edit that could have done it. Parses the real served page
+    with `node --check`, so it covers every block rather than the one function
+    the classifier test extracts. Skipped when node is unavailable — same rule
+    as the tests above.
+    """
+    node = _find_node()
+    if not node:
+        pytest.skip("no node runtime to parse the served panel JS")
+    html = render_panel(token="t")
+    bodies = re.findall(r"<script[^>]*>(.*?)</script>", html, re.S)
+    assert bodies, "no <script> in the served panel — has it moved?"
+    assert sum(len(b) for b in bodies) > 50_000, (
+        "the panel JS shrank by more than half — this test is probably "
+        "parsing the wrong thing rather than the page getting smaller")
+    out = subprocess.run([node, "--check", "-"],
+                         input="\n".join(bodies), capture_output=True,
+                         text=True, timeout=30)
+    assert out.returncode == 0, (
+        "the served panel JS does not parse — every control on the page is "
+        f"dead, not just the newest one:\n{out.stderr}")
