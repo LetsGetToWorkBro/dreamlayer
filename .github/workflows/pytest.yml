@@ -65,6 +65,26 @@ jobs:
         # contributor can't quietly land dead code or an undefined name.
         run: ruff check src/dreamlayer
 
+      - name: "Lint — ruff over the repo's other Python"
+        # The same ruleset, over the 61 files outside the package: dev scripts,
+        # the demo kit, the examples, the companion. This ran nowhere. `ruff
+        # check src/dreamlayer` is scoped to the package, so a syntax error or
+        # an undefined name in scripts/ was found by running the script, and
+        # the demo kit had accumulated 47 findings unseen.
+        #
+        # Brought to zero in the same commit, which is the only reason this can
+        # be a gate rather than a backlog. Same rules as above, deliberately:
+        # two ruff configurations drift, and the second one loses.
+        #
+        # `--config` is explicit because these paths are outside host-python/
+        # where pyproject.toml lives; without it ruff falls back to its own
+        # defaults and silently checks a different ruleset than the name of
+        # this step claims.
+        working-directory: .
+        run: |
+          ruff check --config host-python/pyproject.toml \
+            scripts tools examples web laptop-companion
+
       - name: Typecheck — mypy over the whole dreamlayer package
         # Was 4 of 323 files behind --follow-imports=skip; the repo-wide typing
         # pass landed (audit 2026-07-14, Type-Safety C+ -> A-), so the gate now

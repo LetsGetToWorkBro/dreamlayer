@@ -5,8 +5,7 @@ framed browser posters, dev-story posters, and hero montages. Animated demos
 from __future__ import annotations
 import sys
 from pathlib import Path
-import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 import devices as D
 
 WEB = Path("/tmp/web_out/raw"); BG = Path("/tmp/web_out/bgseq"); DEV = Path("/tmp/dev_out")
@@ -52,9 +51,6 @@ disc_poster(Image.open(BG/"bg_00.png"),"Live preview",
             "your lens on the round glasses display — exactly what ships").save(OUT/"builder"/"builder_preview.png")
 
 # ---------------- Dev / SDK ----------------
-def devwin(img_path, url_title, W, H, title, sub):
-    card = D.shadow(Image.open(img_path).convert("RGB").convert("RGBA"), blur=40, alpha=150)
-    return poster(Image.open(img_path).convert("RGB").convert("RGBA"), W, H, title, sub)
 poster(Image.open(DEV/"dev_terminal.png").convert("RGBA"), 1500, 1080,
        "Build a plugin", "one import surface, one command — new · validate · preview · pack · install").save(OUT/"dev"/"dev_terminal.png")
 poster(Image.open(DEV/"dev_code.png").convert("RGBA"), 1500, 960,

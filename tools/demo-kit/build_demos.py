@@ -4,7 +4,6 @@ window, cycle the builder preview backgrounds, and a disc for the terminal typin
 from __future__ import annotations
 import sys
 from pathlib import Path
-import numpy as np
 from PIL import Image, ImageDraw
 import devices as D
 
@@ -20,10 +19,9 @@ def scroll_frames(full_png, url, outdir, win_w=1500, view_ar=0.66, nframes=150, 
     view_h=int(win_w*view_ar)
     max_off=max(1, full.height-view_h)
     # frame the viewport once to get chrome; we paste crops into it
-    W=H=None
     fi=0
     # easing pan down then a short hold
-    pan=int(nframes*0.82); hold=nframes-pan
+    pan=int(nframes*0.82)
     for f in range(nframes):
         t=min(1.0, f/max(1,pan))
         e=t*t*(3-2*t)  # smoothstep

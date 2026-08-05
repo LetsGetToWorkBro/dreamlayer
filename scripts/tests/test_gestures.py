@@ -39,8 +39,7 @@ from pathlib import Path
 import pytest
 
 try:
-    import lupa  # type: ignore
-    from lupa import LuaRuntime
+    from lupa import LuaRuntime  # type: ignore
     HAS_LUPA = True
 except ImportError:
     HAS_LUPA = False
@@ -344,10 +343,10 @@ class TestNoiseImmunity:
         assert _run_lua(lua, stream) == []
 
     def test_reset_clears_state(self, lua, gesture_module):
-        script = f"""
+        script = """
           local ok, err = pcall(function()
-            local fired = {{}}
-            local G = _M.new({{on_gesture = function(n,c) fired[#fired+1]={{n,c}} end}})
+            local fired = {}
+            local G = _M.new({on_gesture = function(n,c) fired[#fired+1]={n,c} end})
             for i = 0, 7 do G:feed(0, 35, 0, i*20) end
             G:reset()
             for i = 0, 7 do G:feed(0, -35, 0, 400 + i*20) end

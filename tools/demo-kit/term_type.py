@@ -2,7 +2,6 @@
 each command line is typed one char at a time, then its output appears, then the
 next command types. Writes /tmp/dev_out/term/f_*.png (consumed by build_popup)."""
 from __future__ import annotations
-import sys
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 

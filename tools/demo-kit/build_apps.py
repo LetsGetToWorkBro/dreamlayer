@@ -4,7 +4,6 @@ the iPhone app and the Mac Brain panel from the real screenshots.
 from __future__ import annotations
 import sys
 from pathlib import Path
-import numpy as np
 from PIL import Image, ImageDraw
 import devices as D
 

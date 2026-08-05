@@ -3,7 +3,7 @@ recognizable app icons, and Finder windows (toolbar + sidebar + icon grid).
 Aimed at screen-recording fidelity at 1080p."""
 from __future__ import annotations
 import math
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 def font(px, bold=True):
     p = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
