@@ -19,51 +19,15 @@ function".
 """
 from __future__ import annotations
 
-import json
-import threading
-import urllib.error
-import urllib.request
-
 import pytest
 
-from dreamlayer.ai_brain.server.server import Brain, make_brain_server
-from dreamlayer.ai_brain.server.store import BrainConfig
-
-
-class _Live:
-    def __init__(self, tmp_path, token="tok"):
-        cfg = tmp_path / "cfg"
-        cfg.mkdir(exist_ok=True)
-        BrainConfig(token=token).save(cfg)
-        self.brain = Brain(cfg)
-        self.server = make_brain_server(self.brain, "127.0.0.1", 0)
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
-        self.h = {"X-DreamLayer-Token": token}
-
-    def get(self, path):
-        req = urllib.request.Request(self.url + path, headers=self.h)
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        try:
-            with opener.open(req, timeout=5) as r:
-                return r.status, json.loads(r.read().decode())
-        except urllib.error.HTTPError as e:
-            return e.code, None
-
-    def post(self, path, payload):
-        req = urllib.request.Request(
-            self.url + path, data=json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json", **self.h})
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        try:
-            with opener.open(req, timeout=5) as r:
-                return r.status, json.loads(r.read().decode())
-        except urllib.error.HTTPError as e:
-            return e.code, None
-
-    def stop(self):
-        self.server.shutdown()
-        self.server.server_close()
+from dreamlayer.ai_brain.server.server import Brain
+# The socket harness is IMPORTED, not copied. The first draft pasted `_Live`
+# in here, which duplicated its `token="tok"` default into a new file and gave
+# CodeQL a fresh py/hardcoded-credentials location to report — the one thing
+# CI was failing on. Sharing it is the better answer regardless: two copies of
+# a test server drift, and the copy loses whatever the original learns.
+from dreamlayer.tests.test_brain_lens_wiring import _Live
 
 
 @pytest.fixture

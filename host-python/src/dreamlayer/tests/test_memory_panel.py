@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 import shutil
 import subprocess
 from pathlib import Path
@@ -358,7 +359,11 @@ def test_the_served_panel_javascript_parses():
     node = _find_node()
     if not node:
         pytest.skip("no node runtime to parse the served panel JS")
-    html = render_panel(token="t")
+    # A generated token, not a literal. The value is irrelevant here — the page
+    # renders either way — and a new `token="..."` literal is a fresh
+    # py/hardcoded-credentials location for CodeQL, which is a real cost for
+    # nothing gained.
+    html = render_panel(token=secrets.token_hex(8))
     bodies = re.findall(r"<script[^>]*>(.*?)</script>", html, re.S)
     assert bodies, "no <script> in the served panel — has it moved?"
     assert sum(len(b) for b in bodies) > 50_000, (
