@@ -245,3 +245,34 @@ class TestSomethingActuallyDrawsIt:
         src = self._panel()
         assert "it.needs_grant" in src
         assert "async function setConsent" in src
+
+    def test_it_builds_nodes_rather_than_an_html_string(self):
+        """CodeQL flagged the first draft high-severity, and it was right.
+
+        `esc()` in this panel is a correct escaper, but CodeQL cannot see it as
+        a sanitizer, so any `innerHTML = <string built from a response>` reads
+        as js/xss. More to the point the objection is sound: that pattern is
+        safe only while every future edit remembers to wrap every field, and
+        `textContent` cannot be got wrong.
+
+        Asserted over the consent renderer only. The rest of the panel still
+        uses the string-building pattern and changing all of it is a separate
+        job — but nothing NEW should arrive that way.
+        """
+        src = self._panel()
+        i = src.index("async function loadConsent")
+        j = src.index("/* --- packs:", i)
+        block = src[i:j]
+        assert "innerHTML" not in block, (
+            "the consent rows are built by string again — use mkEl/textContent")
+        assert "textContent" in block and "mkEl(" in block
+
+    def test_the_control_binds_a_listener_not_an_inline_handler(self):
+        """An `onclick="setConsent('...')"` attribute puts a response value
+        inside executable markup, which is the same taint path one layer along
+        and cannot be fixed by escaping alone."""
+        src = self._panel()
+        i = src.index("function consentControl")
+        block = src[i:i + 900]
+        assert "addEventListener" in block
+        assert "onclick" not in block

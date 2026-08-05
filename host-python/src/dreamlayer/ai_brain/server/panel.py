@@ -1807,6 +1807,26 @@ function renderCaps(r){
    the panel and the gate's own account of itself out of step. */
 const SCOPEWORD={internet:"the internet",radio:"radio, in the open",
                  lan:"your own network",on_device:"stays here"};
+/* Built with DOM calls, not an HTML string.
+
+   `esc()` above is a correct escaper, but CodeQL cannot see it as a sanitizer,
+   so any new `innerHTML = <string built from a response>` is a high-severity
+   js/xss alert. The objection is sound beyond satisfying the tool: that
+   pattern is safe only while every future edit remembers to wrap every field,
+   and `textContent` cannot be got wrong. Same reason the button binds a
+   listener instead of carrying an interpolated onclick= attribute, which puts
+   a response value inside executable markup where escaping does not help.
+
+   Named mkEl, NOT el: about twenty functions in this file already use `el` as
+   a local const for "the element I just looked up". A global `el` would work
+   only because each of those shadows it, and the first person to call el(...)
+   inside one of them gets "el is not a function". */
+function mkEl(tag, cls, text){
+  const n=document.createElement(tag);
+  if(cls)n.className=cls;
+  if(text!=null)n.textContent=text;
+  return n;
+}
 async function loadConsent(){
   let r; try{r=await api("/dreamlayer/consent");}catch(e){return;}
   const rows=r.sinks||[];
@@ -1816,39 +1836,57 @@ async function loadConsent(){
     : "Nothing has left this device";
   $("consentSub").textContent = rows.filter(x=>x.allowed).length
     + " of " + rows.length + " paths are currently allowed";
-  let html="",scope="";
+  const box=$("consentRows");
+  box.textContent="";
+  let scope="";
   rows.forEach(it=>{
-    if(it.scope!==scope){scope=it.scope;
-      html+=`<div class="navlabel" style="padding:14px 0 2px">${esc(SCOPEWORD[scope]||scope)}</div>`;}
+    if(it.scope!==scope){
+      scope=it.scope;
+      const h=mkEl("div","navlabel",SCOPEWORD[scope]||scope);
+      h.style.padding="14px 0 2px";
+      box.appendChild(h);
+    }
+    const row=mkEl("div","conn"); row.style.padding="8px 0";
+    const dot=mkEl("span");
+    dot.style.cssText="width:8px;height:8px;border-radius:50%;flex:none";
+    dot.style.background=it.allowed?"var(--success)":"var(--ghost)";
+    row.appendChild(dot);
+
+    const mid=mkEl("div"); mid.style.cssText="flex:1;min-width:0";
+    const title=mkEl("div","conn-t",it.key);
     /* A refusal is worth SHOWING. A feature that quietly does nothing reads as
-       broken; "it asked, and you have not said yes" is a different sentence. */
-    /* Coerced to Number, not esc()'d. These are counts — `int(...)` server-side
-       in EgressConsent.report — so a number is the exact type, and taking one
-       leaves no path from the response body into innerHTML at all. Everything
-       else on this row goes through esc(); these two were the only holes, and
-       CodeQL was right to say so on #623. */
-    const sent = Number(it.sent) || 0, refused = Number(it.refused) || 0;
-    const tail = sent>0 ? `<span class="tag" style="margin-left:6px">used ${sent}×</span>`
-      : (refused>0 ? `<span class="tag" style="margin-left:6px">asked ${refused}× — not allowed</span>` : "");
-    html+=`<div class="conn" style="padding:8px 0">
-      <span style="width:8px;height:8px;border-radius:50%;flex:none;background:${it.allowed?"var(--success)":"var(--ghost)"}"></span>
-      <div style="flex:1;min-width:0">
-        <div class="conn-t">${esc(it.key)}${tail}</div>
-        <div class="conn-s" style="margin-top:2px">${esc(it.what)} &rarr; ${esc(it.where)}</div></div>
-      <div class="row" style="gap:8px;flex:none">${consentRight(it)}</div></div>`;
+       broken; "it asked, and you have not said yes" is a different sentence.
+       Counts are `int(...)` server-side, so Number() is the exact type. */
+    const sent=Number(it.sent)||0, refused=Number(it.refused)||0;
+    if(sent>0||refused>0){
+      const tag=mkEl("span","tag",
+        sent>0?`used ${sent}\u00d7`:`asked ${refused}\u00d7 \u2014 not allowed`);
+      tag.style.marginLeft="6px";
+      title.appendChild(tag);
+    }
+    mid.appendChild(title);
+    const sub=mkEl("div","conn-s",`${it.what} \u2192 ${it.where}`);
+    sub.style.marginTop="2px";
+    mid.appendChild(sub);
+    row.appendChild(mid);
+
+    const right=mkEl("div","row"); right.style.cssText="gap:8px;flex:none";
+    right.appendChild(consentControl(it));
+    row.appendChild(right);
+    box.appendChild(row);
   });
-  $("consentRows").innerHTML=html;
 }
-function consentRight(it){
-  /* Only the no-switch sinks get a control here. The rest already have one
-     source of truth — the feature's own toggle — and a second one on this row
-     is how the two drift apart and the panel starts lying. The route refuses
-     them with a 400 for the same reason. */
+function consentControl(it){
+  /* Only the no-switch sinks get a control. The rest already have one source of
+     truth — the feature's own toggle — and a second one on this row is how the
+     two drift apart and the panel starts lying. The route refuses them with a
+     400 for the same reason. */
   if(!it.needs_grant)
-    return `<span class="sstate">${it.allowed?"on":"follows its own setting"}</span>`;
-  return it.allowed
-    ? `<button class="sm ghost danger" onclick="setConsent(${esc(JSON.stringify(it.key))},false)">Withdraw</button>`
-    : `<button class="sm" onclick="setConsent(${esc(JSON.stringify(it.key))},true)">Allow</button>`;
+    return mkEl("span","sstate",it.allowed?"on":"follows its own setting");
+  const b=mkEl("button", it.allowed?"sm ghost danger":"sm",
+               it.allowed?"Withdraw":"Allow");
+  b.addEventListener("click",()=>setConsent(it.key,!it.allowed));
+  return b;
 }
 async function setConsent(key,granted){
   try{await api("/dreamlayer/consent",{method:"POST",
