@@ -1156,6 +1156,21 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   </section>
 
   <section>
+    <div class="eyebrow">Trust &amp; data</div><h2>What can reach past this device</h2>
+    <p class="lead">Every path that can send something somewhere, what it sends, and where it goes —
+      listed furthest-reaching first. Most follow a switch you have already set; the ones that need a
+      yes of their own are marked. The Veil always wins: while Incognito or in quiet hours, none of
+      these send anything.</p>
+    <div class="conn" id="consentBanner" style="align-items:center;gap:12px">
+      <div style="flex:1;min-width:0">
+        <div class="conn-t" id="consentHead">Loading…</div>
+        <div class="conn-s" id="consentSub">&nbsp;</div>
+      </div>
+    </div>
+    <div id="consentRows"></div>
+  </section>
+
+  <section>
     <div class="eyebrow">Proof</div><h2>Privacy receipt</h2>
     <p class="lead">A signed, tamper-evident record of what the Brain did — each entry sealed to
       the one before it and signed by this device's key. Verify it right here, offline; export a
@@ -1784,6 +1799,57 @@ function renderCaps(r){
   });
   $("caprows").innerHTML=html;
 }
+
+/* --- what can reach past this device -------------------------------------
+   The registry (ai_brain/server/consent_gate.py) was computed on every status
+   poll and drawn by nothing (#610). `what` and `where` are rendered VERBATIM:
+   they are written for a person deciding, and re-wording them here would put
+   the panel and the gate's own account of itself out of step. */
+const SCOPEWORD={internet:"the internet",radio:"radio, in the open",
+                 lan:"your own network",on_device:"stays here"};
+async function loadConsent(){
+  let r; try{r=await api("/dreamlayer/consent");}catch(e){return;}
+  const rows=r.sinks||[];
+  const out=rows.filter(x=>x.sent>0&&x.scope!=="on_device").length;
+  $("consentHead").textContent = r.anything_left
+    ? `Something has left this device (${out} ${out===1?"path":"paths"} used)`
+    : "Nothing has left this device";
+  $("consentSub").textContent = rows.filter(x=>x.allowed).length
+    + " of " + rows.length + " paths are currently allowed";
+  let html="",scope="";
+  rows.forEach(it=>{
+    if(it.scope!==scope){scope=it.scope;
+      html+=`<div class="navlabel" style="padding:14px 0 2px">${esc(SCOPEWORD[scope]||scope)}</div>`;}
+    /* A refusal is worth SHOWING. A feature that quietly does nothing reads as
+       broken; "it asked, and you have not said yes" is a different sentence. */
+    const tail = it.sent>0 ? `<span class="tag" style="margin-left:6px">used ${it.sent}×</span>`
+      : (it.refused>0 ? `<span class="tag" style="margin-left:6px">asked ${it.refused}× — not allowed</span>` : "");
+    html+=`<div class="conn" style="padding:8px 0">
+      <span style="width:8px;height:8px;border-radius:50%;flex:none;background:${it.allowed?"var(--success)":"var(--ghost)"}"></span>
+      <div style="flex:1;min-width:0">
+        <div class="conn-t">${esc(it.key)}${tail}</div>
+        <div class="conn-s" style="margin-top:2px">${esc(it.what)} &rarr; ${esc(it.where)}</div></div>
+      <div class="row" style="gap:8px;flex:none">${consentRight(it)}</div></div>`;
+  });
+  $("consentRows").innerHTML=html;
+}
+function consentRight(it){
+  /* Only the no-switch sinks get a control here. The rest already have one
+     source of truth — the feature's own toggle — and a second one on this row
+     is how the two drift apart and the panel starts lying. The route refuses
+     them with a 400 for the same reason. */
+  if(!it.needs_grant)
+    return `<span class="sstate">${it.allowed?"on":"follows its own setting"}</span>`;
+  return it.allowed
+    ? `<button class="sm ghost danger" onclick="setConsent(${esc(JSON.stringify(it.key))},false)">Withdraw</button>`
+    : `<button class="sm" onclick="setConsent(${esc(JSON.stringify(it.key))},true)">Allow</button>`;
+}
+async function setConsent(key,granted){
+  try{await api("/dreamlayer/consent",{method:"POST",
+    body:JSON.stringify({key:key,granted:granted})});}
+  catch(e){toast("Could not change that");return;}
+  loadConsent();
+}
 /* --- packs: curated upgrades so single capabilities are never overlooked --- */
 const PACKSTATE={installed:"installed",partial:"partially installed",available:""};
 function packCard(p){
@@ -2090,6 +2156,7 @@ async function load(){
   renderPlan(c.plan);
   refreshStatus(); loadHistory(); loadHealth(); loadAgenda(); loadPeople(); loadCalendars();
   loadContactsSync(); loadReminders(); loadCaps(); loadReceipt(); refreshVoice();
+  loadConsent();
 }
 
 function fmtWhen(ts){if(!ts)return "";const d=new Date(ts*1000);
