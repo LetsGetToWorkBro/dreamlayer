@@ -68,24 +68,59 @@ jobs:
           CEILINGS = {
               "contracts": 0,       # the proof core: always zero
               "signer": 0,          # the deploy trust anchor: always zero
-              "budgets": 213,       # diagnostic-string + equivalent residue
+              # budgets.py — 230, measured. Was 213 until #530 replaced the
+              # flood check's exponential cycle enumeration with two real
+              # algorithms, which arrived with no direct tests: the count went
+              # to 291 and THIS JOB HAS BEEN RED EVERY WEEK SINCE (2026-07-27
+              # and 2026-08-03), unnoticed, because it is scheduled and never a
+              # merge gate.
+              #
+              # test_budgets_cycle_math.py now tests the three functions
+              # directly and killed 61 of them: _zero_time_cycle 25 -> 2 (the
+              # two left set BLACK to 3 and to None, and BLACK is a sentinel —
+              # any value that is neither WHITE nor GREY behaves identically),
+              # _max_ratio_cycle 39 -> 18, _cycle_analysis 46 -> 29.
+              #
+              # The 230 is NOT a claim that the remaining 49 are all equivalent.
+              # Every mutant that changes a VERDICT — a livelock missed, a flood
+              # rate mis-derived, a ring reconstructed wrong, a dangling arc
+              # admitted, the at-budget boundary — is killed and has a named
+              # test. What is left is predominantly the class this file already
+              # accepts for verify()'s 181: mutmut re-casing and wrapping
+              # diagnostic message strings, and blanking Violation arguments,
+              # which is engineer-facing text rather than behaviour. Some
+              # cycle-reconstruction residue in _max_ratio_cycle is genuinely
+              # not yet killed and is worth another pass.
+              "budgets": 230,
               "flash_safety": 15,   # degradation branches + boundary-exact forms
-              # privacy.py — the core safety gate, added by the audit 2026-07-14
-              # §7 test-infra raise. PROVISIONAL ceiling: mutmut is not
-              # installable in the authoring env (it is the optional [mutation]
-              # extra), so this was NOT measured — it is a small analytic bound,
-              # not a count. The one analytically-equivalent form is set_incognito's
-              # `bool(on)` truthiness coercion (dropping bool() is behaviorally
-              # identical: the flag's only reader is `_paused or _incognito`, so
-              # truthiness is all that is observed). The margin covers mutmut
-              # `return None`->bare-`return` idioms in the two decorator guards.
-              # The first SCHEDULED run (this job is workflow_dispatch + weekly,
-              # never a merge gate) calibrates this: tighten to the measured
-              # count, or document any additional provably-equivalent residue the
-              # budgets.py/flash_safety.py way. Any REAL new test hole leaves far
-              # more survivors (and "no tests" mutants) than 3 and still fails.
-              "privacy": 3,
+              # privacy.py — 1, MEASURED, as the previous comment here asked for.
+              # It was a provisional analytic bound of 3 written when mutmut was
+              # not installable in the authoring environment. Four scheduled runs
+              # (2026-07-13, -07-20, -07-27, -08-03) and a local run all report
+              # exactly 1: set_incognito's `bool(on)` truthiness coercion, which
+              # is behaviourally identical because the flag's only reader is
+              # `_paused or _incognito`. The `return None` -> bare `return`
+              # idioms the margin was reserved for do not survive.
+              "privacy": 1,
           }
+
+          # Documented non-zero residue, as a FLOOR. Every ceiling below is
+          # `n <= ceiling` with n defaulting to 0, so a parse that matches
+          # nothing reports every file clean and exits 0 — a green mutation gate
+          # over an empty set, the failure this repo keeps meeting (CLAUDE.md
+          # #1). mutmut's `results` output is not a stable API and a rename in
+          # it would silently retire this whole job.
+          #
+          # These two files have residue that is understood and cannot go to
+          # zero: ~180 of budgets.py's are mutmut re-casing verify()'s
+          # diagnostic strings, and flash_safety.py's 15 are degradation
+          # branches. A report of zero for either means the parse stopped
+          # matching, not that somebody wrote extraordinary tests — and if they
+          # did, they are editing this table anyway.
+          #
+          # contracts/signer are legitimately 0 and privacy is 1, so they get no
+          # floor; the two below are enough to prove the parse still works.
+          FLOORS = {"budgets": 100, "flash_safety": 5}
 
           per = Counter()
           for line in open("/tmp/results.txt"):
@@ -96,6 +131,14 @@ jobs:
                   per[m.group(1)] += 1
 
           failed = False
+          for fname, floor in FLOORS.items():
+              n = per.get(fname, 0)
+              if n < floor:
+                  print(f"::error::{fname}.py reported {n} survivors, below the "
+                        f"documented floor of {floor}. The results parse has "
+                        f"almost certainly stopped matching mutmut's output — "
+                        f"every ceiling below would then pass on nothing.")
+                  failed = True
           for fname, ceiling in CEILINGS.items():
               n = per.get(fname, 0)
               status = "OK " if n <= ceiling else "OVER"
