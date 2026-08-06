@@ -354,6 +354,11 @@ pytest_add_cli_args_test_selection = [
     "src/dreamlayer/tests/test_contracts_unit.py",
     "src/dreamlayer/tests/test_budgets_boundaries.py",
     "src/dreamlayer/tests/test_rc2_budgets.py",
+    # The two graph algorithms #530 put behind the flood check, tested
+    # directly. Listing it here is the point: a killer suite mutmut is not
+    # told to run cannot kill anything, and the survivor count would not
+    # move however good the tests were.
+    "src/dreamlayer/tests/test_budgets_cycle_math.py",
     "src/dreamlayer/tests/test_flash_safety_unit.py",
     "src/dreamlayer/tests/test_flash_safety.py",
     "src/dreamlayer/tests/test_signer_boundaries.py",
