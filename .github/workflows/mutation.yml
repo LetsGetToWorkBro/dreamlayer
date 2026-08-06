@@ -68,7 +68,7 @@ jobs:
           CEILINGS = {
               "contracts": 0,       # the proof core: always zero
               "signer": 0,          # the deploy trust anchor: always zero
-              # budgets.py — 230, measured. Was 213 until #530 replaced the
+              # budgets.py — 229, measured. Was 213 until #530 replaced the
               # flood check's exponential cycle enumeration with two real
               # algorithms, which arrived with no direct tests: the count went
               # to 291 and THIS JOB HAS BEEN RED EVERY WEEK SINCE (2026-07-27
@@ -79,9 +79,9 @@ jobs:
               # directly and killed 61 of them: _zero_time_cycle 25 -> 2 (the
               # two left set BLACK to 3 and to None, and BLACK is a sentinel —
               # any value that is neither WHITE nor GREY behaves identically),
-              # _max_ratio_cycle 39 -> 18, _cycle_analysis 46 -> 29.
+              # _max_ratio_cycle 39 -> 17, _cycle_analysis 46 -> 29.
               #
-              # The 230 is NOT a claim that the remaining 49 are all equivalent.
+              # The 229 is NOT a claim that the remaining 48 are all equivalent.
               # Every mutant that changes a VERDICT — a livelock missed, a flood
               # rate mis-derived, a ring reconstructed wrong, a dangling arc
               # admitted, the at-budget boundary — is killed and has a named
@@ -91,7 +91,7 @@ jobs:
               # which is engineer-facing text rather than behaviour. Some
               # cycle-reconstruction residue in _max_ratio_cycle is genuinely
               # not yet killed and is worth another pass.
-              "budgets": 230,
+              "budgets": 229,
               "flash_safety": 15,   # degradation branches + boundary-exact forms
               # privacy.py — 1, MEASURED, as the previous comment here asked for.
               # It was a provisional analytic bound of 3 written when mutmut was

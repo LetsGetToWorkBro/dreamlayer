@@ -15,9 +15,14 @@ the fixtures at hand.
 
 The weekly mutation job said so and nobody was reading it: budgets.py went from
 213 survivors to 291 in the week #530 landed, and the job — scheduled, never a
-merge gate — has been red ever since. Of those, 25 were in `_zero_time_cycle`,
+merge gate — had been red ever since. Of those, 25 were in `_zero_time_cycle`,
 39 in `_max_ratio_cycle`, and `_cycle_analysis` grew from 3 to 46. The old 213
 is documented residue (diagnostic message strings); this was not residue.
+
+The tests below take it to 229: 2, 17 and 29 respectively. Half of those kills
+came from mutating THESE tests rather than the code — see the two classes at
+the end, each of which exists because a survivor named a case the first draft
+could not reach.
 
 These are pure functions over plain lists and dicts, so they can simply be
 called with graphs whose answers are known by hand. Every expected value below
@@ -395,3 +400,31 @@ class TestCycleAnalysisVerdicts:
         v: list = []
         assert _cycle_analysis(fig, v) == 1.0
         assert v == [], f"the dangling edge changed the verdict: {v}"
+
+
+class TestTheArcScorerPicksTheCycleSArcNotTheLoudestArc:
+    """`score = w_e - lo * w_s`, and the minus sign is load-bearing.
+
+    When two arcs join the same pair of scenes, the rate is derived from
+    whichever scores higher — and "higher" has to mean "better emits-per-second
+    at the rate we are testing", not "more emits in total". The two parallel
+    arcs in the earlier test both score the same way under either sign, so they
+    do not observe this.
+
+    Here the routes are 2 emits over 0.1 s (20/s) and 3 emits over 5 s (0.6/s).
+    The maximum-ratio cycle uses the first. Flip the sign and the scorer prefers
+    the second because it emits more in total, and the figment's sustained rate
+    comes back as 0.6/s — under the 1/s budget — when it is really 20/s. That is
+    the direction that ships a flood.
+    """
+
+    def test_the_faster_route_is_scored_even_when_it_emits_less_in_total(self):
+        nodes = ["a", "b"]
+        arcs = [("a", 2.0, 0.1, "b"),      # 20 emits/s
+                ("a", 3.0, 5.0, "b"),      # 0.6 emits/s, but more emits
+                ("b", 0.0, 0.0, "a")]
+        rate, cycle = _max_ratio_cycle(nodes, arcs, 0.0, 50.0)
+        assert rate == 20.0, (
+            f"got {rate}/s — the scorer took the route with the most emits "
+            f"rather than the fastest, so a 20/s figment reads as under budget")
+        assert cycle is not None and set(cycle) == {"a", "b"}
