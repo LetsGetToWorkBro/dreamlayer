@@ -87,3 +87,4 @@ between this directory and a pile of free text.
 | [0009](0009-veil-recall-semantics.md) | fixed | Recall is unrestricted; capture fails closed — and two writes filed under recall had to move |
 | [0010](0010-orchestrator-only-world-lens-connectors.md) | refuted | The weather and skywatch connectors have no shipped Brain caller, so a consent sink for them could never fire |
 | [0011](0011-plugin-declared-connectors-cannot-reach-the-gate.md) | confirmed-deferred | The four plugin-declared connectors egress from inside a sandboxed plugin, which has no Brain to ask for consent |
+| [0012](0012-birdnetlib-watchdog-pin-is-not-incidental.md) | confirmed-deferred | birdnetlib's watchdog pin is load-bearing — relaxing the version alone ships a TypeError |
