@@ -103,6 +103,18 @@ def wrapper(capabilities, package_dir) -> list:
                "--chdir", "/"]
         for p in _ro_binds():
             cmd += ["--ro-bind", p, p]
+        # Recreate the /lib -> usr/lib compat symlinks a merged-/usr host has.
+        # _ro_binds() realpaths and dedupes, so those four collapse into their
+        # /usr targets and never exist inside the jail — and the child's ELF
+        # interpreter is an absolute /lib64/ld-linux-x86-64.so.2, so nothing
+        # execs at all: `bwrap: execvp <python>: No such file or directory`,
+        # surfacing as SubprocessPluginHost.start() returning False. _works()
+        # cannot see it, because its probe binds / wholesale and so keeps them.
+        # readlink is relative here, so the link resolves to the already-bound
+        # target; on a non-merged host every islink() is false and this is inert.
+        for link in ("/lib", "/lib64", "/bin", "/sbin"):
+            if os.path.islink(link):
+                cmd += ["--symlink", os.readlink(link), link]
         cmd += ["--ro-bind-try", pkg, pkg]
         if not net:
             cmd += ["--unshare-net"]
