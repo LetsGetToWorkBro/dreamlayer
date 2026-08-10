@@ -85,3 +85,5 @@ between this directory and a pile of free text.
 | [0007](0007-the-twenty-one-dormant-capabilities.md) | confirmed-deferred | Each of the 21 dormant capabilities, and what is actually blocking it |
 | [0008](0008-mlx-train-is-unbuilt-not-unhosted.md) | confirmed-deferred | mlx_train's trainer was never written, so it needed building rather than wiring |
 | [0009](0009-veil-recall-semantics.md) | fixed | Recall is unrestricted; capture fails closed — and two writes filed under recall had to move |
+| [0010](0010-orchestrator-only-world-lens-connectors.md) | refuted | The weather and skywatch connectors have no shipped Brain caller, so a consent sink for them could never fire |
+| [0011](0011-plugin-declared-connectors-cannot-reach-the-gate.md) | confirmed-deferred | The four plugin-declared connectors egress from inside a sandboxed plugin, which has no Brain to ask for consent |
