@@ -222,6 +222,30 @@ class TestTheWorkflowActuallyRunsThis:
         block = block.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
         assert '- "scripts/license_gate.py"' in block
 
+    @pytest.mark.parametrize("stanza", ["push", "pull_request"])
+    @pytest.mark.parametrize("path", ["scripts/license_gate.py",
+                                      ".github/workflows/dep-audit.yml"])
+    def test_both_triggers_list_the_gate_s_own_files(self, stanza, path):
+        """Asserted per stanza, because the test above reads the whole `on:`
+        block and one entry satisfies it.
+
+        The distinction is not cosmetic: for a PR from a FORK — how this
+        repository receives contributions — `push` fires on the fork and never
+        here, so `pull_request` is the only trigger the change can reach. With
+        the gate's own two files missing from that list, a PR editing nothing
+        but the licence comparison ran no dependency-audit at all: the gate did
+        not run on the change to itself.
+        """
+        import yaml
+
+        on = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+        on = on.get("on") or on.get(True)       # PyYAML reads bare `on:` as True
+        paths = on[stanza]["paths"]
+        assert path in paths, (
+            f"{stanza}.paths does not list {path}, so a change to it triggers "
+            f"no run — see this test's docstring for why that matters most on "
+            f"the pull_request side")
+
     def test_the_gate_is_no_longer_an_untestable_heredoc(self):
         assert "python - <<'PY'" not in WORKFLOW.read_text(encoding="utf-8")
 

@@ -21,9 +21,21 @@ on:
       - "scripts/license_gate.py"
       - ".github/workflows/dep-audit.yml"
   pull_request:
+    # The gate's own two files are listed here as well as under `push`, and the
+    # asymmetry mattered: `push` events fire on the FORK for a fork PR, never on
+    # this repository, so `pull_request` is the only trigger a contributor's
+    # change can reach. Without these two entries a PR that edited nothing but
+    # the licence comparison — or this workflow — matched no path, and the gate
+    # did not run on the change to itself.
+    #
+    # That was already true of dep-audit.yml before the comparison moved into a
+    # script; extracting it made the hole wider rather than creating it, since
+    # the logic is now in a file that was on neither list.
     paths:
       - "host-python/pyproject.toml"
       - "host-python/uv.lock"
+      - "scripts/license_gate.py"
+      - ".github/workflows/dep-audit.yml"
 
 permissions:
   contents: read   # least-privilege floor; jobs opt into more where needed
