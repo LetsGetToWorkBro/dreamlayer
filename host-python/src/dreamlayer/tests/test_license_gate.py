@@ -24,6 +24,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import types
@@ -236,15 +237,35 @@ class TestTheWorkflowActuallyRunsThis:
         but the licence comparison ran no dependency-audit at all: the gate did
         not run on the change to itself.
         """
-        import yaml
-
-        on = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-        on = on.get("on") or on.get(True)       # PyYAML reads bare `on:` as True
-        paths = on[stanza]["paths"]
-        assert path in paths, (
+        # Sliced, not parsed. PyYAML is not a dependency of this project — it
+        # arrives only through optional extras — so `import yaml` here fails
+        # outright on the plain `[dev]` install CI uses, which is how this test
+        # first went red. Comment lines are stripped before matching so a `#`
+        # cannot satisfy the assertion, the way one satisfied the CodeQL
+        # config-file guard.
+        text = WORKFLOW.read_text(encoding="utf-8")
+        block = text.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
+        stanzas: dict[str, list[str]] = {}
+        current = None
+        for line in block.splitlines():
+            if line.lstrip().startswith("#"):
+                # Stripped before matching so a `#` cannot satisfy the
+                # assertion, the way one satisfied the CodeQL config-file
+                # guard earlier in this repo's history.
+                continue
+            m = re.fullmatch(r"  (\w+):\s*", line)
+            if m:
+                current = m.group(1)
+                stanzas[current] = []
+            elif current is not None:
+                stanzas[current].append(line)
+        assert stanza in stanzas, (
+            f"no `{stanza}:` trigger in dep-audit.yml; found {sorted(stanzas)}")
+        assert any(f'"{path}"' in ln for ln in stanzas[stanza]), (
             f"{stanza}.paths does not list {path}, so a change to it triggers "
             f"no run — see this test's docstring for why that matters most on "
-            f"the pull_request side")
+            f"the pull_request side.\nStanza read as:\n"
+            + "\n".join(stanzas[stanza]))
 
     def test_the_gate_is_no_longer_an_untestable_heredoc(self):
         assert "python - <<'PY'" not in WORKFLOW.read_text(encoding="utf-8")
