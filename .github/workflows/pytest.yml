@@ -75,6 +75,21 @@ jobs:
           # `platform` stays out: pylsl and argostranslate are the heavy,
           # native-build members this deliberately does not pull in.
           pip install "wasmtime>=46,<48"
+          # extism, the SECOND wasm runtime on the same package format, and a
+          # direct consequence of the line above. test_wasm_plugin_package.py
+          # opens with importorskip("wasmtime") only, but its TestExtismRuntime
+          # class needs `extism` as well — a different package with its own
+          # native runtime. While CI installed neither, the whole file skipped
+          # and the mis-gating was invisible; installing wasmtime unskipped the
+          # file and those five failed on an absent extism, with
+          # ExtismPluginHost.start() returning a bare False that reads as a
+          # broken host rather than a missing wheel.
+          #
+          # The class now carries its own importorskip, so a contributor
+          # without extism gets an honest skip. Installing it here is the other
+          # half: a permanent skip is the quieter version of the same defect.
+          # 8.3 MB with extism-sys and cffi.
+          pip install "extism>=1,<2"
 
       - name: "Lint — ruff (pyflakes: dead imports/vars, undefined names)"
         # The high-signal static-analysis gate. Config in pyproject
