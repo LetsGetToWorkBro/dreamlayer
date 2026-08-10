@@ -554,7 +554,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             report = self.plugins.install_package(pkg)
             label = pkg.manifest.name
         elif body.get("name"):
-            report = self.plugins.install(str(body["name"]))
+            # Posture-gated (#628). A sideload — the branch above — needs no
+            # network and stays available while the Veil is up; only this one
+            # reaches the registry.
+            report = self._install_from_registry(str(body["name"]))
             label = str(body["name"])
         else:
             report = ValidationReport()
@@ -609,6 +612,44 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         consent(self).note("plugin_registry")        # a request genuinely left
         return raw
 
+    def _install_from_registry(self, name: str):
+        """Install a pinned package by registry name — the ONE path to the
+        registry's PACKAGE fetch (#628).
+
+        `PluginStore.install()` reads the already-loaded index and then fetches
+        the package from raw.githubusercontent.com. Two Brain methods reached
+        that fetch and only one of them checked the posture: `store_install`
+        refused while veiled, `install_plugin`'s registry-name branch did not,
+        and with a warm index it opened a connection during a window the
+        product describes as private. What left was that the device is online
+        and which plugin it wants — confidentiality, not integrity; the
+        checksum and sandbox gates were never bypassed.
+
+        That is the drift `decisions/0009` records — hand-written per-call-site
+        Veil gates diverging — so the answer is a chokepoint rather than a
+        fourteenth copy of the check. The same shape `_fetch_registry_index`
+        above uses for the index, and for the same reason: a future third
+        caller cannot route around a gate that owns the fetch.
+
+        `note()` fires when a package fetch was ATTEMPTED, which is deliberately
+        not what the index note above does. A socket opens whether or not the
+        response parses, and this ledger answers "has anything left this
+        device?" — so a download that failed halfway still has to count. The
+        early return costs nothing: an unknown name never reaches the network.
+        """
+        from ...plugins import ValidationReport
+        from .consent_gate import consent
+        if not consent(self).check("plugin_registry"):
+            r = ValidationReport()
+            r.add_error("the plugin store needs the network — you're in "
+                        "Incognito or LAN-only right now")
+            return r
+        will_fetch = self.plugins.index.get(name) is not None
+        report = self.plugins.install(name)
+        if will_fetch:
+            consent(self).note("plugin_registry")
+        return report
+
     def store_catalogue(self) -> dict:
         """The in-app plugin store: fetch the pinned registry catalogue and
         return it (each entry flagged with whether it's already installed). This
@@ -649,7 +690,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             cat = self.store_catalogue()
             if cat.get("error"):
                 return {"ok": False, "errors": [cat["error"]]}
-        report = self.plugins.install(name)
+        report = self._install_from_registry(name)
         if report.ok:
             self.activity.add("plugin", f"Installed {name} from the store")
             self._invalidate_world_lens()
