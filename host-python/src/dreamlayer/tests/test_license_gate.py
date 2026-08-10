@@ -24,6 +24,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import types
@@ -221,6 +222,50 @@ class TestTheWorkflowActuallyRunsThis:
         block = WORKFLOW.read_text(encoding="utf-8")
         block = block.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
         assert '- "scripts/license_gate.py"' in block
+
+    @pytest.mark.parametrize("stanza", ["push", "pull_request"])
+    @pytest.mark.parametrize("path", ["scripts/license_gate.py",
+                                      ".github/workflows/dep-audit.yml"])
+    def test_both_triggers_list_the_gate_s_own_files(self, stanza, path):
+        """Asserted per stanza, because the test above reads the whole `on:`
+        block and one entry satisfies it.
+
+        The distinction is not cosmetic: for a PR from a FORK — how this
+        repository receives contributions — `push` fires on the fork and never
+        here, so `pull_request` is the only trigger the change can reach. With
+        the gate's own two files missing from that list, a PR editing nothing
+        but the licence comparison ran no dependency-audit at all: the gate did
+        not run on the change to itself.
+        """
+        # Sliced, not parsed. PyYAML is not a dependency of this project — it
+        # arrives only through optional extras — so `import yaml` here fails
+        # outright on the plain `[dev]` install CI uses, which is how this test
+        # first went red. Comment lines are stripped before matching so a `#`
+        # cannot satisfy the assertion, the way one satisfied the CodeQL
+        # config-file guard.
+        text = WORKFLOW.read_text(encoding="utf-8")
+        block = text.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
+        stanzas: dict[str, list[str]] = {}
+        current = None
+        for line in block.splitlines():
+            if line.lstrip().startswith("#"):
+                # Stripped before matching so a `#` cannot satisfy the
+                # assertion, the way one satisfied the CodeQL config-file
+                # guard earlier in this repo's history.
+                continue
+            m = re.fullmatch(r"  (\w+):\s*", line)
+            if m:
+                current = m.group(1)
+                stanzas[current] = []
+            elif current is not None:
+                stanzas[current].append(line)
+        assert stanza in stanzas, (
+            f"no `{stanza}:` trigger in dep-audit.yml; found {sorted(stanzas)}")
+        assert any(f'"{path}"' in ln for ln in stanzas[stanza]), (
+            f"{stanza}.paths does not list {path}, so a change to it triggers "
+            f"no run — see this test's docstring for why that matters most on "
+            f"the pull_request side.\nStanza read as:\n"
+            + "\n".join(stanzas[stanza]))
 
     def test_the_gate_is_no_longer_an_untestable_heredoc(self):
         assert "python - <<'PY'" not in WORKFLOW.read_text(encoding="utf-8")
