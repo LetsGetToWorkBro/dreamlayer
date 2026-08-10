@@ -725,6 +725,23 @@ class TestExtismRuntime:
     complete and tested and had exactly one caller — its own tests — because
     nothing on disk was ever an Extism guest."""
 
+    @pytest.fixture(autouse=True)
+    def _requires_the_extism_runtime(self):
+        """Gated on the dependency this class actually uses.
+
+        The file's only guard is `importorskip("wasmtime")` at the top, and
+        these tests need `extism` as well — a different package with a
+        different native runtime. While CI installed neither, the whole file
+        skipped and the mis-gating was invisible; installing wasmtime (#630)
+        unskipped the file and these five failed on an absent `extism` with
+        `ExtismPluginHost.start()` returning a bare False, which reads as a
+        broken host rather than a missing wheel.
+
+        A skip that names the right reason is the whole point — see
+        CLAUDE.md #1 on skips that examined nothing.
+        """
+        pytest.importorskip("extism")
+
     def test_the_package_is_the_same_format_with_another_kind(self, tmp_path):
         pkg = extism_package()
         assert pkg.manifest.is_extism and not pkg.manifest.is_wasm

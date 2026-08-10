@@ -58,6 +58,38 @@ jobs:
           # birdnetlib can never join this install — see the conflicts table.
           pip install "usearch>=2,<3" "sqlite-vec>=0.1,<1" "cbor2>=6,<7" \
                       "watchdog>=6,<7" "zeroconf>=0.150,<1"
+          # wasmtime, and this one is a SECURITY boundary rather than a feature.
+          # The plugin sandbox's runtime capability enforcement — a wasm plugin
+          # granted only ["log"] importing dreamlayer.net_get must raise
+          # CapabilityError — lives in four files that all open with
+          # `pytest.importorskip("wasmtime")`. wasmtime is declared only in the
+          # `platform` extra, which nothing here installs, so 105 tests
+          # including that refusal ran in no environment at all: the strongest
+          # boundary in the tree was green by skip.
+          #
+          # Reported by a contributor on #424 while proposing the isolation
+          # work, and it is the same hole as the five above — the previous pass
+          # took cbor2 out of `platform` and left its neighbour behind.
+          #
+          # 9.5 MB, and the 105 tests run in about 4 seconds. The rest of
+          # `platform` stays out: pylsl and argostranslate are the heavy,
+          # native-build members this deliberately does not pull in.
+          pip install "wasmtime>=46,<48"
+          # extism, the SECOND wasm runtime on the same package format, and a
+          # direct consequence of the line above. test_wasm_plugin_package.py
+          # opens with importorskip("wasmtime") only, but its TestExtismRuntime
+          # class needs `extism` as well — a different package with its own
+          # native runtime. While CI installed neither, the whole file skipped
+          # and the mis-gating was invisible; installing wasmtime unskipped the
+          # file and those five failed on an absent extism, with
+          # ExtismPluginHost.start() returning a bare False that reads as a
+          # broken host rather than a missing wheel.
+          #
+          # The class now carries its own importorskip, so a contributor
+          # without extism gets an honest skip. Installing it here is the other
+          # half: a permanent skip is the quieter version of the same defect.
+          # 8.3 MB with extism-sys and cffi.
+          pip install "extism>=1,<2"
 
       - name: "Lint — ruff (pyflakes: dead imports/vars, undefined names)"
         # The high-signal static-analysis gate. Config in pyproject
