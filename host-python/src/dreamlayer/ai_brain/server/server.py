@@ -586,6 +586,29 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             pass                      # a failed write only forgets, never breaks
         return True
 
+    def _fetch_registry_index(self) -> dict:
+        """The pinned plugin-store catalogue, behind the consent gate (#611).
+
+        The registry is infrastructure rather than a lens answering a glance —
+        it carries nothing about the wearer, only a request for the catalogue —
+        and it is still a third party learning that this device exists and when
+        it went shopping. `/dreamlayer/status` answering "nothing has left"
+        after a store browse would be false, which is the whole complaint.
+
+        Checked HERE rather than only in `store_catalogue`'s posture guard so a
+        future second caller cannot route around it — the same reason
+        `lexicon_live` gates the lookup rather than the utterance. The sink's
+        predicate IS that posture, so this refuses exactly when the existing
+        guard already did and adds no second yes to obtain."""
+        from ...plugins import registry_client
+        from .consent_gate import consent
+        if not consent(self).check("plugin_registry"):
+            raise PermissionError("the plugin store needs the network — you're "
+                                  "in Incognito or LAN-only right now")
+        raw = registry_client.fetch_index()
+        consent(self).note("plugin_registry")        # a request genuinely left
+        return raw
+
     def store_catalogue(self) -> dict:
         """The in-app plugin store: fetch the pinned registry catalogue and
         return it (each entry flagged with whether it's already installed). This
@@ -595,10 +618,9 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         if self.incognito_now():
             return {"error": "the plugin store needs the network — you're in "
                              "Incognito or LAN-only right now"}
-        from ...plugins import registry_client
         from ...plugins.store import RegistryIndex
         try:
-            raw = registry_client.fetch_index()
+            raw = self._fetch_registry_index()
         except Exception as e:                       # network / parse failure
             return {"error": f"couldn't reach the plugin store: {e}"}
         self.plugins.index = RegistryIndex.from_dict(raw)

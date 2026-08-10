@@ -30,7 +30,7 @@ import re
 import logging
 import os
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 log = logging.getLogger("dreamlayer.world_lens")
 
@@ -173,6 +173,48 @@ def _six_words(raw: str) -> str:
     return " ".join(words).rstrip(".,;:!").strip()
 
 
+def barcode_lookup_fn(brain, fetch_fn: Optional[Callable[[str], object]] = None
+                      ) -> Callable[[str], dict]:
+    """The Open Food Facts barcode lookup, behind the consent gate (#611).
+
+    A named factory rather than a closure inside ``WorldLensHost.__init__``
+    because the gate is asserted by DRIVING this — a source grep proves nothing
+    about whether the connector is reached.
+
+    Two placements carry the meaning:
+
+      * ``check`` wraps the connector, so a refusal means Open Food Facts is
+        never reached and no URL is ever built — not that it returned nothing;
+      * ``note`` sits on the FETCH, INSIDE the connector's TTL cache, so a
+        second glance at the same jar counts as the one send it is.
+
+    This adds the ledger and nothing else. ``BarcodeFoodProvider``'s own
+    ``allow_network`` gate reads the same Veil (through ``VeilGate``), still
+    runs first, and is untouched — the sink is registered with the posture as
+    its predicate precisely so registration cannot refuse anything the wearer
+    was already getting.
+    """
+    from ...plugins.openfoodfacts import _default_fetch, off_barcode_fn
+    from .consent_gate import consent
+    # a snappy fetch (no retries, 2s) so a slow OFF can't hold a glance-pool
+    # worker for the default 13.5s retry budget and starve the other lenses
+    fetch = fetch_fn or (lambda u: _default_fetch(u, retries=0, timeout=2.0))
+
+    def counted_fetch(url: str) -> object:
+        got = fetch(url)
+        consent(brain).note("openfoodfacts")   # a barcode genuinely left
+        return got
+
+    lookup = off_barcode_fn(counted_fetch)
+
+    def gated_lookup(code: str) -> dict:
+        if not consent(brain).check("openfoodfacts"):
+            return {}
+        return lookup(code)
+
+    return gated_lookup
+
+
 class WorldLensHost:
     """Runs the Object Lens + TasteLens inside the Brain. Built once and cached
     on the Brain (``Brain.world_lens()``); presents the small orchestrator-shaped
@@ -259,12 +301,8 @@ class WorldLensHost:
         # leaves, and only when the Veil is down (allow_capture) — the same gate
         # the taste read uses; your DietaryProfile never leaves the device.
         from ...object_lens.barcode_lens import BarcodeFoodProvider
-        from ...plugins.openfoodfacts import _default_fetch, off_barcode_fn
-        # a snappy fetch (no retries, 2s) so a slow OFF can't hold a glance-pool
-        # worker for the default 13.5s retry budget and starve the other lenses
-        _off = off_barcode_fn(lambda u: _default_fetch(u, retries=0, timeout=2.0))
         self.object_lens.registry.register(BarcodeFoodProvider(
-            self.dietary, lookup_fn=_off,
+            self.dietary, lookup_fn=barcode_lookup_fn(self.brain),
             allow_network=self.privacy.allow_capture))
         self.taste_lens = TasteLens(read_fn=self._taste_read,
                                     profile=self.dietary, shop_fn=self._taste_shop)

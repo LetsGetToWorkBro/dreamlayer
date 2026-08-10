@@ -257,3 +257,151 @@ class TestTheRegistryStaysHonest:
 
     def test_it_is_built_once_and_held(self, brain):
         assert consent(brain) is consent(brain)
+
+
+#: One OFF reply, in the shape `lookup_by_barcode` parses (status 1 + product).
+_OFF_REPLY = ('{"status": 1, "product": {"product_name": "Hazelnut spread", '
+              '"nutriscore_grade": "e"}}')
+
+
+class TestTheKeylessConnectorsAreOnTheList:
+    """#611 — a partial registry reads as a complete one.
+
+    `/dreamlayer/status` could say "your device has talked to a cloud provider
+    and to a dictionary" while a barcode glance had been querying Open Food
+    Facts all afternoon, and `anything_left()` answered False. These are the two
+    keyless connectors the SHIPPED Brain reaches; `decisions/0010` and
+    `decisions/0011` record why the other six in that issue are not here.
+    """
+
+    def test_registering_them_did_not_switch_them_off(self, brain):
+        """The gate fails CLOSED, so a sink with no switch and no predicate
+        would have silently killed a lookup that has always been on. That is the
+        one way this change could have cost the wearer something."""
+        g = EgressConsent(brain)
+        rows = {r["key"]: r for r in g.report()}
+        for key in ("openfoodfacts", "plugin_registry"):
+            assert g.allowed(key) is True, f"{key} was registered default-DENY"
+            assert rows[key]["needs_grant"] is False, key
+
+    def test_the_veil_is_what_they_are_consented_on(self, brain, monkeypatch):
+        """Asserted against `_predicate` directly, because `allowed()` asks the
+        Veil before it ever reaches the predicate — so a predicate that answered
+        "yes, always" would be a bare grant wearing a predicate's name, and
+        nothing driving `allowed()` could tell the difference."""
+        g = EgressConsent(brain)
+        for key in ("openfoodfacts", "plugin_registry"):
+            sink = SINKS[key]
+            assert sink.switch is None and sink.predicate == "veil_is_down", key
+            assert g._predicate(sink) is True, key
+            monkeypatch.setattr(type(brain), "incognito_now", lambda self: True)
+            assert g._predicate(sink) is False, key
+            monkeypatch.undo()
+
+    def test_a_barcode_glance_counts_as_something_leaving(self, brain):
+        """The headline complaint: a glance had left the device and
+        `anything_left()` still answered False."""
+        g = consent(brain)
+        assert g.anything_left() is False
+        g.note("openfoodfacts")
+        assert g.anything_left() is True
+
+    # -- the call sites ------------------------------------------------------
+
+    def test_the_barcode_lookup_asks_the_gate(self, brain):
+        """Asserted by BEHAVIOUR — the connector must not be REACHED at all, not
+        merely return nothing. A stub can fake a return value."""
+        from dreamlayer.ai_brain.server.world_lens import barcode_lookup_fn
+        fetched: list = []
+        lookup = barcode_lookup_fn(
+            brain, fetch_fn=lambda url: fetched.append(url) or _OFF_REPLY)
+
+        brain.config.network_mode = "lan_only"       # the Veil, up
+        assert lookup("3017620422003") == {}
+        assert fetched == [], "a barcode left the device while veiled"
+
+        brain.config.network_mode = "connected"
+        assert lookup("3017620422003")["product_name"] == "Hazelnut spread"
+        assert len(fetched) == 1
+        assert {r["key"]: r
+                for r in consent(brain).report()}["openfoodfacts"]["sent"] == 1
+
+    def test_a_second_glance_at_the_same_jar_is_not_a_second_send(self, brain):
+        """`note` sits on the FETCH, inside the connector's TTL cache, so the
+        ledger counts what actually left rather than how often a lens asked."""
+        from dreamlayer.ai_brain.server.world_lens import barcode_lookup_fn
+        fetched: list = []
+        lookup = barcode_lookup_fn(
+            brain, fetch_fn=lambda url: fetched.append(url) or _OFF_REPLY)
+        assert lookup("3017620422003") and lookup("3017620422003")
+        assert len(fetched) == 1, "the cache was bypassed — retune this test"
+        assert {r["key"]: r
+                for r in consent(brain).report()}["openfoodfacts"]["sent"] == 1
+
+    def test_the_lens_the_brain_actually_builds_is_the_gated_one(self, brain,
+                                                                 monkeypatch):
+        """The two above drive `barcode_lookup_fn` directly, which says nothing
+        about whether the SHIPPED lens is wired to it — restoring the old
+        ungated `off_barcode_fn(...)` at the registration in `WorldLensHost`
+        leaves both of them green. So this one asks the Brain for its own world
+        lens and puts a barcode through the provider it registered."""
+        from dreamlayer.object_lens.schema import ObjectSighting
+        from dreamlayer.plugins import openfoodfacts
+        # patched BEFORE `world_lens()`: the fetch is bound when the lens is
+        # built, so a later patch would rebind nothing.
+        monkeypatch.setattr(openfoodfacts, "_default_fetch",
+                            lambda url, **kw: _OFF_REPLY)
+
+        wl = brain.world_lens()
+        barcode = next(p for p in wl.object_lens.registry._providers
+                       if p.name == "barcode")
+        rows = barcode.build(ObjectSighting(
+            label="jar of spread", confidence=0.9,
+            attributes={"barcode": "3017620422003"}))
+
+        assert [r.label for r in rows if r.kind == "info"] == ["Hazelnut spread"]
+        assert {r["key"]: r
+                for r in consent(brain).report()}["openfoodfacts"]["sent"] == 1, (
+            "the barcode lens the Brain builds bypassed the consent gate")
+
+    def test_the_plugin_registry_fetch_asks_the_gate(self, brain, monkeypatch):
+        """Same shape, same assertion: the pinned registry must not be reached.
+
+        `store_catalogue` already refuses while veiled; this is checked at the
+        fetch itself so a future second caller cannot route around it — the
+        reason `lexicon_live` gates the lookup rather than the utterance."""
+        from dreamlayer.plugins import registry_client
+        fetched: list = []
+        monkeypatch.setattr(registry_client, "fetch_index",
+                            lambda *a, **k: fetched.append(1) or {"plugins": []})
+
+        brain.config.network_mode = "lan_only"       # the Veil, up
+        with pytest.raises(PermissionError):
+            brain._fetch_registry_index()
+        assert fetched == [], "the registry was reached while veiled"
+
+        brain.config.network_mode = "connected"
+        assert brain._fetch_registry_index() == {"plugins": []}
+        assert fetched == [1]
+        assert {r["key"]: r
+                for r in consent(brain).report()}["plugin_registry"]["sent"] == 1
+
+    def test_the_store_still_browses_when_the_veil_is_down(self, brain,
+                                                            monkeypatch):
+        """The privacy contract runs the other way too: registering a sink must
+        never become a way to STOP something the wearer already had.
+
+        The `sent` assertion is the other half, and it is here because this is
+        the one test that drives the SHIPPED browse: `store_catalogue` calling
+        `registry_client.fetch_index()` again instead of the gated
+        `_fetch_registry_index()` would still browse, and only the ledger
+        notices."""
+        from dreamlayer.plugins import registry_client
+        monkeypatch.setattr(registry_client, "fetch_index",
+                            lambda *a, **k: {"updated": "2026-08-09",
+                                             "plugins": []})
+        brain.config.network_mode = "connected"
+        assert brain.store_catalogue().get("plugins") == []
+        assert {r["key"]: r
+                for r in consent(brain).report()}["plugin_registry"]["sent"] == 1, (
+            "the store browse bypassed the consent gate")

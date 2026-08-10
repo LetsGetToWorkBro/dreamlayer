@@ -123,6 +123,27 @@ SINKS = {
              what="one rare word, taken from a PII-redacted transcript",
              where="api.dictionaryapi.dev, a keyless third-party dictionary",
              scope=INTERNET, switch="lexicon_enabled"),
+        # The two keyless connectors the SHIPPED Brain reaches (#611). Neither
+        # has a switch of its own, and neither gets a bare grant: an unswitched
+        # sink is default-DENY, so a grant would have silently stopped a lookup
+        # that has been on since it was written. `veil_is_down` names what
+        # their consent actually is — the wearer's posture, which is the gate
+        # both call sites already read — so registering them makes them legible
+        # without re-asking for a per-connector yes nobody ever gave.
+        #
+        # The other six connectors named in that issue are deliberately absent:
+        # decisions/0010 (Orchestrator-only) and decisions/0011 (reachable only
+        # as an installed plugin, which has no Brain to ask) record which caller
+        # each one has. A sink no wearer can reach would make this list longer
+        # and less true, which is the failure the list exists to fix.
+        Sink("openfoodfacts",
+             what="one numeric barcode you looked at, and nothing else",
+             where="world.openfoodfacts.org, a keyless public food database",
+             scope=INTERNET, predicate="veil_is_down"),
+        Sink("plugin_registry",
+             what="nothing about you — only a request for the plugin catalogue",
+             where="raw.githubusercontent.com, the pinned plugin registry",
+             scope=INTERNET, predicate="veil_is_down"),
         # Nothing below leaves the machine, and every one of them is about a
         # person who is not the wearer. They are listed for exactly that
         # reason: "it stays local" answers a different question from "whose
@@ -220,6 +241,20 @@ class EgressConsent:
                 from .backends import is_local_endpoint
                 base = (self.brain.config.api_base_url or "").strip()
                 return bool(base) and not is_local_endpoint(base)
+            except Exception:                        # noqa: BLE001
+                return False
+        if sink.predicate == "veil_is_down":
+            # A keyless connector that ships ON, whose consent has only ever
+            # been the wearer's posture — the barcode lookup and the plugin
+            # store both read it at their own call site already.
+            #
+            # `allowed()` asks the Veil first, so this repeats it, and that is
+            # the point rather than an oversight: the predicate is what the
+            # SINK says its consent is, and one that answered "yes, always"
+            # would be a bare grant wearing a predicate's name. Read it here
+            # and the panel's answer and the behaviour stay one sentence.
+            try:
+                return not bool(self.brain.incognito_now())
             except Exception:                        # noqa: BLE001
                 return False
         return False
