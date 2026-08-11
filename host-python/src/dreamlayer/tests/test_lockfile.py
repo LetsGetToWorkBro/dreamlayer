@@ -139,12 +139,14 @@ DECIDED_BOUNDS = [
      "decryption) is fixed in 50.0.0. Lowering this reopens it, and the two "
      "advisories fixed in 49.0.0 with it. See #614."),
     ("vision", "moondream", "<2",
-     "2.x is a different product: vl() returns a CLOUD client by default. The "
-     "classifier calls md.vl() bare on the ambient camera loop, so 2.x points "
-     "wearer frames at a third-party cloud past the Veil and the consent "
-     "registry — or silently kills the capability without an api_key. Moving "
-     "up requires porting classify_backends.py to vl(local=True) FIRST. "
-     "Declined in #635; the dependabot ignore rule is the other half."),
+     "vl() is a cloud-client factory by default in EVERY packaged release — "
+     "the locked 1.3.0 included, which #635/#646 originally mis-read as "
+     "local; the adapter now passes local=True and "
+     "test_moondream_stays_local.py pins it. What keeps the cap is "
+     "sequencing, not privacy: 2.x moves the kestrel pin to ==0.5.0 and "
+     "un-caps pillow, so the bump must land WITH a relock and the [tool.uv] "
+     "conflicts re-evaluated — deliberately, in #647, not as a routine "
+     "widening. The dependabot ignore rule is the other half."),
 ]
 
 

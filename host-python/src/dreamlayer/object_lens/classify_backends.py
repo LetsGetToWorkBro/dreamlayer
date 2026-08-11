@@ -181,7 +181,9 @@ class YoloClassifier:
 
 class MoondreamClassifier:
     """Compact VLM (moondream): ask "What is the main object?" and take the
-    short answer as the label. Real inference — lazy-loads on first call.
+    short answer as the label. LOCAL inference only — lazy-loads on first
+    call, and on hosts where the local runtime cannot start (kestrel needs
+    CUDA or Apple MPS) it degrades to None so the ladder moves on.
     Confidence is a fixed prior (VLMs don't emit calibrated scores); the
     recognizer's min_confidence gate still applies."""
     dep = "moondream"
@@ -198,7 +200,17 @@ class MoondreamClassifier:
             return
         try:
             import moondream as md  # type: ignore
-            self._model = md.vl()          # loads the packaged/default weights
+            # local=True is load-bearing, not a preference. In every packaged
+            # release of moondream (1.3.0 and 2.x alike) bare vl() is a factory
+            # for a CLOUD client whose query() POSTs the frame to
+            # api.moondream.ai before any auth check — with no api_key the
+            # frame still leaves the device and only the answer fails. On this
+            # adapter that would be wearer camera frames on the ambient loop,
+            # past the Veil and the consent registry. local=True selects the
+            # on-device Photon runtime instead, which raises where it cannot
+            # run (no CUDA/MPS) and lands in the except below.
+            # test_moondream_stays_local.py pins both directions.
+            self._model = md.vl(local=True)
         except Exception as exc:
             log.warning("[moondream] load failed: %s; mock fallback", exc)
             self._model = None
