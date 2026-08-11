@@ -75,6 +75,21 @@ jobs:
           # those deps aren't part of the CVE surface this job exists to guard.
           # Add new crypto/network deps to this line as they're introduced.
           pip install -e ".[privacy,llm]" fastapi uvicorn
+      - name: Lock freshness — uv.lock still matches pyproject.toml
+        # Three gates read uv.lock (this one, dependency-review, sbom) and
+        # NOTHING verified it still described the project. That is the exact
+        # channel the piper-tts relicense hid in for weeks, and it happened
+        # again (#640): insightface's bound was widened in pyproject on
+        # Jul 26 and the lock's metadata mirror sat stale for a month — the
+        # three lock-reading gates all green over a lockfile describing bounds
+        # the project no longer had. Benign that time; the channel is not.
+        #
+        # ~3 minutes warm. If this fails: `cd host-python && uv lock`, commit
+        # the result in the same PR that touched pyproject.
+        run: |
+          python -m pip install -q uv
+          uv lock --check
+
       - name: pip-audit — report known-vulnerable resolved dependencies
         run: |
           pip install pip-audit

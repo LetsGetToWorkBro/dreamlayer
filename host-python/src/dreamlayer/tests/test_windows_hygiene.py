@@ -175,3 +175,15 @@ def test_index_reads_utf8_notes(tmp_path):
     idx.reindex()
     ans = idx.ask("when is the rendezvous")
     assert ans is not None and "café" in ans.text
+
+
+def test_replace_atomic_default_budget_is_generous():
+    # A tripwire on the DECISION, not the mechanism (the two tests above own
+    # that). 10s lost a real write on the Windows CI leg (#641): one run's
+    # reader storm never left a 10-second window, the loud final attempt
+    # raised, the writer thread died, and 33 contacts vanished. The budget is
+    # a defence against Defender-class scanners that hold files for seconds at
+    # a time — lowering it back should be a deliberate act, not a tidy-up.
+    import inspect
+    from dreamlayer.ai_brain.server.store import replace_atomic
+    assert inspect.signature(replace_atomic).parameters["timeout"].default >= 30.0

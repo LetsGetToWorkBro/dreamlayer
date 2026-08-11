@@ -31,7 +31,7 @@ _TMP_REAP_GRACE = 60.0
 log = logging.getLogger("dreamlayer.ai_brain.server.store")
 
 
-def replace_atomic(src, dst, timeout: float = 10.0, burst: int = 50) -> None:
+def replace_atomic(src, dst, timeout: float = 30.0, burst: int = 50) -> None:
     """os.replace that rides out Windows share-mode contention.
 
     POSIX rename is atomic and never takes the retry path. On Windows,
@@ -46,7 +46,15 @@ def replace_atomic(src, dst, timeout: float = 10.0, burst: int = 50) -> None:
     always leaves gaps between its opens), separated by short jittered
     breathers that break lockstep with reader cadence. After `timeout`
     seconds a final attempt re-raises, so a file held open *permanently*
-    by another program still fails loudly instead of spinning forever."""
+    by another program still fails loudly instead of spinning forever.
+
+    30s, raised from 10 (#641): the Windows CI leg lost a write through the
+    10s budget — a run where the reader storm never left a 10-second window.
+    The real-world holder this models is not our own readers but a
+    Defender-class scanner sitting on the file, and Microsoft's own guidance
+    for sharing violations is to retry longer than feels reasonable. The
+    permanently-held case still fails loudly, just later; a 30s stall on a
+    store write is survivable, a silently lost contact list is not."""
     import random
     deadline = time.monotonic() + timeout
     delay = 0.0005
