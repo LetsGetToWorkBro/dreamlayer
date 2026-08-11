@@ -32,6 +32,7 @@ permissions:
   contents: write     # so a tag build can attach the installer to a Release
   id-token: write     # OIDC token the provenance signer exchanges (SLSA)
   attestations: write # write the build-provenance attestation for the installer
+  actions: write     # dispatch sign-release after publishing — see below
 
 jobs:
   build:
@@ -201,3 +202,24 @@ jobs:
           fail_on_unmatched_files: true
           files: DreamLayer-Setup.exe
           body_path: .github/RELEASE_NOTES.md
+
+      - name: Dispatch keyless signing for the published release
+        # `release: published` NEVER fires here: this release is published with
+        # GITHUB_TOKEN, and events created by that token do not trigger other
+        # workflows. workflow_dispatch is the documented exception, so we
+        # dispatch sign-release ourselves. This is how v0.9.1 and v0.9.2 both
+        # shipped UNSIGNED for weeks — the auto-trigger silently never fired,
+        # and the two manual dispatches raced a draft.
+        #
+        # Both build workflows dispatch after their own upload; sign-release
+        # enumerates whatever assets exist at run time and --clobbers, so the
+        # later dispatch always completes the set. Racing is safe by design.
+        if: github.ref_type == 'tag' || inputs.publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # bash explicitly: this job's default is pwsh (see defaults.run), where
+        # the backslash continuation and $VAR syntax below would both break.
+        shell: bash
+        run: |
+          gh workflow run sign-release.yml --repo "$GITHUB_REPOSITORY" \
+            -f tag="${{ steps.rel.outputs.tag }}"
