@@ -59,6 +59,11 @@ intelligence = ["speechbrain>=1,<2", "spacy>=3,<4", "river>=0.23,<1", "human-lea
 # a tiny generalist NER (GLiNER) for sharper commitment / entity extraction than
 # the regex + spaCy path — opt-in, so not in any deployment profile.
 nlp-extra = ["gliner>=0.2,<1"]
+# moondream is capped <2 on a PRIVACY boundary, not compatibility: 2.x's
+# vl() returns a cloud client by default, and our classifier calls it bare on
+# the ambient camera loop. See DECIDED_BOUNDS in tests/test_lockfile.py and
+# the dependabot ignore rule; port classify_backends.py to vl(local=True)
+# before moving this.
 vision   = ["ultralytics>=8,<9", "moondream>=1,<2", "open-clip-torch>=3,<4", "rapidocr-onnxruntime>=1.3,<2", "zxing-cpp>=2,<4", "coremltools>=9,<10; sys_platform=='darwin'", "mlx-vlm>=0.6,<1; sys_platform=='darwin'"]
 # on-device document + math reading, atop the OCR path (opt-in, heavy)
 math-ocr = ["pix2tex>=0.1,<1"]

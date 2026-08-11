@@ -138,6 +138,13 @@ DECIDED_BOUNDS = [
      "GHSA-g6cj-pr64-35w5 (a Bleichenbacher oracle in PKCS#7 EnvelopedData "
      "decryption) is fixed in 50.0.0. Lowering this reopens it, and the two "
      "advisories fixed in 49.0.0 with it. See #614."),
+    ("vision", "moondream", "<2",
+     "2.x is a different product: vl() returns a CLOUD client by default. The "
+     "classifier calls md.vl() bare on the ambient camera loop, so 2.x points "
+     "wearer frames at a third-party cloud past the Veil and the consent "
+     "registry — or silently kills the capability without an api_key. Moving "
+     "up requires porting classify_backends.py to vl(local=True) FIRST. "
+     "Declined in #635; the dependabot ignore rule is the other half."),
 ]
 
 
