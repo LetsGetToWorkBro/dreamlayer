@@ -3,13 +3,30 @@
 isolation.py already runs an untrusted plugin in its own process behind a thin
 RPC surface. This adds a *kernel* boundary around that process when the tools are
 present — **bubblewrap** (`bwrap`) or **nsjail** — so a hostile plugin is confined
-by namespaces + a read-only filesystem + no-new-privileges, not only by the
-narrowness of the RPC.
+by namespaces + a private root + no-new-privileges, not only by the narrowness
+of the RPC.
 
 It maps the capability model onto the sandbox: **no `network` capability → the
-child runs in an empty network namespace** (no interfaces, no host network); the
-filesystem is read-only except a private `tmpfs` at `/tmp`; the package dir is
-bound read-only; PID/IPC/UTS namespaces are unshared.
+child runs in an empty network namespace** (no interfaces, no host network);
+every path bound in from the host is bound READ-ONLY; the package dir is bound
+read-only; PID/IPC/UTS namespaces are unshared.
+
+What is writable, stated exactly, because the sentence that used to be here was
+wrong and it is the sentence somebody would rely on when reasoning about what a
+hostile plugin can touch (#632). This said "the filesystem is read-only except a
+private tmpfs at /tmp". It is not: the jail's ROOT is bwrap's own new tmpfs and
+accepts writes. Measured through this very `wrapper()`::
+
+    open("/zz",      "w")  -> succeeds
+    open("/tmp/zz",  "w")  -> succeeds
+    open("/usr/zz",  "w")  -> OSError errno 30 (EROFS)
+    open("/etc/zz",  "w")  -> OSError errno 30 (EROFS)
+
+The security conclusion is unchanged, which is why this is a wording fix and no
+behaviour moved: everything writable is private to the child's mount namespace
+and gone when it exits, and nothing on the host is reachable for writing. But
+"read-only except /tmp" describes a jail this is not, and a reader planning
+around it would be wrong about where a plugin can leave a file.
 
 Graceful by construction:
   * If no sandbox tool is installed *or a functional probe fails* (e.g.

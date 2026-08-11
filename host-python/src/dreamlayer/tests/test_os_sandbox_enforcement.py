@@ -225,3 +225,85 @@ def test_granted_network_capability_lets_the_same_probe_through(tmp_path):
         "the jail from the environment" + _diag(argv, proc))
     assert reply.get("ok") is True, _diag(argv, proc)
     assert reply.get("providers") == 1, _diag(argv, proc)
+
+
+def test_the_host_is_read_only_and_the_private_root_is_not(tmp_path):
+    """What the jail's filesystem actually does, asserted rather than described.
+
+    The module docstring used to say "the filesystem is read-only except a
+    private tmpfs at /tmp". It is not: bwrap's new root is itself a tmpfs and
+    takes writes, and only the `--ro-bind` mounts refuse (#632). The security
+    conclusion is unchanged — everything writable is private to the child's
+    mount namespace and gone when it exits — but that was the sentence somebody
+    would rely on when reasoning about where a hostile plugin can leave a file.
+
+    So this pins both halves. The EROFS half is the one with security weight:
+    if a host bind ever became writable, a plugin could modify the code it is
+    about to import. The writable half exists so the docstring cannot quietly
+    drift back to the tidier claim that was wrong.
+    """
+    probe = (
+        "import errno, json\n"
+        "out = {}\n"
+        "for p in ('/zz', '/tmp/zz', '/usr/zz', '/etc/zz'):\n"
+        "    try:\n"
+        "        open(p, 'w').write('x')\n"
+        "        out[p] = 'wrote'\n"
+        "    except OSError as e:\n"
+        "        out[p] = e.errno\n"
+        "print(json.dumps(out))\n")
+    argv = os_sandbox.wrapper([], tmp_path) + [sys.executable, "-c", probe]
+    proc = subprocess.run(argv, capture_output=True, text=True, timeout=120)
+    assert proc.stdout.strip(), (
+        "the probe produced no output, so it never ran" + _diag(argv, proc))
+    got = json.loads(proc.stdout.splitlines()[-1])
+
+    # The half that carries the security claim: nothing bound in from the host
+    # may be written, or a plugin could rewrite the code it is about to import.
+    for path in ("/usr/zz", "/etc/zz"):
+        assert got[path] == errno.EROFS, (
+            f"{path} is writable inside the jail (got {got[path]!r}); a host "
+            f"bind must be read-only" + _diag(argv, proc))
+
+    # The half that keeps the docstring honest.
+    for path in ("/zz", "/tmp/zz"):
+        assert got[path] == "wrote", (
+            f"{path} refused a write ({got[path]!r}). That may be a HARDENING "
+            f"rather than a regression — but the module docstring says the "
+            f"private root and /tmp accept writes, so change the docstring in "
+            f"the same commit" + _diag(argv, proc))
+
+
+def test_a_ci_leg_actually_runs_this_file():
+    """The coupling this file asked for in its own PR.
+
+    Everything above skips unless a working bwrap is present, and bwrap is
+    installed by exactly one step in pytest.yml. Delete that step and this
+    entire file goes quietly back to skipping everywhere, with no assertion
+    moving anywhere — which is the shape of hole it was written against, and
+    the shape that left 105 wasm tests green by skip until #630.
+
+    A comment in the workflow saying so is a comment. This fails.
+
+    Anchored on the two things that make the leg real — the install and the
+    pin — rather than on the step's name, which is prose somebody may reword.
+    """
+    import pathlib
+    import re
+
+    wf = (pathlib.Path(__file__).resolve().parents[4]
+          / ".github" / "workflows" / "pytest.yml").read_text(encoding="utf-8")
+    live = [ln for ln in wf.splitlines() if not ln.lstrip().startswith("#")]
+    body = "\n".join(live)
+
+    assert re.search(r"apt-get install .*\bbubblewrap\b", body), (
+        "no CI step installs bubblewrap, so every test in this file skips: "
+        "the OS-sandbox tier's enforcement runs in no environment again")
+    # `[\s\S]` rather than `[^\n]`: the invocation is split over a backslash
+    # continuation, and a newline-bounded pattern silently matches nothing —
+    # which would make this coupling test the very thing it guards against.
+    assert re.search(r"DL_SANDBOX=bwrap\s+pytest[\s\S]{0,200}?"
+                     r"test_os_sandbox_enforcement\.py", body), (
+        "no CI step runs this file with DL_SANDBOX=bwrap. Without the pin the "
+        "fixture SKIPS when bwrap is missing instead of failing, so a runner "
+        "that lost bubblewrap would go quiet rather than red")
