@@ -90,6 +90,14 @@ jobs:
           # half: a permanent skip is the quieter version of the same defect.
           # 8.3 MB with extism-sys and cffi.
           pip install "extism>=1,<2"
+          # triage findings (#637): these four gate tests that ran NOWHERE —
+          # cryptography alone gates 5 files incl. the signed receipt chain and
+          # the appliance TLS cert, which is the dep we pin a CVE floor on.
+          # c2pa covers capture provenance. rich/pyyaml are trivial. 30MB total.
+          # presidio stays out: 76MB, drags the whole spacy stack — reason
+          # recorded in scripts/triage.py DELIBERATELY_NOT_INSTALLED.
+          pip install "cryptography>=50,<51" "rich>=14,<16" "pyyaml>=6,<7" \
+                      "c2pa-python>=0.6"
 
       - name: "Lint — ruff (pyflakes: dead imports/vars, undefined names)"
         # The high-signal static-analysis gate. Config in pyproject
