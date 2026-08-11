@@ -4814,7 +4814,7 @@ requires-dist = [
     { name = "gliner", marker = "extra == 'nlp-extra'", specifier = ">=0.2,<1" },
     { name = "human-learn", marker = "extra == 'intelligence'", specifier = ">=0.3,<1" },
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6,<7" },
-    { name = "insightface", marker = "extra == 'face'", specifier = ">=0.7,<1" },
+    { name = "insightface", marker = "extra == 'face'", specifier = ">=0.7,<2" },
     { name = "instructor", marker = "extra == 'structured'", specifier = ">=1,<2" },
     { name = "keyring", marker = "extra == 'privacy'", specifier = ">=24,<26" },
     { name = "kokoro", marker = "extra == 'voice'", specifier = ">=0.9,<1" },
