@@ -32,14 +32,13 @@ updates:
       # TestABoundThatEncodesADecisionStaysPut is the other half of this.
       - dependency-name: "piper-tts"
         versions: [">=1.3"]
-      # moondream 2.x is a different PRODUCT: vl() became a factory that
-      # returns a CLOUD client by default (local=False, cloud endpoint). Our
-      # classifier calls md.vl() bare on the ambient camera loop — under 2.x
-      # that would point wearer frames at a third-party cloud with no Veil
-      # check and no consent sink, or silently kill the capability without an
-      # api_key. #635 proposed the widening as a routine bump. Moving to 2.x
-      # means porting the adapter to vl(local=True) first — a privacy decision
-      # plus a code change, not a version bump. test_lockfile.py pins the cap.
+      # moondream 2.x moves the kestrel pin to ==0.5.0 and un-caps pillow, so
+      # the bump has to land WITH a relock and the [tool.uv] conflicts
+      # re-evaluated (#647) — a deliberate change, not a routine widening,
+      # which is what #635 proposed. (The privacy half is in the adapter now:
+      # vl() is a cloud-client factory by default in every release, 1.3.0
+      # included, and classify_backends.py passes local=True — pinned by
+      # test_moondream_stays_local.py.) test_lockfile.py pins the cap.
       - dependency-name: "moondream"
         versions: [">=2"]
     open-pull-requests-limit: 5
