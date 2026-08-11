@@ -31,6 +31,32 @@ def test_nsjail_maps_the_network_capability(monkeypatch):
     assert "--disable_clone_newnet" not in os_sandbox.wrapper(["network"], "/tmp/pkg")
 
 
+def test_bwrap_clears_and_rebuilds_the_jail_environment(monkeypatch):
+    monkeypatch.setattr(os_sandbox, "available", lambda: "bwrap")
+    cmd = os_sandbox.wrapper([], "/tmp/pkg")
+
+    assert "--clearenv" in cmd
+    assert dict(os_sandbox._JAIL_ENV) == {
+        "HOME": "/tmp",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "TMPDIR": "/tmp",
+    }
+    for name, value in os_sandbox._JAIL_ENV:
+        assert ["--setenv", name, value] in [
+            cmd[i:i + 3] for i in range(len(cmd) - 2)]
+
+
+def test_nsjail_rebuilds_the_jail_environment(monkeypatch):
+    monkeypatch.setattr(os_sandbox, "available", lambda: "nsjail")
+    cmd = os_sandbox.wrapper([], "/tmp/pkg")
+
+    for name, value in os_sandbox._JAIL_ENV:
+        assert ["--env", f"{name}={value}"] in [
+            cmd[i:i + 2] for i in range(len(cmd) - 1)]
+
+
 def test_dl_sandbox_none_disables(monkeypatch):
     monkeypatch.setenv("DL_SANDBOX", "none")
     os_sandbox._probe_cache.clear()

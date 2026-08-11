@@ -11,6 +11,21 @@ child runs in an empty network namespace** (no interfaces, no host network);
 every path bound in from the host is bound READ-ONLY; the package dir is bound
 read-only; PID/IPC/UTS namespaces are unshared.
 
+The child's environment is BUILT rather than inherited, and the two backends
+arrive there from opposite directions. bwrap is handed `--clearenv` and then the
+five variables of `_JAIL_ENV` via `--setenv`. nsjail needs no clearing step —
+its `--keep_env` is off by default ("Pass all environment variables to the child
+process (default: all envars are cleared)", google/nsjail `cmdline.cc:100`), so
+the same five arrive as `--env` and the operation is a WIDENING of an already
+empty environment. One clears, the other widens; the child sees the same set.
+
+Of the above, what is asserted from INSIDE a running jail is the network
+namespace, the read-only host binds and the environment
+(`tests/test_os_sandbox_enforcement.py`, bwrap only). The PID/IPC/UTS unsharing
+and the whole nsjail branch are pinned as argv construction and nothing more —
+which is a weaker claim, and is why it is written down rather than left for a
+reader to assume.
+
 What is writable, stated exactly, because the sentence that used to be here was
 wrong and it is the sentence somebody would rely on when reasoning about what a
 hostile plugin can touch (#632). This said "the filesystem is read-only except a
@@ -51,6 +66,19 @@ import sys
 import sysconfig
 
 _probe_cache: dict = {}
+
+# Keep conventional runtime locations private to the jail; never copy values from
+# the host environment. The absolute interpreter and installed package already
+# provide Python's import path, so PYTHONPATH is intentionally not restored —
+# and the from-inside test compares the child's whole key set against exactly
+# these five, so adding a sixth here fails there until it is deliberate.
+_JAIL_ENV = (
+    ("HOME", "/tmp"),
+    ("LANG", "C.UTF-8"),
+    ("LC_ALL", "C.UTF-8"),
+    ("PATH", "/usr/local/bin:/usr/bin:/bin"),
+    ("TMPDIR", "/tmp"),
+)
 
 
 def _ro_binds() -> list:
@@ -107,15 +135,18 @@ def available() -> str | None:
 def wrapper(capabilities, package_dir) -> list:
     """A command prefix that confines the child, or ``[]`` when no sandbox tool
     is usable. Prepend it to the child's argv. `network` in `capabilities`
-    keeps the network namespace shared; otherwise it is unshared (no net)."""
+    keeps the network namespace shared; otherwise it is unshared (no net). The
+    child's environment is `_JAIL_ENV` and nothing else, by either backend's
+    route (module docstring)."""
     tool = available()
     if tool is None:
         return []
     net = "network" in set(capabilities or [])
     pkg = os.path.realpath(str(package_dir))
     if tool == "bwrap":
-        cmd = ["bwrap", "--die-with-parent", "--unshare-pid", "--unshare-ipc",
-               "--unshare-uts", "--new-session",
+        cmd = ["bwrap", "--clearenv", "--die-with-parent",
+               "--unshare-pid", "--unshare-ipc", "--unshare-uts",
+               "--new-session",
                "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
                "--chdir", "/"]
         for p in _ro_binds():
@@ -132,13 +163,18 @@ def wrapper(capabilities, package_dir) -> list:
         for link in ("/lib", "/lib64", "/bin", "/sbin"):
             if os.path.islink(link):
                 cmd += ["--symlink", os.readlink(link), link]
+        for name, value in _JAIL_ENV:
+            cmd += ["--setenv", name, value]
         cmd += ["--ro-bind-try", pkg, pkg]
         if not net:
             cmd += ["--unshare-net"]
         return cmd
     # nsjail: mount-only mode, read-only rootfs bind, optional net unshare
     cmd = ["nsjail", "--quiet", "-Mo", "--rlimit_as", "1024",
-           "--disable_clone_newuser", "--chroot", "/", "--"]
+           "--disable_clone_newuser", "--chroot", "/"]
+    for name, value in _JAIL_ENV:
+        cmd += ["--env", f"{name}={value}"]
+    cmd += ["--"]
     if not net:
         cmd = cmd[:-1] + ["--disable_clone_newnet", "--"]
     return cmd
