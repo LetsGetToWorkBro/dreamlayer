@@ -30,6 +30,7 @@ otherwise (CLAUDE.md #1).
 """
 from __future__ import annotations
 
+import ast
 import json
 import re
 import sys
@@ -103,18 +104,37 @@ class Finding:
 
 
 def importorskip_modules(test_tree: Path) -> dict[str, list[str]]:
-    """Every `pytest.importorskip("x")` in the tree -> the files asking for it.
+    """Every `pytest.importorskip("x")` CALL in the tree -> the files asking.
 
-    Source files only. A stale .pyc in __pycache__ still contains the string
-    and would report a module no live test gates on.
+    By AST, not by regex, and the difference is not pedantry: the first draft
+    matched text and reported `nowhere_lib` and `ghost_lib` — the fixture
+    strings inside this scanner's own tests, which are string literals rather
+    than calls. Two of its seven findings were noise it generated about
+    itself, and a report that cries wolf joins the things nobody reads, which
+    is the failure it exists to prevent.
+
+    Source files only. A stale .pyc in __pycache__ contains the string too, and
+    would name a module no live test gates on.
     """
     out: dict[str, list[str]] = {}
     for path in sorted(test_tree.rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
-        text = path.read_text(encoding="utf-8", errors="replace")
-        for m in re.finditer(r'importorskip\(\s*["\']([A-Za-z0-9_.]+)["\']', text):
-            out.setdefault(m.group(1).split(".")[0], []).append(path.name)
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not node.args:
+                continue
+            fn = node.func
+            name = fn.attr if isinstance(fn, ast.Attribute) else getattr(
+                fn, "id", None)
+            if name != "importorskip":
+                continue
+            first = node.args[0]
+            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                out.setdefault(first.value.split(".")[0], []).append(path.name)
     return out
 
 

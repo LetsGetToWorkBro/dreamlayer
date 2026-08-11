@@ -121,6 +121,39 @@ class TestSkipsThatRunNowhere:
         wf, pj = _project(tmp_path, _WORKFLOW, _PYPROJECT)
         assert triage.skips_that_run_nowhere(tree, wf, pj) == []
 
+    def test_a_module_named_only_inside_a_STRING_is_not_a_finding(self, triage,
+                                                                   tmp_path):
+        """The scanner must not report its own fixtures.
+
+        This very file contains the text `pytest.importorskip("nowhere_lib")`
+        inside string literals, because that is how the fixtures above build a
+        fake test tree. A text scan matched them and reported `nowhere_lib` and
+        `ghost_lib` as real findings — two of seven, in the first CI run of the
+        report. A tool that cries wolf joins the things nobody reads, which is
+        the failure it was written to prevent.
+
+        An AST walk sees calls, not strings, and the difference is the whole
+        reason it parses rather than greps.
+        """
+        tree = _tree(tmp_path, test_a=(
+            'DOC = \'pytest.importorskip("only_a_string")\'\n'
+            'blob = """importorskip("also_only_a_string")"""\n'))
+        wf, pj = _project(tmp_path, _WORKFLOW, _PYPROJECT)
+        assert triage.skips_that_run_nowhere(tree, wf, pj) == [], (
+            "a module named inside a string literal was reported as gating "
+            "real tests")
+
+    def test_a_file_that_does_not_parse_is_skipped_not_fatal(self, triage,
+                                                             tmp_path):
+        """One unparseable file must not take the whole scan down — a triage
+        job that crashes reports nothing, silently."""
+        tree = _tree(tmp_path, test_bad='def broken(:\n',
+                     test_ok='pytest.importorskip("nowhere_lib")\n')
+        wf, pj = _project(tmp_path, _WORKFLOW, _PYPROJECT)
+        got = triage.skips_that_run_nowhere(tree, wf, pj)
+        assert [f.title for f in got] == [
+            "`nowhere_lib` gates tests that run in no environment"]
+
     def test_a_stale_pyc_does_not_invent_a_finding(self, triage, tmp_path):
         """A compiled test still contains the string. Reporting from one names
         a module no live test gates on, and the reader cannot tell."""
