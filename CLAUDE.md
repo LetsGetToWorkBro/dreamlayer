@@ -29,6 +29,9 @@ these was green:
 | `body.count("confirm(") >= 3` | there are five, so two destructive actions could lose their guard and it still passed — and it could not say which |
 | 52 skipped tests | every one an `importorskip`. Legitimate locally, but CI installed none of those extras either, so the memory spine's tests ran in **no environment at all** |
 | `assert w.start() is False` | asserted the no-dependency fallback with nothing gating it on the dependency being absent. With watchdog installed it passed anyway — on `OSError` errno 28, the OS out of inotify watches |
+| `os_sandbox._works()` | the functional probe binds `--ro-bind / /` wholesale; the shipped `wrapper()` binds a curated list. `available()` reported a working sandbox that could not launch anything — **the probe tested a different command than the one that ships** |
+| `test_os_sandbox.py` | asserts `--unshare-net` reached the argv. Make it the *value* of `--setenv` and the flag is present, the namespace is never created, and all five tests stay green — construction is not enforcement |
+| the wasm capability proof | four files opening `importorskip("wasmtime")`, declared only in an extra nothing installs. 105 tests, including the one refusal that makes the plugin sandbox a boundary, ran nowhere |
 
 **The habit:** before trusting a pass, ask *what did this actually look at?*
 and make the test say so. `test_served_js_parses.py` pins this explicitly —
@@ -48,6 +51,12 @@ tests:**
 not just whether skipping is reasonable here. The answer for five small wheels
 was "nowhere" — `pytest.yml` already carried that argument for `networkx` and
 nobody had asked it of the rest.
+
+*A probe is not the thing it probes.* `os_sandbox._works()` and `wrapper()`
+build different commands, so the probe passed on every host where the product
+could not start a single plugin. Ask what the check RUNS, not what it is named
+after — and where a probe exists to predict a real invocation, make it run the
+real one.
 
 *A scanner with no findings and a scanner that stopped working produce the same
 output.* Six Semgrep rules, `luacheck`, and CodeQL's `paths-ignore` all report
