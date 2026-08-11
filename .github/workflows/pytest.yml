@@ -184,6 +184,45 @@ jobs:
               src/dreamlayer/tests/test_primary_api_brain.py
           '
 
+      - name: Jail tier — a capability denial enforced INSIDE a bwrap child
+        # test_os_sandbox.py asserts argv *construction* — that `--unshare-net`
+        # reached the command line. Nothing has ever asserted that the kernel
+        # honoured it, so the OS-sandbox tier's enforcement ran in no
+        # environment at all: the same hole the wasmtime install above closed
+        # for the wasm tier, where 105 tests were green by skip.
+        #
+        # bubblewrap is installed HERE rather than in `Install dependencies`,
+        # and that placement is load-bearing. With bwrap on PATH,
+        # `os_sandbox.available()` starts returning "bwrap" for the whole
+        # suite, which would silently change how every subprocess-plugin test
+        # launches its child. This step changes one thing and reruns one file.
+        #
+        # `DL_SANDBOX=bwrap` is not a convenience either: the test reads the pin
+        # as a promise that this machine has a working bwrap, and FAILS rather
+        # than skipping when the promise is not kept. A skip that fires on every
+        # runner is the same defect one layer up.
+        #
+        # And note what that buys and what it does not. In the `Run pytest` step
+        # above, bwrap is deliberately absent, so this file skips there. Delete
+        # this step and the whole enforcement file goes quietly back to skipping
+        # everywhere, with no assertion moving anywhere — the exact shape it was
+        # written against. This step is the only thing coupling it to a run.
+        #
+        # bwrap needs unprivileged user namespaces. The step above reports
+        # GitHub-hosted runners refusing those outright for `unshare -rn`, and
+        # recent Ubuntu images restrict them separately; which of the two binds
+        # here has not been measured. The sysctl is therefore best-effort and a
+        # no-op on an image without the knob. If bwrap still cannot run, the pin
+        # makes the test say so out loud instead of skipping — that is the
+        # intended failure mode, and the first run of this leg is what settles
+        # which explanation was right.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          DL_SANDBOX=bwrap pytest --tb=short -p no:cacheprovider \
+            src/dreamlayer/tests/test_os_sandbox_enforcement.py
+
   test-windows:
     # The Windows Brain is a shipping target (the tray app), so Windows
     # regressions must fail CI, not users. A targeted slice — the appliance
