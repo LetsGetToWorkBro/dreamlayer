@@ -59,13 +59,13 @@ intelligence = ["speechbrain>=1,<2", "spacy>=3,<4", "river>=0.23,<1", "human-lea
 # a tiny generalist NER (GLiNER) for sharper commitment / entity extraction than
 # the regex + spaCy path — opt-in, so not in any deployment profile.
 nlp-extra = ["gliner>=0.2,<1"]
-# moondream is capped <2 on SEQUENCING: the 2.x bump changes the kestrel pin
-# and un-caps pillow, so it must land together with a relock and the
-# [tool.uv] conflicts re-evaluated (#647). The privacy half lives in the
-# adapter now — vl() is a cloud factory by default in every release (1.3.0
-# too), and classify_backends.py passes local=True, pinned by
-# test_moondream_stays_local.py. See DECIDED_BOUNDS in tests/test_lockfile.py.
-vision   = ["ultralytics>=8,<9", "moondream>=1,<2", "open-clip-torch>=3,<4", "rapidocr-onnxruntime>=1.3,<2", "zxing-cpp>=2,<4", "coremltools>=9,<10; sys_platform=='darwin'", "mlx-vlm>=0.6,<1; sys_platform=='darwin'"]
+# moondream: vl() is a cloud-client factory by default in every release, so
+# classify_backends.py passes local=True (pinned by
+# test_moondream_stays_local.py — read it before touching the adapter). 2.x
+# un-capped pillow, which is what let the six moondream-driven [tool.uv]
+# conflict pairs come out (#647); local inference needs kestrel's runtime
+# (CUDA/MPS) and degrades to the next ladder rung elsewhere.
+vision   = ["ultralytics>=8,<9", "moondream>=1,<3", "open-clip-torch>=3,<4", "rapidocr-onnxruntime>=1.3,<2", "zxing-cpp>=2,<4", "coremltools>=9,<10; sys_platform=='darwin'", "mlx-vlm>=0.6,<1; sys_platform=='darwin'"]
 # on-device document + math reading, atop the OCR path (opt-in, heavy)
 math-ocr = ["pix2tex>=0.1,<1"]
 doc-ocr  = ["surya-ocr>=0.6,<1"]
@@ -145,11 +145,13 @@ profile-mac   = ["dreamlayer[memory,voice,structured,llm,intelligence,vision,inf
 profile-cloud = ["dreamlayer[structured,llm,intelligence,privacy]"]  # remote runner: reasoning, no device/local-model stack
 
 [tool.uv]
-# The brilliant-msg extras (glasses-bridge host: pillow>=11) and the
-# moondream/vision extras (Mac Brain: pillow<11) pin incompatible pillow
-# ranges. They target different machines — the profiles above say "pick ONE
-# per machine" — so declare every cross-machine pair conflicting instead of
-# letting the incompatibility block the universal lock.
+# The brilliant-msg extras (glasses-bridge host: pillow>=11) and surya-ocr
+# (doc-ocr: pillow<11) pin incompatible pillow ranges. They target different
+# machines — the profiles above say "pick ONE per machine" — so declare every
+# cross-machine pair conflicting instead of letting the incompatibility block
+# the universal lock. (The vision extra used to be on the pillow<11 side of
+# this too, via moondream 1.x; 2.x un-capped pillow and those six pairs came
+# out — #647.)
 #
 # birds/infra is a different shape of the same problem and worth being plain
 # about, because it costs something real. birdnetlib hard-pins watchdog==2.1.9;
@@ -161,12 +163,6 @@ profile-cloud = ["dreamlayer[structured,llm,intelligence,privacy]"]  # remote ru
 # all, so the lock silently rots and NOTHING gets a reproducible install.
 # `birds` ships in no profile (it is opt-in); `infra` is in profile-mac only.
 conflicts = [
-    [{ extra = "dream" },        { extra = "vision" }],
-    [{ extra = "dream" },        { extra = "profile-mac" }],
-    [{ extra = "hardware" },     { extra = "vision" }],
-    [{ extra = "hardware" },     { extra = "profile-mac" }],
-    [{ extra = "profile-halo" }, { extra = "vision" }],
-    [{ extra = "profile-halo" }, { extra = "profile-mac" }],
     [{ extra = "dream" },        { extra = "doc-ocr" }],
     [{ extra = "hardware" },     { extra = "doc-ocr" }],
     [{ extra = "profile-halo" }, { extra = "doc-ocr" }],
