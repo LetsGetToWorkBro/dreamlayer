@@ -88,11 +88,14 @@ machine *is already* local compromise. No fixed release exists ("through
 Every advisory on the locked 10.4.0 and 11.3.0 forks is fixed in
 12.1.1–12.3.0. Neither fork can get there:
 
-- the `vision` fork sits at 10.4.0 because moondream 1.x requires
-  `pillow<11` — dissolved by the #647 port (`vl(local=True)`, moondream 2.x);
-- the `dream`/`hardware` fork sits at 11.3.0 because brilliant-msg requires
-  `pillow<12.0.0,>=11.1.0`, and its latest release (7.0.0, checked today on
-  PyPI) still does.
+- ~~the `vision` fork sits at 10.4.0 because moondream 1.x requires
+  `pillow<11`~~ — done: #647 moved moondream to 2.0.1 (pillow uncapped) and
+  the vision fork now resolves at 11.3.0 alongside `dream`. The 10.4.0 fork
+  that remains belongs to `doc-ocr` alone: surya-ocr 0.22.1 pins
+  `pillow<11,>=10.2.0`;
+- the `dream`/`hardware`/`vision` fork sits at 11.3.0 because brilliant-msg
+  requires `pillow<12.0.0,>=11.1.0`, and its latest release (7.0.0, checked
+  2026-08-11 on PyPI) still does.
 
 The pillow surface here is the wearer's own camera frames and generated dream
 imagery, not hostile documents — the font/PSD/PDF parser bugs need attacker-
@@ -102,8 +105,10 @@ crafted files. Elevated the moment any pillow path renders untrusted input.
 
 - `python3 -c "import json,urllib.request; d=json.load(urllib.request.urlopen('https://pypi.org/pypi/brilliant-msg/json')); print(d['info']['version'], [x for x in d['info']['requires_dist'] if 'illow' in x])"`
   — a release allowing pillow 12 reopens the dream-fork bump.
-- #647 landing reopens the vision-fork bump (and re-check this entry's pillow
-  section when it does).
+- #647 landed (2026-08-11): the vision fork moved to 11.3.0 — the pillow
+  section above reflects it. What remains is brilliant-msg (<12) and, for the
+  doc-ocr fork, surya-ocr (<11):
+  `python3 -c "import json,urllib.request; d=json.load(urllib.request.urlopen('https://pypi.org/pypi/surya-ocr/json')); print(d['info']['version'], [x for x in d['info']['requires_dist'] if 'illow' in x])"`
 - A chromadb release with a non-empty `fixed:` for GHSA-f4j7-r4q5-qw2c — bump
   it even though unreachable, so the alert clears.
 - Any new code path constructing `chromadb.HttpClient` or running

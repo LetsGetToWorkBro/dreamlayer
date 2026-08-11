@@ -138,15 +138,11 @@ DECIDED_BOUNDS = [
      "GHSA-g6cj-pr64-35w5 (a Bleichenbacher oracle in PKCS#7 EnvelopedData "
      "decryption) is fixed in 50.0.0. Lowering this reopens it, and the two "
      "advisories fixed in 49.0.0 with it. See #614."),
-    ("vision", "moondream", "<2",
-     "vl() is a cloud-client factory by default in EVERY packaged release — "
-     "the locked 1.3.0 included, which #635/#646 originally mis-read as "
-     "local; the adapter now passes local=True and "
-     "test_moondream_stays_local.py pins it. What keeps the cap is "
-     "sequencing, not privacy: 2.x moves the kestrel pin to ==0.5.0 and "
-     "un-caps pillow, so the bump must land WITH a relock and the [tool.uv] "
-     "conflicts re-evaluated — deliberately, in #647, not as a routine "
-     "widening. The dependabot ignore rule is the other half."),
+    # The moondream row that lived here (<2, added by #646) was removed by
+    # #647 in the same commit as the widening — the deliberate act the table
+    # exists to force. What the cap was really protecting is now enforced
+    # where it belongs: the adapter constructs vl(local=True) only, pinned by
+    # test_moondream_stays_local.py, which holds on every factory shape.
 ]
 
 
