@@ -90,6 +90,10 @@ DELIBERATELY_NOT_INSTALLED: dict[str, str] = {
     "faster_whisper": "ASR model weights; the voice extra is a device profile, "
                       "not a CI surface",
     "silero_vad": "torch-backed VAD, same reasoning as faster_whisper",
+    "presidio_analyzer": "measured at 76MB with deps — it drags the whole "
+                         "spacy stack (blis, cymem, thinc). The regex PII "
+                         "path is the shipped fallback and is covered; the "
+                         "presidio-specific tests stay device-profile only",
 }
 
 
