@@ -71,8 +71,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eo pipefail
-          body=$(cat "$RUNNER_TEMP/triage.md")
-          title="Triage: what nobody is looking at"
           # One issue, updated — not a new one every week. A weekly issue
           # becomes a stream people mute, which is how the report joins the
           # things nobody reads.
