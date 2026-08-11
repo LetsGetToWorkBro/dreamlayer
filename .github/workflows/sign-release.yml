@@ -59,12 +59,32 @@ jobs:
 
       - name: Resolve the release tag
         id: rel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
-            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+            tag="${{ github.event.release.tag_name }}"
           else
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            tag="${{ inputs.tag }}"
           fi
+          # Fail HERE, with the actual reason, if the release can't be signed
+          # yet. Both real failures of this workflow (2026-07-22, 2026-07-27)
+          # were dispatches against a still-draft release: a draft's tag does
+          # not exist yet, so the signing step later died with a bare
+          # "release not found" and both operators walked away — v0.9.1 and
+          # v0.9.2 then shipped unsigned for weeks. A draft is not an error
+          # about the release; it is an error about the ORDER: publish first,
+          # then dispatch. Say that.
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+               --json isDraft --jq .isDraft > draft.txt 2>/dev/null; then
+            echo "::error::no published release for '$tag'. If it exists as a draft, publish it first, then re-dispatch — a draft's tag is not visible and signing will fail."
+            exit 1
+          fi
+          if [ "$(cat draft.txt)" = "true" ]; then
+            echo "::error::release '$tag' is still a DRAFT. Publish it, then re-dispatch — signing a draft is not possible."
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Sign release assets and upload the cosign bundles
         env:
