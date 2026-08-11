@@ -60,12 +60,42 @@ jobs:
           #   silero-vad            -> VAD     (voice_pipeline_real)
           #   faster-whisper        -> ASR     (voice_pipeline_real)
           # Weights download on first use.
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # The WHOLE torch trio from the CPU index, then a constraints file so
+          # the install below cannot swap any of them for a CUDA build. That is
+          # exactly what broke this job for three straight weeks (Jul 27 -
+          # Aug 10): only `torch` came from the CPU index, the second install
+          # resolved silero-vad's `torchaudio` from default PyPI, and a
+          # torch-stack release in the Jul 20-27 window paired a CUDA-13
+          # torchaudio with CPU torch — dead on import with a missing
+          # libcudart.so.13. With the constraints, a dep that genuinely needs a
+          # newer torch fails LOUDLY at resolution instead of silently
+          # reinstalling the CUDA build.
+          pip install torch torchaudio torchvision \
+            --index-url https://download.pytorch.org/whl/cpu
+          pip freeze | grep -E '^(torch|torchaudio|torchvision)==' \
+            > /tmp/torch-cpu-constraints.txt
+          cat /tmp/torch-cpu-constraints.txt
           #   insightface+onnxruntime -> ArcFace buffalo_l (face_recognition)
-          pip install -e ".[dev,privacy]" \
+          # Every backend a `real_model` test gates on, with the project's own
+          # bounds. The fail-on-skip step below has NEVER passed since it landed
+          # (#531): 12 marked modules collection-skip because their backends were
+          # not installed here — chromadb, lancedb, river and supervision run in
+          # NO other job, which is precisely this job's charter. The rest
+          # (usearch, sqlite-vec, loro, crosshair-tool, wasmtime) are green in
+          # pytest.yml and only needed installing here too.
+          pip install -c /tmp/torch-cpu-constraints.txt -e ".[dev,privacy]" \
             sentence-transformers open-clip-torch model2vec \
             silero-vad faster-whisper \
-            insightface onnxruntime
+            insightface onnxruntime \
+            "usearch>=2,<3" "sqlite-vec>=0.1,<1" "loro>=1.0,<2" \
+            "chromadb>=1,<2" "lancedb>=0.34,<1" "river>=0.23,<1" \
+            "supervision>=0.29,<1" "wasmtime>=46,<48" \
+            "crosshair-tool>=0.0.60,<1"
+          # Fail here, not at collection: if any of the trio still cannot
+          # import, the job should say so before an hour of model downloads.
+          python -c "import torch, torchaudio, torchvision; \
+            print('torch', torch.__version__, '| audio', torchaudio.__version__, \
+                  '| vision', torchvision.__version__)"
           # presidio needs spaCy AND a spaCy *model* — models are not pip deps,
           # so the `privacy` extra alone leaves the analyzer None and the
           # redactor silently on its regex fallback. nlp_setup standardises on
