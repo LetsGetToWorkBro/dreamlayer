@@ -1,3 +1,40 @@
+The privacy release. We went looking for the gaps between what this project promises and what the code does, and closed every one we found — including one that mattered: an optional vision backend whose library turns out to phone home by default. It never returned an answer without an API key, but the frame still left the device. That path is dead now, three tests deep, and the whole hunt is written up in the repo for anyone to check.
+
+## What changed since 0.9.2
+
+### Privacy, verified
+
+- **The moondream vision backend can no longer reach the cloud.** Every packaged release of the moondream library defaults `vl()` to a *cloud* client that transmits the image before authentication fails. If you had installed the vision pack, the ambient camera loop could send frames to a third-party API — never returning an answer, but the bytes left. The adapter now constructs the on-device runtime only, and three tests (one behavioral, one degradation, one source tripwire) fail if a cloud construction ever comes back.
+- **One Veil gate, not twelve.** The incognito check existed as twelve hand-written copies, and two of them disagreed. There is one now, it fails closed on capture and stays open on recall, and a test asserts nothing writes while veiled — by watching the persistence layer, not the return values.
+- **Installing a plugin by name no longer fetches while the Veil is up.** The registry fetch is behind the same consent + Veil gate as everything else consequential, and the attempt itself is noted in your ledger.
+- **The plugin OS sandbox is enforced, and now tested from inside.** The jail's denial is asserted at the kernel level from within the sandboxed child; the sandbox works on merged-/usr Linux; and the child's environment is built from scratch instead of inherited, so your shell secrets don't ride into a plugin.
+- **Consent has one gate and a real surface.** The two keyless connectors the Brain can reach are registered in the consent registry; the six it cannot reach are recorded as such, with the reasoning in `decisions/`.
+
+### The Brain remembers better
+
+- **"Hi, I'm Maya" — remembered.** Name capture from live introductions, and the recognizer only ever matches people you introduced. A stranger stays a stranger.
+- **Memories have an author now.** Voice recall knows who was speaking, and the ear can tell two voices apart.
+- **The retention lifecycle actually runs.** Memories age, decay, and expire on the shipped Brain — the oldest finding in `decisions/` (0001), finally closed.
+- **Your repertoire follows you.** CRDT sync carries it across every device you own, no server involved.
+- **A rare word heard in conversation gets defined** on the caption path, quietly.
+
+### Honesty, continued
+
+- **HUD cards: 23 of 24 declared cards now render on the phone**, and the checkers fail in both directions — a card that can't render and a renderer with no card.
+- **The capability meter stops lying in the remaining direction.** Installs that couldn't switch a feature on aren't offered; claims a runner never used are dropped; "loadable" no longer counts as "on".
+- **Releases are actually signed now.** The signing workflow silently never fired (CI-published releases can't trigger their own automation — a GitHub rule we now route around). v0.9.1 and v0.9.2 were signed retroactively; this release signs on publish.
+- **The tests that ran nowhere, run.** 149 tests were silently skipped in every CI environment; the wheels they needed are installed and a weekly triage loop now files an issue when anything—a skipped test, a red gate nobody watches, a waiting contributor—goes unnoticed.
+
+### Quality of life
+
+- **Vision and glasses packs install together now.** The dependency conflict that made the vision pack mutually exclusive with the glasses bridge is gone (six lockfile conflict pairs dissolved).
+- **Windows: fewer "file in use" failures.** The atomic-replace retry budget now outlasts Defender-class scans holding files open.
+- **macOS Mail reads per-account**, mirroring the calendar allow-list, and the panel tells you when macOS itself is blocking a source.
+- **Reduced motion is honored** system-wide, and the missing screen-reader labels are in.
+- **Local model discovery** finds Msty and SGLang servers on their default ports.
+
+---
+
 Incremental quality pass on Live Lens and the memory graph. Panel updates and rendering fixes, plus a batch of edge-case closes on the on-glass lenses.
 
 ## What changed since 0.9.1
