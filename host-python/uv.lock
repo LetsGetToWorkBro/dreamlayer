@@ -10286,7 +10286,7 @@ wheels = [
 
 [[package]]
 name = "dreamlayer"
-version = "0.9.2"
+version = "0.9.3"
 source = { editable = "." }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or (extra == 'extra-10-dreamlayer-birds' and extra == 'extra-10-dreamlayer-infra') or (extra == 'extra-10-dreamlayer-birds' and extra == 'extra-10-dreamlayer-profile-mac') or (extra == 'extra-10-dreamlayer-doc-ocr' and extra == 'extra-10-dreamlayer-dream') or (extra == 'extra-10-dreamlayer-doc-ocr' and extra == 'extra-10-dreamlayer-hardware') or (extra == 'extra-10-dreamlayer-doc-ocr' and extra == 'extra-10-dreamlayer-profile-halo') or (extra == 'extra-10-dreamlayer-math-ocr' and extra == 'extra-10-dreamlayer-profile-mac') or (extra == 'extra-10-dreamlayer-math-ocr' and extra == 'extra-10-dreamlayer-vision')" },
