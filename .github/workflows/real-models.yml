@@ -89,7 +89,7 @@ jobs:
             insightface onnxruntime \
             "usearch>=2,<3" "sqlite-vec>=0.1,<1" "loro>=1.0,<2" \
             "chromadb>=1,<2" "lancedb>=0.34,<1" "river>=0.23,<1" \
-            "supervision>=0.29,<1" "wasmtime>=46,<48" \
+            "supervision>=0.29,<1" "wasmtime>=46,<49" \
             "crosshair-tool>=0.0.60,<1"
           # Fail here, not at collection: if any of the trio still cannot
           # import, the job should say so before an hour of model downloads.
