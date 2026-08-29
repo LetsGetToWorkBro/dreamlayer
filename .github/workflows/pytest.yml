@@ -74,7 +74,7 @@ jobs:
           # 9.5 MB, and the 105 tests run in about 4 seconds. The rest of
           # `platform` stays out: pylsl and argostranslate are the heavy,
           # native-build members this deliberately does not pull in.
-          pip install "wasmtime>=46,<48"
+          pip install "wasmtime>=46,<49"
           # extism, the SECOND wasm runtime on the same package format, and a
           # direct consequence of the line above. test_wasm_plugin_package.py
           # opens with importorskip("wasmtime") only, but its TestExtismRuntime
