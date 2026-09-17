@@ -103,7 +103,7 @@ dream-style = ["onnxruntime>=1.17,<2"]
 # does nothing until the wearer turns face_recognition on, and never matches
 # anyone who was not consensually enrolled — there is no stranger lookup and no
 # face database beyond your own contacts. See truth_lens/face_backends.py.
-face = ["insightface>=0.7,<2", "onnxruntime>=1.17,<2"]
+face = ["insightface>=0.7,<3", "onnxruntime>=1.17,<2"]
 # data-over-sound (ggwave — near-ultrasonic audio chirps, from the llama.cpp
 # author) — transmit small payloads between devices as sound. A QR-free pairing
 # fallback: the Brain sings a code, the phone catches it out of the air. Opt-in,
@@ -363,6 +363,11 @@ pytest_add_cli_args_test_selection = [
     "src/dreamlayer/tests/test_budgets_cycle_math.py",
     "src/dreamlayer/tests/test_flash_safety_unit.py",
     "src/dreamlayer/tests/test_flash_safety.py",
+    # The report dataclasses' __str__ methods, which mutmut could not reach
+    # until 3.8.0 taught it to mutate methods of decorated classes. Nothing
+    # executed them: the one `str(rep)` in the suites above is an assert
+    # MESSAGE, evaluated only when that assert fails. See the file docstring.
+    "src/dreamlayer/tests/test_report_strings.py",
     "src/dreamlayer/tests/test_signer_boundaries.py",
     "src/dreamlayer/tests/test_rc2_vault.py",
     "src/dreamlayer/tests/test_privacy.py",

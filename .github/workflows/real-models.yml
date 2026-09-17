@@ -83,10 +83,18 @@ jobs:
           # NO other job, which is precisely this job's charter. The rest
           # (usearch, sqlite-vec, loro, crosshair-tool, wasmtime) are green in
           # pytest.yml and only needed installing here too.
+          #
+          # "with the project's own bounds" was prose, not fact, for insightface
+          # until #673: it was the one entry installed UNPINNED, so when
+          # insightface 2.0 shipped (2026-09-08) this job silently started
+          # proving the face path against a version `face`'s own `<2` cap
+          # forbade. It passed — which is how we know 2.0 works — but a job
+          # that tests what nobody can install is testing the wrong thing, in
+          # either direction. Every entry on this line now carries its bound.
           pip install -c /tmp/torch-cpu-constraints.txt -e ".[dev,privacy]" \
             sentence-transformers open-clip-torch model2vec \
             silero-vad faster-whisper \
-            insightface onnxruntime \
+            "insightface>=0.7,<3" "onnxruntime>=1.17,<2" \
             "usearch>=2,<3" "sqlite-vec>=0.1,<1" "loro>=1.0,<2" \
             "chromadb>=1,<2" "lancedb>=0.34,<1" "river>=0.23,<1" \
             "supervision>=0.29,<1" "wasmtime>=46,<49" \

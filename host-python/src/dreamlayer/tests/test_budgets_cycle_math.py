@@ -402,6 +402,40 @@ class TestCycleAnalysisVerdicts:
         assert v == [], f"the dangling edge changed the verdict: {v}"
 
 
+class TestATransitionGoesWhereItSaysNotBackToItself:
+    """`target = sid if t.target == SELF else t.target` — the SELF rewrite.
+
+    Only a transition that names SELF becomes a self-loop; everything else
+    keeps the scene it names. mutmut 3.8.0 learned to mutate the condition of
+    a ternary (changelog: "Mutate the condition of ternary expressions"), and
+    `(t.target == SELF) or True` — every hop collapsed into a self-loop —
+    survived every test in this file. A ring of equal scenes cannot see it:
+    collapsing s0→s1→s0 (2 emits / 2 s) into s0→s0 (1 emit / 1 s) leaves the
+    rate at 1/s either way.
+
+    An ASYMMETRIC cycle sees it immediately. One fast emitting scene and one
+    slow silent one sustain 1 emit per 10.1 s — comfortably under budget — but
+    the fast scene alone, read as a self-loop, is 10 emits/s. So the mutant
+    invents a flood in a figment that does not have one, which on the wearer's
+    side is a Repertoire refusing to compile something perfectly safe.
+    """
+
+    def test_a_slow_cycle_is_not_a_flood_because_one_scene_is_fast(self):
+        fig = Figment(name="t", initial="s0")
+        fig.add_scene(Scene(
+            id="s0", duration_sec=0.1, lines=[TextLine("hi", row=1)],
+            on_timeout=[Transition(target="s1", emit="e")]))
+        fig.add_scene(Scene(
+            id="s1", duration_sec=10.0, lines=[TextLine("hi", row=1)],
+            on_timeout=[Transition(target="s0", emit=None)]))
+        v: list = []
+        rate = _cycle_analysis(fig, v)
+        # 1 emit around a 10.1 s loop. The self-loop reading is 10/s.
+        assert rate == pytest.approx(1.0 / 10.1, rel=1e-6)
+        assert rate < EMIT_REFILL_PER_S
+        assert v == [], f"a safe asymmetric cycle was flagged: {v}"
+
+
 class TestTheArcScorerPicksTheCycleSArcNotTheLoudestArc:
     """`score = w_e - lo * w_s`, and the minus sign is load-bearing.
 
