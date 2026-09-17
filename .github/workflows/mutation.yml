@@ -18,7 +18,25 @@ name: mutation
 # the job, while the documented residue doesn't ratchet. Lower a ceiling when
 # you kill residue; never raise one without the same class of justification.
 #
+# THIS JOB CAN GO RED WITHOUT A CODE CHANGE, and that is working as intended.
+# `mutation` installs mutmut fresh each run under `>=3.0,<4`, so a release that
+# mutates MORE can turn an unchanged commit red. It happened on 2026-09-14:
+# mutmut 3.8.0 (released 09-12) fixed "methods of decorated classes are not
+# mutated" and added ternary-condition mutation, and the same commit that was
+# green on 09-07 came back +23 survivors. The bound stays wide on purpose —
+# every one of those 23 was reachable code nobody was testing, and seven had
+# never been executed at all.
+#
+# So when this goes red with no diff to explain it: reproduce both versions
+# before touching a ceiling. `pip install mutmut==<last green>` and
+# `mutmut run` gives the baseline; the delta against the new version tells you
+# whether the net widened or the tests rotted. Raising a ceiling to match a
+# wider net, without reading the new survivors, is how a gate gets muted.
+#
 # Not on every push (it copies + re-runs per mutant); on demand + weekly.
+# It is also NOT a PR gate, so nothing turns a pull request red when this
+# breaks — the weekly triage loop (.github/workflows/triage.yml) is what
+# noticed the 09-14 failure, and issue #637 is where it says so.
 
 on:
   workflow_dispatch:
@@ -91,16 +109,44 @@ jobs:
               # which is engineer-facing text rather than behaviour. Some
               # cycle-reconstruction residue in _max_ratio_cycle is genuinely
               # not yet killed and is worth another pass.
-              "budgets": 229,
-              "flash_safety": 15,   # degradation branches + boundary-exact forms
+              #
+              # 229 -> 231 (2026-09-17), and the two are itemized because a
+              # ceiling that moves without an itemization is just a ratchet.
+              # mutmut 3.8.0 added "Mutate the condition of ternary
+              # expressions", so two conditions became mutable that never were:
+              #   _cycle_analysis: `hi = (1.0/min(durs))*len(nodes) if durs
+              #     else 1e6` — forcing the else gives the ratio search a
+              #     larger-but-still-valid upper bound, so it converges to the
+              #     same rate. Equivalent, not a hole.
+              #   verify: `_beat_of(fig, scene) if scene else None` — the beat
+              #     is diagnostic metadata on a Violation, the same
+              #     engineer-facing class as the message strings above.
+              # The THIRD new ternary mutant was a real hole and is killed, not
+              # accepted: `(t.target == SELF) or True` collapsed every timeout
+              # hop into a self-loop, which a ring of equal scenes cannot see.
+              # test_budgets_cycle_math.py's asymmetric-cycle test kills it.
+              "budgets": 231,
+              # flash_safety.py — 15, degradation branches + boundary-exact
+              # forms. It went to 22 under mutmut 3.8.0 and is back at 15
+              # because all seven new mutants were KILLED, not accommodated:
+              # they were FlashReport.__str__, which no test had ever executed
+              # (see test_report_strings.py — the one apparent reader was an
+              # assert MESSAGE, which Python evaluates only on failure).
+              "flash_safety": 15,
               # privacy.py — 1, MEASURED, as the previous comment here asked for.
               # It was a provisional analytic bound of 3 written when mutmut was
               # not installable in the authoring environment. Four scheduled runs
               # (2026-07-13, -07-20, -07-27, -08-03) and a local run all report
-              # exactly 1: set_incognito's `bool(on)` truthiness coercion, which
-              # is behaviourally identical because the flag's only reader is
-              # `_paused or _incognito`. The `return None` -> bare `return`
-              # idioms the margin was reserved for do not survive.
+              # exactly 1.
+              #
+              # That mutant is `PrivacyGate.__init__`'s `self._incognito =
+              # False` -> `None`, NOT set_incognito's `bool(on)` coercion as
+              # this comment claimed until 2026-09-17 — mutmut show names it,
+              # and the reasoning was right about the wrong line. It is
+              # behaviourally identical for the reason given: the flag's only
+              # reader is `_paused or _incognito`, and None is falsy exactly as
+              # False is. The `return None` -> bare `return` idioms the margin
+              # was reserved for do not survive.
               "privacy": 1,
           }
 
