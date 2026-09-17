@@ -363,6 +363,11 @@ pytest_add_cli_args_test_selection = [
     "src/dreamlayer/tests/test_budgets_cycle_math.py",
     "src/dreamlayer/tests/test_flash_safety_unit.py",
     "src/dreamlayer/tests/test_flash_safety.py",
+    # The report dataclasses' __str__ methods, which mutmut could not reach
+    # until 3.8.0 taught it to mutate methods of decorated classes. Nothing
+    # executed them: the one `str(rep)` in the suites above is an assert
+    # MESSAGE, evaluated only when that assert fails. See the file docstring.
+    "src/dreamlayer/tests/test_report_strings.py",
     "src/dreamlayer/tests/test_signer_boundaries.py",
     "src/dreamlayer/tests/test_rc2_vault.py",
     "src/dreamlayer/tests/test_privacy.py",
