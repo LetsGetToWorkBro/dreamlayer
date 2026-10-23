@@ -33,7 +33,7 @@
     "expo-linking": "~57.0.3",
     "expo-localization": "~57.0.1",
     "expo-notifications": "~57.0.5",
-    "expo-router": "~57.0.6",
+    "expo-router": "~58.0.25",
     "expo-splash-screen": "~57.0.4",
     "i18n-js": "^4.5.3",
     "react": "19.2.3",
