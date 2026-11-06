@@ -90,6 +90,17 @@ class TestBuildRequest:
         assert url == "https://api.deepseek.com/v1/chat/completions"
         assert headers["Authorization"] == "Bearer ds-1"
 
+    def test_cheaperinference_preset_is_openai_compatible(self):
+        # The /v1 base already carries the version, so the adapter must NOT
+        # double it — POST lands on /v1/chat/completions, not /v1/v1/….
+        p = be.PROVIDER_PRESETS["cheaperinference"]
+        wire, url, _, headers = be._build_cloud_request(
+            _cfg(cloud_provider="cheaperinference", cloud_base_url=p["base_url"],
+                 cloud_api_key="ci-1", cloud_model=p["model"]), "hi")
+        assert wire == "openai"
+        assert url == "https://api.cheaperinference.com/v1/chat/completions"
+        assert headers["Authorization"] == "Bearer ci-1"
+
 
 class TestParseResponse:
     def test_openai_shape(self):
@@ -137,11 +148,11 @@ def test_cloud_chat_injected_still_works():
 
 # --- OpenAI-compatible provider presets (issue #389) -----------------------------
 #
-# Groq / Together / DeepSeek are one-click presets: pre-fill a base URL + model,
-# speak the OpenAI wire, and require a key (remote → amber egress warning). Each
-# lives in FOUR mirrored spots that must stay in sync — backends.PROVIDER_PRESETS,
-# the panel's CPROV and APROV JS tables, and the two <select> option lists. These
-# tests bite if any spot drifts.
+# Groq / Together / DeepSeek / Cheaper Inference are one-click presets: pre-fill
+# a base URL + model, speak the OpenAI wire, and require a key (remote → amber
+# egress warning). Each lives in FOUR mirrored spots that must stay in sync —
+# backends.PROVIDER_PRESETS, the panel's CPROV and APROV JS tables, and the two
+# <select> option lists. These tests bite if any spot drifts.
 
 # expected shape: base_url that the adapter must resolve to /…/chat/completions
 _OPENAI_COMPAT_PRESETS = {
@@ -151,6 +162,8 @@ _OPENAI_COMPAT_PRESETS = {
                  "https://api.together.xyz/v1/chat/completions"),
     "deepseek": ("DeepSeek", "https://api.deepseek.com",
                  "https://api.deepseek.com/v1/chat/completions"),
+    "cheaperinference": ("Cheaper Inference", "https://api.cheaperinference.com/v1",
+                         "https://api.cheaperinference.com/v1/chat/completions"),
 }
 
 

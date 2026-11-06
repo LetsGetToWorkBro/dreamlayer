@@ -55,6 +55,13 @@ PROVIDER_PRESETS: dict[str, dict] = {
         # accepts (its /v1 is a compat alias, unrelated to model version).
         "label": "DeepSeek", "base_url": "https://api.deepseek.com",
         "model": "deepseek-chat", "needs_key": True, "wire": "openai"},
+    "cheaperinference": {
+        # Cheaper Inference, OpenAI-compatible gateway (docs:
+        # cheaperinference.com/docs). The /v1 in the base means _build_request
+        # appends only /chat/completions.
+        "label": "Cheaper Inference",
+        "base_url": "https://api.cheaperinference.com/v1",
+        "model": "gpt-5.4-mini", "needs_key": True, "wire": "openai"},
     "ollama": {
         "label": "Ollama · local", "base_url": "http://localhost:11434",
         "model": "llama3.2", "needs_key": False, "wire": "openai"},
