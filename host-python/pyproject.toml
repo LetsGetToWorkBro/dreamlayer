@@ -65,7 +65,7 @@ nlp-extra = ["gliner>=0.2,<1"]
 # un-capped pillow, which is what let the six moondream-driven [tool.uv]
 # conflict pairs come out (#647); local inference needs kestrel's runtime
 # (CUDA/MPS) and degrades to the next ladder rung elsewhere.
-vision   = ["ultralytics>=8,<9", "moondream>=1,<3", "open-clip-torch>=3,<4", "rapidocr-onnxruntime>=1.3,<2", "zxing-cpp>=2,<4", "coremltools>=9,<10; sys_platform=='darwin'", "mlx-vlm>=0.6,<1; sys_platform=='darwin'"]
+vision   = ["ultralytics>=8,<9", "moondream>=1,<3", "open-clip-torch>=3,<5", "rapidocr-onnxruntime>=1.3,<2", "zxing-cpp>=2,<4", "coremltools>=9,<10; sys_platform=='darwin'", "mlx-vlm>=0.6,<1; sys_platform=='darwin'"]
 # on-device document + math reading, atop the OCR path (opt-in, heavy)
 math-ocr = ["pix2tex>=0.1,<1"]
 doc-ocr  = ["surya-ocr>=0.6,<1"]
